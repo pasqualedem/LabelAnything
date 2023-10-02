@@ -1,0 +1,27 @@
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: Labelization # name of the logger platform experiment
+  continue_with_errors: False # continue with other runs even if a run failsx
+  tracking_dir: "./output" # dir where results will be saved
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  tags: [[mytag1, mytag2]] # list of tags to attach to the run in logger platform
+  phases: [[train, test]] # list of phases
+  dataset_interface: [examples/cifar10/Cifar10] # Path to the dataset interface class
+
+  train_params:
+    loss:
+      name: [cross_entropy] # class loss name
+      params:
+    seed: [42] # random seed to set
+    max_epochs: [10]
+    initial_lr: [0.0001, 0.01]
+    optimizer: [Adam]
+    zero_weight_decay_on_bias_and_bn: [True]
+    average_best_models: [False]
+    greater_metric_to_watch_is_better: [False]
+    metric_to_watch: [loss]
+    freeze_pretrained: [False] # freeze the loaded pretrained weights
+    # Other parameters relative to Super-Gradients (see their docs)
