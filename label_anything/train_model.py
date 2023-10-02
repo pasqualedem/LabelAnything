@@ -40,7 +40,7 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
         loss = criterion(outputs, 'labels')
 
         # TODO change pred argmax??
-        pred = outputs.argmax(dim=1, keepdim=True)  
+        pred = outputs.argmax(dim=1, keepdim=True)
         # get the index of the max log-probability
 
         loss.backward()
@@ -68,15 +68,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 model = Model()
 
+# dataset
+# dataloader
+
 if torch.cuda.device_count() > 1:
     logger.info(f"Using {torch.cuda.device_count()} GPUs")
     model = nn.DataParallel(model)
-
 model.to(device)
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
+optimizer = Adam(model.parameters(), lr=hyper_params['learning_rate'])
 
 # Train the Model
 with experiment.train():
