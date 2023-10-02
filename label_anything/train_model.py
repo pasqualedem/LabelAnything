@@ -30,9 +30,9 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
         optimizer.zero_grad()
         target = batch_dict["target"].to(device)
         example = batch_dict["example"].to(device)
-        p_mask = batch_dict["p_mask"].to(device)
-        p_point = batch_dict["p_point"].to(device)
-        p_bbox = batch_dict["p_bbox"].to(device)
+        p_mask = batch_dict["prompt_mask"].to(device)
+        p_point = batch_dict["prompt_point"].to(device)
+        p_bbox = batch_dict["prompt_bbox"].to(device)
         gt = batch_dict["gt"].to(device)
 
         # TODO cosa passo al modello?
