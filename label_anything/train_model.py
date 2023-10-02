@@ -36,13 +36,12 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
         gt = batch_dict["gt"].to(device)
 
         # TODO cosa passo al modello?
-        outputs = model(images)
-        loss = criterion(outputs, labels)
+        outputs = model('images')
+        loss = criterion(outputs, 'labels')
 
         # TODO change pred argmax??
-        pred = outputs.argmax(
-            dim=1, keepdim=True
-        )  # get the index of the max log-probability
+        pred = outputs.argmax(dim=1, keepdim=True)  
+        # get the index of the max log-probability
 
         loss.backward()
         optimizer.step()
@@ -50,6 +49,9 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
         # TODO: computate train accuracy
         # batch_correct = pred.eq(target.view_as(pred)).sum().item()
         # batch_total = target.size(0)
+
+        # total_loss += loss.item()
+        # correct += batch_correct
 
         # Log batch_accuracy to Comet; step is each batch
         # experiment.log_metric("batch_accuracy", batch_correct / batch_total)
