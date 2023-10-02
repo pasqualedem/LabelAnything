@@ -4,15 +4,9 @@ from torch.optim import Adam
 import torch
 import comet_ml
 from comet_ml.integration.pytorch import log_model
-import os
-
-comet_information = {
-    'apykey': os.getenv('COMET_API_KEY'),
-    'project_name': 'cv_pasquale_il_mastodontico'
-}
 
 
-comet_ml.init(comet_information)
+comet_ml.init(project_name="comet-example-intro-to-comet")
 
 experiment = comet_ml.Experiment()
 experiment_name = 'dai-un-nome-a-cazzo'
