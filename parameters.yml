@@ -7,3 +7,21 @@ parameters:
     max_epochs: [1, 2]
     initial_lr: [0.0001]
     optimizer: [Adam]
+
+  early_stop:
+
+  train_metrics:
+
+  test_metrics:
+
+  model:
+    name: []
+
+  dataset:
+    channels: [["R", "G", "B"]]
+    trainloader:
+      batch_size: []
+      num_workers: []
+    testloader:
+      batch_size: []
+      num_workers: []
