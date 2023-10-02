@@ -12,9 +12,10 @@ def iou(pred: torch.Tensor, target: torch.Tensor):
         ious (list): A list of length C containing the IoU for each class.
     """
     ious = []
+    num_classes = pred.shape[1]
     pred = torch.argmax(pred, dim=1).view(-1)
     target = target.view(-1)
-    for cls in range(pred.shape[1]):
+    for cls in range(num_classes):
         pred_inds = pred == cls
         target_inds = target == cls
         intersection = (pred_inds[target_inds]).long().sum().item()
