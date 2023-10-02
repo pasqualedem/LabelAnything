@@ -14,3 +14,8 @@ from collections import namedtuple
 
 ComposedOutput = namedtuple('ComposedOutput', ['main',
                                                'aux'])
+
+FDOutput = namedtuple('FDOutput', ['student_features',
+                                   'student_output',
+                                   'teacher_features',
+                                   'teacher_output'])
