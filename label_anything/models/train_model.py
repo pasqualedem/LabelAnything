@@ -8,7 +8,7 @@ import os
 
 comet_information = {
     'apykey': os.getenv('COMET_API_KEY'),
-    'project_name': 'cv_pasquale_il_mastodontico'
+    'project_name': 'label-anything',
 }
 
 comet_ml.init(comet_information)
