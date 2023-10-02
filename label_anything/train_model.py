@@ -15,7 +15,7 @@ comet_information = {
 comet_ml.init(comet_information)
 
 experiment = comet_ml.Experiment()
-experiment_name = 'dai-un-nome-a-cazzo'
+experiment_name = 'random-name'
 hyper_params = {"batch_size": 100, "num_epochs": 2, "learning_rate": 0.01}
 
 experiment.log_parameters(hyper_params)
