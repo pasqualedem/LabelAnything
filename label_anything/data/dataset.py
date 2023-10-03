@@ -6,6 +6,7 @@ from io import BytesIO
 import pandas as pd
 import random
 import torch
+import itertools
 
 
 def __compute_j_index(class_a, class_b):
@@ -15,13 +16,12 @@ def __compute_j_index(class_a, class_b):
 
 
 def __convert_polygons(polygons):
-    ans = []
-    for pol in polygons:
-        ans += [[(int(pol[i]), int(pol[i + 1])) for i in range(0, len(pol), 2)]]
-    return ans
+    return [[(int(pol[i]), int(pol[i + 1])) for i in range(0, len(pol), 2)] for pol in polygons]
 
 
-def __apply_mask(img, segmentations):
+def __get_mask(img, segmentations):
+    if segmentations == [[]]:  # for empty segmentation
+        return torch.zeros(img.size())
     image = Image.new('L', img.shape[1:][::-1], 0)  # due to problem with shapes
     draw = ImageDraw.Draw(image)
     for pol in __convert_polygons(segmentations):
@@ -31,6 +31,18 @@ def __apply_mask(img, segmentations):
     return mask
 
 
+def __get_mask_per_image(annotations, image_id, image, target_classes):
+    return torch.stack([
+        __get_mask(image,
+                   itertools.chain(*annotations[(annotations.image_id == image_id) &
+                                                (annotations.category_id == x)].segmentation.tolist()))
+        for x in target_classes
+    ])
+
+def __get_prompt_mask(annotations, image, target_classes):
+    return torch.stack([
+        __get_mask_per_image(annotations, x, image, target_classes) for x in annotations.image_id.unique().tolist()
+    ])
 
 
 def __get_bboxes(bboxes_entries, image_id, category_id, len_bbox):
@@ -119,7 +131,11 @@ class LabelAnythingDataset(Dataset):
 
         # bboxes
         bbox_annotations = prompt_annotations[['image_id', 'bbox', 'category_id']]
-        prompt_bbox = __get_prompt_bbox(bbox_annotations, classes)
+        prompt_bbox, flag_bbox = __get_prompt_bbox(bbox_annotations, classes)
+
+        # masks
+        mask_annotations = prompt_annotations[['image_id', 'bbox', 'category_id']]
+        prompt_mask = __get_prompt_mask(mask_annotations, target, classes)
 
         if self.preprocess:
             examples = [self.preprocess(x) for x in examples]
@@ -128,9 +144,10 @@ class LabelAnythingDataset(Dataset):
         return {
             'target': target,
             'examples': examples,
-            'prompt_mask': None,
+            'prompt_mask': prompt_mask,
             'prompt_point': None,
             'prompt_bbox': prompt_bbox,
+            'flag_bbox': flag_bbox,
             'gt': None,
         }
 
@@ -145,5 +162,5 @@ if __name__ == '__main__':
 
     annotations = pd.DataFrame(instances['annotations'])
     example = annotations[annotations.image_id == 195042]
-    print(__get_prompt_bbox(example, target_classes=[811, 430, 431]))
+    print(example[['image_id', 'category_id', 'segmentation']])
 
