@@ -1,7 +1,6 @@
 import argparse
 from utils.utils import load_yaml
 import yaml
-import re
 
 
 def parse_args():
