@@ -1,41 +1,79 @@
-experiment:
-  name: Experiment
+- experiment:
+  - name: Experiment
 
-parameters:
-  phases: [[train, test]] # list of phases
-  dataset_interface: [] # Path to the dataset interface class
+- parameters:
+  - phases: 
+    - help: "List of phases"
+      value: [["train", "test"]] # list of phases
+  - dataset_interface: 
+    - help: "Dataset Interface"
+      value: [] # Path to the dataset interface class
 
-  train_params:
-    seed: [42]
+  - train_params:
+    seed:
+      help: "Random Seed"
+      value: [42]
     loss:
-      name: [mean_squared_error] # class loss name
-      params:
-    max_epochs: [1, 2]
-    initial_lr: [0.0001]
-    optimizer: [Adam]
-    average_best_models: [False]s
-    metric_to_watch: [loss]
-    freeze_pretrained: [False] # freeze the loaded pretrained weights
+      help: "Loss Function"
+      value: 
+        help: ["mean_squared_error"] # class loss name
+        params: {}
+    max_epochs: 
+      help: "Max Epochs"
+      value: [1, 2]
+    initial_lr: 
+      help: "Initial Learning Rate"
+      value: [0.0001]
+    optimizer: 
+      help: "Optimizer"
+      value: ["Adam"]
+    average_best_models: 
+      help: "Average Best Models"
+      value: [False]
+    metric_to_watch: 
+      help: "Metric to Watch"
+      value: ["loss"]
+    freeze_pretrained: 
+      help: "Freeze Pretrained Weights"
+      value: [False] # freeze the loaded pretrained weights
 
-  early_stop:
-    patience: [10] # number of epochs before stopping
-    monitor: [loss] # metric to monitor
-    mode: [min] # metric to be minimized or maximized
+  - early_stop:
+    patience: 
+      help: "Patience"
+      value: [10] # number of epochs before stopping
+    monitor: 
+      help: "Monitor Metric"
+      value: ["loss"] # metric to monitor
+    mode: 
+      help: "Mode"
+      value: ["min"] # metric to be minimized or maximized
 
-  train_metrics:
-    # list of metrcs to load from torch metrics
-  test_metrics:
+  - train_metrics:
+    help: "Train Metrics"
     # list of metrics to load from torch metrics
-    # es f1, precision, recall
-  model:
-    name: []
-    params:
+  - test_metrics:
+    help: "Test Metrics"
+    # list of metrics to load from torch metrics
+    # e.g., f1, precision, recall
+  - model:
+    help: "Model"
+    params: {}
 
-  dataset:
-    channels: [["R", "G", "B"]]
+  - dataset:
+    channels:
+      help: "Channels"
+      value: [["R", "G", "B"]]
     trainloader:
-      batch_size: []
-      num_workers: []
+      batch_size:
+        help: "Train Batch Size"
+        value: []
+      num_workers:
+        help: "Train Num Workers"
+        value: []
     testloader:
-      batch_size: []
-      num_workers: []
+      batch_size:
+        help: "Test Batch Size"
+        value: []
+      num_workers:
+        help: "Test Num Workers"
+        value: []
