@@ -10,3 +10,4 @@ from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
 from .prompt_encoder import PromptEncoder
 from .transformer import TwoWayTransformer
+from .build_sam import build_sam_vit_b, build_sam_vit_h, build_sam_vit_l
