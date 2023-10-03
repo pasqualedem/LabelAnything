@@ -2,20 +2,34 @@ experiment:
   name: Experiment
 
 parameters:
+  phases: [[train, test]] # list of phases
+  dataset_interface: [] # Path to the dataset interface class
+
   train_params:
     seed: [42]
+    loss:
+      name: [mean_squared_error] # class loss name
+      params:
     max_epochs: [1, 2]
     initial_lr: [0.0001]
     optimizer: [Adam]
+    average_best_models: [False]s
+    metric_to_watch: [loss]
+    freeze_pretrained: [False] # freeze the loaded pretrained weights
 
   early_stop:
+    patience: [10] # number of epochs before stopping
+    monitor: [loss] # metric to monitor
+    mode: [min] # metric to be minimized or maximized
 
   train_metrics:
-
+    # list of metrcs to load from torch metrics
   test_metrics:
-
+    # list of metrics to load from torch metrics
+    # es f1, precision, recall
   model:
     name: []
+    params:
 
   dataset:
     channels: [["R", "G", "B"]]
