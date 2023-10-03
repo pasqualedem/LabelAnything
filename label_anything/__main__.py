@@ -1,3 +1,4 @@
+from argpass import parse_args
 
 if __name__ == "__main__":
-    pass
+    args = parse_args()
