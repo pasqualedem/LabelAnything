@@ -22,39 +22,56 @@ experiment.log_parameters(hyper_params)
 experiment.add_tags([experiment_name])
 
 
+def get_train_data(batch_dict: dict):
+    """Convert the dictionary into the elements for training
+
+    Args:
+        batch_dict (dict): data dictionary with the training data
+
+    Returns:
+        target: The target tensor.
+        example: The example tensor.
+        prompt_mask: The prompt_mask tensor.
+        prompt_point: The prompt_point tensor.
+        prompt_bbox: The prompt_bbox tensor.
+        gt: The gt tensor.
+    """
+    # Per ogni chiave in batch_dict, sposta il tensor corrispondente sul dispositivo e lo memorizza nel dizionario output
+    output = {}
+    for key in batch_dict:
+        output[key] = batch_dict[key].to(device)
+
+    # Estrae i tensori dal dizionario output
+    target, example, p_mask, p_point, p_bbox, gt = output.values()
+    return target, example, p_mask, p_point, p_bbox, gt
+
+
 def train(model, optimizer, criterion, dataloader, epoch, experiment):
     model.train()
     total_loss = 0
     correct = 0
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
-        target = batch_dict["target"].to(device)
-        example = batch_dict["example"].to(device)
-        p_mask = batch_dict["prompt_mask"].to(device)
-        p_point = batch_dict["prompt_point"].to(device)
-        p_bbox = batch_dict["prompt_bbox"].to(device)
-        gt = batch_dict["gt"].to(device)
+        target, example, p_mask, p_point, p_bbox, gt = get_train_data(
+            batch_dict)
 
-        # TODO cosa passo al modello?
-        outputs = model('images')
-        loss = criterion(outputs, 'labels')
+        outputs = model(target, example, p_mask, p_point, p_bbox)
+        loss = criterion(outputs, gt)
 
         # TODO change pred argmax??
         pred = outputs.argmax(dim=1, keepdim=True)
-        # get the index of the max log-probability
 
         loss.backward()
         optimizer.step()
 
-        # TODO: computate train accuracy
-        # batch_correct = pred.eq(target.view_as(pred)).sum().item()
-        # batch_total = target.size(0)
+        batch_correct = pred.eq(target.view_as(pred)).sum().item()
+        batch_total = target.size(0)
 
-        # total_loss += loss.item()
-        # correct += batch_correct
+        total_loss += loss.item()
+        correct += batch_correct
 
         # Log batch_accuracy to Comet; step is each batch
-        # experiment.log_metric("batch_accuracy", batch_correct / batch_total)
+        experiment.log_metric("batch_accuracy", batch_correct / batch_total)
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
@@ -66,8 +83,11 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
 # TODO: inserisci qui il modello che deve essere lanciato
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
+
+#TODO: cosa sarà il modello? Un argomento? Probably
 model = Model()
 
+# TODO: dataset e dataloader che cazzo mettiamo?
 # dataset
 # dataloader
 
@@ -82,7 +102,7 @@ optimizer = Adam(model.parameters(), lr=hyper_params['learning_rate'])
 
 # Train the Model
 with experiment.train():
-    print("Running Model Training")
+    logger.info(f"Running Model Training {experiment_name}")
     for epoch in range(hyper_params["num_epochs"]):
         train(model, optimizer, criterion, dataloader, epoch, experiment)
 
