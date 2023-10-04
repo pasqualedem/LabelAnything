@@ -1,65 +1,65 @@
-- experiment:
-  - name: Experiment
+experiment:
+  name: Experiment
 
-- parameters:
-  - phases: 
-    - help: "List of phases"
-      value: [["train", "test"]] # list of phases
-  - dataset_interface: 
-    - help: "Dataset Interface"
-      value: [] # Path to the dataset interface class
+parameters:
+  phases:
+    help: "List of phases"
+    value: ["train", "test"] # list of phases
+  dataset_interface:
+    help: "Dataset Interface"
+    value: [] # Path to the dataset interface class
 
-  - train_params:
+  train_params:
     seed:
       help: "Random Seed"
       value: [42]
     loss:
       help: "Loss Function"
-      value: 
+      value:
         help: ["mean_squared_error"] # class loss name
         params: {}
-    max_epochs: 
+    max_epochs:
       help: "Max Epochs"
       value: [1, 2]
-    initial_lr: 
+    initial_lr:
       help: "Initial Learning Rate"
       value: [0.0001]
-    optimizer: 
+    optimizer:
       help: "Optimizer"
       value: ["Adam"]
-    average_best_models: 
+    average_best_models:
       help: "Average Best Models"
       value: [False]
-    metric_to_watch: 
+    metric_to_watch:
       help: "Metric to Watch"
       value: ["loss"]
-    freeze_pretrained: 
+    freeze_pretrained:
       help: "Freeze Pretrained Weights"
       value: [False] # freeze the loaded pretrained weights
 
-  - early_stop:
-    patience: 
+  early_stop:
+    patience:
       help: "Patience"
       value: [10] # number of epochs before stopping
-    monitor: 
+    monitor:
       help: "Monitor Metric"
       value: ["loss"] # metric to monitor
-    mode: 
+    mode:
       help: "Mode"
       value: ["min"] # metric to be minimized or maximized
 
-  - train_metrics:
+  train_metrics:
     help: "Train Metrics"
     # list of metrics to load from torch metrics
-  - test_metrics:
+  test_metrics:
     help: "Test Metrics"
     # list of metrics to load from torch metrics
     # e.g., f1, precision, recall
-  - model:
+  model:
     help: "Model"
     params: {}
 
-  - dataset:
+  dataset:
     channels:
       help: "Channels"
       value: [["R", "G", "B"]]
