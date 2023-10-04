@@ -7,6 +7,10 @@ import pandas as pd
 import random
 import torch
 import itertools
+from torchvision.transforms import Resize, ToTensor
+import warnings
+
+warnings.filterwarnings('always')
 
 
 def compute_j_index(class_a, class_b):
@@ -19,30 +23,32 @@ def convert_polygons(polygons):
     return [[(int(pol[i]), int(pol[i + 1])) for i in range(0, len(pol), 2)] for pol in polygons]
 
 
-def get_mask(img, segmentations):
+def get_mask(img_shape, reshape, segmentations):
     if segmentations == [[]]:  # for empty segmentation
-        return torch.zeros(img.size())
-    image = Image.new('L', img.shape[1:][::-1], 0)  # due to problem with shapes
+        return reshape(torch.zeros(img_shape))[0]
+    image = Image.new('L', img_shape[1:][::-1], 0)  # due to problem with shapes
     draw = ImageDraw.Draw(image)
     for pol in convert_polygons(segmentations):
         draw.polygon(pol, outline=1, fill=1)
     mask = np.asarray(image)
     mask = torch.Tensor(mask)
-    return mask
+    return reshape(mask.unsqueeze(dim=0))
 
 
-def get_mask_per_image(annotations, image_id, image, target_classes):
+def get_mask_per_image(annotations, image_id, image_shape, reshape, target_classes):
     return torch.stack([
-        get_mask(image,
-                   itertools.chain(*annotations[(annotations.image_id == image_id) &
-                                                (annotations.category_id == x)].segmentation.tolist()))
+        get_mask(image_shape,
+                 reshape,
+                 itertools.chain(*annotations[(annotations.image_id == image_id) &
+                                              (annotations.category_id == x)].segmentation.tolist()))
         for x in target_classes
     ])
 
 
-def get_prompt_mask(annotations, image, target_classes):
+def get_prompt_mask(annotations, image_shape, reshape, target_classes):
     return torch.stack([
-        get_mask_per_image(annotations, x, image, target_classes) for x in annotations.image_id.unique().tolist()
+        get_mask_per_image(annotations, x, image_shape, reshape, target_classes)
+        for x in annotations.image_id.unique().tolist()
     ])
 
 
@@ -71,7 +77,6 @@ def get_prompt_bbox_per_image(bbox_entries, img_id, target_classes, max_anns):
 
 def get_prompt_bbox(bbox_entries, target_classes):
     max_anns = get_max_bbox(bbox_entries)
-    print(f'having {max_anns} maximum bbox per example')
     res = [get_prompt_bbox_per_image(bbox_entries, x, target_classes, max_anns)
            for x in bbox_entries.image_id.unique().tolist()]
     return torch.stack([x[0] for x in res]), torch.stack([x[1] for x in res])
@@ -84,13 +89,13 @@ def get_max_bbox(annotations):
     )
 
 
-def get_gt(annotations, image, target_classes):
-    gt = Image.new('L', image.shape[1:][::-1], 0)
+def get_gt(annotations, image_shape, target_classes):
+    gt = Image.new('L', image_shape[1:][::-1], 0)
     draw = ImageDraw.Draw(gt)
-    for c in target_classes:
+    for ix, c in enumerate(target_classes, start=1):
         polygons = convert_polygons(itertools.chain(*annotations[annotations.category_id == c].segmentation.tolist()))
         for pol in polygons:
-            draw.polygon(pol, outline=1, fill=c)
+            draw.polygon(pol, outline=1, fill=ix)
     gt = np.asarray(gt)
     gt = torch.Tensor(gt)
     return gt
@@ -99,12 +104,13 @@ def get_gt(annotations, image, target_classes):
 class LabelAnythingDataset(Dataset):
     def __init__(
             self,
-            instances,
-            directory=None,
-            num_max_examples=10,
-            preprocess=None,
-            j_index_value=.5,
-            seed=42,
+            instances,  #data
+            directory=None,  # directory (only if images have to be loaded from disk)
+            num_max_examples=10,  # number of max examples to be given for the target image
+            preprocess=ToTensor(),  # preprocess step
+            j_index_value=.5,  # threshold for extracting examples
+            seed=42,  # for reproducibility
+            resize_dim=224,  # shape for stacking images
     ):
         super().__init__()
         self.annotations = pd.DataFrame(instances['annotations'])
@@ -116,6 +122,8 @@ class LabelAnythingDataset(Dataset):
         self.preprocess = preprocess
         self.j_index_value = j_index_value
         self.seed = seed
+        self.resize = Resize((resize_dim, resize_dim))
+        self.img_shape = (1, resize_dim, resize_dim)
 
     def __load_image(self, img):
         if self.load_from_dir:
@@ -131,17 +139,15 @@ class LabelAnythingDataset(Dataset):
         num_samples = random.randint(1, self.num_max_examples)
         print(f'extracting {num_samples} examples')
         return class_projection.sample(n=num_samples, replace=True,
-                                       random_state=self.seed).image_id.tolist(), target_classes
+                                       random_state=self.seed).image_id.tolist(), list(set(target_classes))
 
     def __getitem__(self, item):
         image_id = self.images.iloc[item]  # image row id
-
         target = self.__load_image(image_id)  # load image
         target = target if not self.preprocess else self.preprocess(target)  # preprocess
 
         # choose similar content with respect to target image
         example_ids, classes = self.__extract_examples(image_id['id'])
-        print(f'having {len(classes)} classes: {classes}')
         examples = [self.__load_image(row)
                     for ix, row in self.images[self.images.id.isin(example_ids)].iterrows()]  # load images
         # annotations useful for prompt
@@ -154,15 +160,17 @@ class LabelAnythingDataset(Dataset):
 
         # masks
         mask_annotations = prompt_annotations[['image_id', 'segmentation', 'category_id']]
-        prompt_mask = get_prompt_mask(mask_annotations, target, classes)
+        prompt_mask = get_prompt_mask(mask_annotations, target.shape, self.resize, classes)
 
         # gt
         target_annotations = self.annotations[self.annotations.image_id == image_id['id']][['category_id', 'segmentation']]
-        gt = get_gt(target_annotations, target, classes)
+        gt = self.resize(get_gt(target_annotations, target.shape, classes).unsqueeze(0)).squeeze(0)
 
         if self.preprocess:
-            examples = [self.preprocess(x) for x in examples]
+            examples = [self.resize(self.preprocess(x)) for x in examples]
         examples = torch.stack(examples)  # load and stack images
+
+        target = self.resize(target)
 
         return {
             'target': target,  # 3 x h x w
@@ -172,6 +180,9 @@ class LabelAnythingDataset(Dataset):
             'prompt_bbox': prompt_bbox,  # n x c x m x 4
             'flag_bbox': flag_bbox,  # n x c x m
             'gt': gt,  # h x w
+            'classes': {
+                ix: c for ix, c in enumerate(classes, start=1)
+            }
         }
 
     def __len__(self):
@@ -182,24 +193,23 @@ class LabelAnythingDataset(Dataset):
 if __name__ == '__main__':
     import json
     from torchvision.transforms import Compose, ToTensor, Resize, ToPILImage
+
     with open('lvis_v1_train.json') as f:
         instances = json.load(f)
 
     preprocess = Compose([
         ToTensor(),
-        Resize((224, 224)),
+        #Resize((1000, 1000)),
     ])
 
     dataset = LabelAnythingDataset(
         instances=instances,
         preprocess=preprocess,
-        num_max_examples=2,
-        j_index_value=.9,
+        num_max_examples=10,
+        j_index_value=.1,
     )
 
     out = dataset[0]
-    for x, y in out.items():
-        print(f'key {x}: size: {y.size()}')
 
-    ToPILImage()(out['gt']).show()
-
+    for k, v in out.items():
+        print(f'{k}: {v.size()}' if isinstance(v, torch.Tensor) else f'{k}: {v}')
