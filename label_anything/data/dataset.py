@@ -9,8 +9,9 @@ import torch
 import itertools
 from torchvision.transforms import Resize, ToTensor
 import warnings
+import json
 
-warnings.filterwarnings('always')
+warnings.filterwarnings('ignore')
 
 
 def compute_j_index(class_a, class_b):
@@ -101,10 +102,16 @@ def get_gt(annotations, image_shape, target_classes):
     return gt
 
 
+def load_instances(json_path):
+    with open(json_path) as f:
+        instances = json.load(f)
+    return instances
+
+
 class LabelAnythingDataset(Dataset):
     def __init__(
             self,
-            instances,  #data
+            instances_path,  #Path
             directory=None,  # directory (only if images have to be loaded from disk)
             num_max_examples=10,  # number of max examples to be given for the target image
             preprocess=ToTensor(),  # preprocess step
@@ -113,6 +120,7 @@ class LabelAnythingDataset(Dataset):
             resize_dim=224,  # shape for stacking images
     ):
         super().__init__()
+        instances = load_instances(instances_path)
         self.annotations = pd.DataFrame(instances['annotations'])
         self.images = pd.DataFrame(instances['images'])
         self.load_from_dir = directory is not None
@@ -181,7 +189,7 @@ class LabelAnythingDataset(Dataset):
             'flag_bbox': flag_bbox,  # n x c x m
             'gt': gt,  # h x w
             'classes': {
-                ix: c for ix, c in enumerate(classes, start=1)
+                c: ix for ix, c in enumerate(classes, start=1)
             }
         }
 
@@ -191,11 +199,7 @@ class LabelAnythingDataset(Dataset):
 
 # main for testing the class
 if __name__ == '__main__':
-    import json
     from torchvision.transforms import Compose, ToTensor, Resize, ToPILImage
-
-    with open('lvis_v1_train.json') as f:
-        instances = json.load(f)
 
     preprocess = Compose([
         ToTensor(),
@@ -203,7 +207,7 @@ if __name__ == '__main__':
     ])
 
     dataset = LabelAnythingDataset(
-        instances=instances,
+        instances_path='lvis_v1_train.json',
         preprocess=preprocess,
         num_max_examples=10,
         j_index_value=.1,
