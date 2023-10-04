@@ -8,14 +8,14 @@ import os
 from logger import logger
 
 comet_information = {
-    'apykey': os.getenv('COMET_API_KEY'),
-    'project_name': 'cv_pasquale_il_mastodontico'
+    "apykey": os.getenv("COMET_API_KEY"),
+    "project_name": "cv_pasquale_il_mastodontico",
 }
 
 comet_ml.init(comet_information)
 
 experiment = comet_ml.Experiment()
-experiment_name = 'random-name'
+experiment_name = "random-name"
 hyper_params = {"batch_size": 100, "num_epochs": 2, "learning_rate": 0.01}
 
 experiment.log_parameters(hyper_params)
@@ -34,6 +34,7 @@ def get_train_data(batch_dict: dict):
         prompt_mask: The prompt_mask tensor.
         prompt_point: The prompt_point tensor.
         prompt_bbox: The prompt_bbox tensor.
+        flag_bbox: The flag_bbox tensor.
         gt: The gt tensor.
     """
     # Per ogni chiave in batch_dict, sposta il tensor corrispondente sul dispositivo e lo memorizza nel dizionario output
@@ -42,8 +43,8 @@ def get_train_data(batch_dict: dict):
         output[key] = batch_dict[key].to(device)
 
     # Estrae i tensori dal dizionario output
-    target, example, p_mask, p_point, p_bbox, gt = output.values()
-    return target, example, p_mask, p_point, p_bbox, gt
+    target, example, p_mask, p_point, p_bbox, flag_bbox, gt = output.values()
+    return target, example, p_mask, p_point, p_bbox, flag_bbox, gt
 
 
 def train(model, optimizer, criterion, dataloader, epoch, experiment):
@@ -52,13 +53,18 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
     correct = 0
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
-        target, example, p_mask, p_point, p_bbox, gt = get_train_data(
-            batch_dict)
+        target, example, p_mask, p_point, p_bbox, gt = get_train_data(batch_dict)
 
-        outputs = model(target, example, p_mask, p_point, p_bbox)
+        # TODO: flag bbox parla con Pasq
+        outputs = model(
+            target,
+            example,
+            p_mask,
+            p_point,
+            p_bbox,
+        )
         loss = criterion(outputs, gt)
 
-        # TODO change pred argmax??
         pred = outputs.argmax(dim=1, keepdim=True)
 
         loss.backward()
@@ -76,15 +82,14 @@ def train(model, optimizer, criterion, dataloader, epoch, experiment):
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
 
-    experiment.log_metrics(
-        {"accuracy": correct, "loss": total_loss}, epoch=epoch)
+    experiment.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
 
 
 # TODO: inserisci qui il modello che deve essere lanciato
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"Using device: {device}")
 
-#TODO: cosa sarà il modello? Un argomento? Probably
+# TODO: cosa sarà il modello? Un argomento? Probably
 model = Model()
 
 # TODO: dataset e dataloader che cazzo mettiamo?
@@ -98,7 +103,7 @@ model.to(device)
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()
-optimizer = Adam(model.parameters(), lr=hyper_params['learning_rate'])
+optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
 
 # Train the Model
 with experiment.train():
