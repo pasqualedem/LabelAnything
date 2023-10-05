@@ -17,8 +17,10 @@ def instantiate_class(name, params):
     module, cls = get_module_class_from_path(name)
     imp_module = importlib.import_module(module)
     imp_cls = getattr(imp_module, cls)
-    if len(signature(imp_cls).parameters.keys()) == 1 and \
-            "params" in list(signature(imp_cls).parameters.keys())[0]:
+    if (
+        len(signature(imp_cls).parameters.keys()) == 1
+        and "params" in list(signature(imp_cls).parameters.keys())[0]
+    ):
         return imp_cls(params)
     return imp_cls(**params)
 
@@ -33,8 +35,7 @@ def substitute_values(x: torch.Tensor, values, unique=None):
     """
     if unique is None:
         unique = x.unique()
-    lt = torch.full((unique.max() + 1, ), -1,
-                    dtype=values.dtype, device=x.device)
+    lt = torch.full((unique.max() + 1,), -1, dtype=values.dtype, device=x.device)
     lt[unique] = values
     return lt[x]
 
@@ -44,8 +45,8 @@ def load_yaml(path, return_string=False):
         d = convert_commentedmap_to_dict(YAML().load(path))
         if return_string:
             path.seek(0)
-            return d, path.read().decode('utf-8')
-    with open(path, 'r') as param_stream:
+            return d, path.read().decode("utf-8")
+    with open(path, "r") as param_stream:
         d = convert_commentedmap_to_dict(YAML().load(param_stream))
         if return_string:
             param_stream.seek(0)
@@ -66,3 +67,10 @@ def convert_commentedmap_to_dict(data):
         return [convert_commentedmap_to_dict(item) for item in data]
     else:
         return data
+
+
+def log_every_n(batch_idx: int, n: int):
+    if batch_idx % n == 0:
+        return True
+    else:
+        return False
