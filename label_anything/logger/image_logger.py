@@ -1,29 +1,86 @@
-import torch
-import comet_ml
-import os
-from PIL import Image
+# width x height x channels
+class Logger:
+    def __init__(self, experiment):
+        self.experiment = experiment
+
+    def log_image(self, nome, immagine):
+        self.experiment.log_image(nome, immagine)
+
+    def log_artifact(self, nome, annotazione):
+        self.experiment.log_artifact(nome, annotazione)
+
+    def log_metric(self, nome, valore):
+        self.experiment.log_metric(nome, valore)
 
 
-class Logger(comet_ml.CometLogger):
-    def __init__(self, project_name, api_key, experiment_name):
-        super().__init__(project_name, api_key, experiment_name)
-
-    def log_image_input(self, image, bboxes, points, mask):
-        image = Image.fromarray(image.cpu().numpy())
-        self.log_image(image, name="image_input")
-        self.log_tensor(bboxes, name="bboxes")
-        self.log_tensor(points, name="points")
-        self.log_tensor(mask, name="mask")
-
-    def log_segmentation_output(self, segmentation):
-        self.log_tensor(segmentation, name="segmentation")
-
-
-if __name__ == "__main__":
-    logger = Logger(
-        project_name="segmentation",
-        api_key=os.getenv("COMET_API_KEY"),
-        experiment_name="segmentation",
-    )
-    # logger.log_image_input(torch.rand(1, 3, 256, 256), torch.rand(1, 4), torch.rand(1, 2), torch.rand(1, 256, 256))
-    # logger.log_segmentation_output(torch.rand(1, 256, 256))
+"""
+Example usage:
+==============================================================
+image:
+- a path (string) to an image
+- file-like containg image
+- numpy matrix
+- tensorflow tensor
+- pytorch tensor
+- list of tuple of values
+- PIL image
+$ logger.log_image("image_name", image)
+==============================================================
+annotation = {"bounding_box": [0, 0, 100, 100]}
+annotation = [
+    {
+        "class": 'ciola',
+        "bounding_box": [0, 0, 100, 100],
+    },
+    {
+        "class": 'figa'
+        "bounding_box": [0, 0, 100, 101],
+    }
+]
+$ logger.log_artifact("annotation_name", annotation)
+==============================================================
+punto = {
+    "x": 100,
+    "y": 200,
+}
+punti = [
+    {
+        "x": 100,
+        "y": 200,
+    },
+    {
+        "x": 200,
+        "y": 300,
+    },
+]
+$ logger.log_artifact("punti_name", punto)
+==============================================================
+maschera = {
+    "points": [
+        [100, 200],
+        [200, 300],
+        [300, 200],
+        [200, 100],
+    ],
+}
+maschere = [
+    {
+        "points": [
+            [100, 200],
+            [200, 300],
+            [300, 200],
+            [200, 100],
+        ],
+    },
+    {
+        "points": [
+            [400, 500],
+            [500, 600],
+            [600, 500],
+            [500, 400],
+        ],
+    },
+]
+$ logger.log_artifact("maschera", maschera)
+==============================================================
+"""
