@@ -76,3 +76,5 @@ parameters:
       num_workers:
         help: "Test Num Workers"
         value: 4
+  logger:
+    n_iter: 8
