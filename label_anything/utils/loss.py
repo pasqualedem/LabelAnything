@@ -1,4 +1,4 @@
-import logger
+import label_anything.logger.logger as logger
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, Module, MSELoss
