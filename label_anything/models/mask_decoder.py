@@ -11,6 +11,8 @@ from torch.nn import functional as F
 
 from typing import List, Tuple, Type
 
+from label_anything.models.transformer import Attention
+
 from .common import LayerNorm2d
 
 
@@ -148,6 +150,68 @@ class MaskDecoder(nn.Module):
         iou_pred = self.iou_prediction_head(iou_token_out)
 
         return masks, iou_pred
+    
+
+class MaskDecoderLam(nn.Module):
+    def __init__(
+        self,
+        *,
+        attention_dim: int,
+        activation: Type[nn.Module] = nn.GELU,
+    ) -> None:
+        """
+        Predicts masks given an image and prompt embeddings, using a
+        transformer architecture.
+
+        Arguments:
+          attention_dim (int): the channel dimension of the transformer
+          transformer (nn.Module): the transformer used to predict masks
+          activation (nn.Module): the type of activation to use when
+            upscaling masks
+        """
+        super().__init__()
+        self.attention_dim = attention_dim
+
+        self.output_upscaling = nn.Sequential(
+            nn.ConvTranspose2d(attention_dim, attention_dim // 4, kernel_size=2, stride=2),
+            LayerNorm2d(attention_dim // 4),
+            activation(),
+            nn.ConvTranspose2d(attention_dim // 4, attention_dim // 8, kernel_size=2, stride=2),
+            activation(),
+        )
+        self.cross_attn_img_to_examples = Attention(
+            attention_dim, 8, downsample_rate=2
+        )
+        self.norm_img_to_examples = nn.LayerNorm(attention_dim)
+
+    def forward(
+        self,
+        image_embeddings: torch.Tensor,
+        image_pe: torch.Tensor,
+        example_embeddings: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict masks given image and prompt embeddings.
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
+          example_embeddings (torch.Tensor): the embeddings of the points and boxes over the examples
+
+        Returns:
+          torch.Tensor: batched predicted segmentations
+        """
+        key_values = image_embeddings + image_pe
+        queries = example_embeddings
+        attn_out = self.cross_attn_img_to_examples(q=queries, k=key_values, v=key_values)
+        queries = queries + attn_out
+        queries = self.norm_img_to_examples(queries)
+
+        upscaled_embeddings = self.output_upscaling(image_embeddings)
+        b, c, h, w = upscaled_embeddings.shape
+        seg = (queries @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+        return seg
+
 
 
 # Lightly adapted from

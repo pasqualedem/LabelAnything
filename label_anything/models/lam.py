@@ -7,6 +7,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from einops import rearrange
 
 from typing import Any, Dict, List, Tuple
 
@@ -50,11 +51,9 @@ class Lam(nn.Module):
     def device(self) -> Any:
         return self.pixel_mean.device
 
-    @torch.no_grad()
     def forward(
         self,
-        batched_input: List[Dict[str, Any]],
-        multimask_output: bool,
+        batched_input: List[Dict[str, Any]]
     ) -> List[Dict[str, torch.Tensor]]:
         """
         Predicts masks end-to-end from provided images and prompts.
@@ -62,22 +61,23 @@ class Lam(nn.Module):
         recommended over calling the model directly.
 
         Arguments:
-          batched_input (list(dict)): A list over input images, each a
-            dictionary with the following keys. A prompt key can be
+          batched_input (dict): a dictionary with the following keys. A prompt key can be
             excluded if it is not present.
-              'image': The image as a torch tensor in 3xHxW format,
+              'target_image': The target image as a torch tensor in Bx3xHxW format,
+                already transformed for input to the model.
+              'example_images': The example images as a torch tensor in BxNx3xHxW format,
                 already transformed for input to the model.
               'original_size': (tuple(int, int)) The original size of
                 the image before transformation, as (H, W).
               'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxNx2. Already transformed to the
+                this image, with shape BxCxNx2. Already transformed to the
                 input frame of the model.
               'point_labels': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.
-              'boxes': (torch.Tensor) Batched box inputs, with shape Bx4.
+              'boxes': (torch.Tensor) Batched box inputs, with shape BxCx4.
                 Already transformed to the input frame of the model.
               'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form Bx1xHxW.
+                in the form BxCxHxW.
           multimask_output (bool): Whether the model should predict multiple
             disambiguating masks, or return a single mask.
 
@@ -94,72 +94,31 @@ class Lam(nn.Module):
                 shape BxCxHxW, where H=W=256. Can be passed as mask input
                 to subsequent iterations of prediction.
         """
-        input_images = torch.stack([self.preprocess(x["image"]) for x in batched_input], dim=0)
-        image_embeddings = self.image_encoder(input_images)
+        B, N = batched_input['example_images'].shape[:2]
+        prompt_images = rearrange(batched_input['example_images'], 'b n c h w -> (b n) c h w')
+        images = torch.cat((batched_input['target_image'], prompt_images), dim=0)
+        image_embeddings = self.image_encoder(images)
+        prompt_images_embeddings = image_embeddings[B:].view(B, N, -1)
+        image_embeddings = image_embeddings[:B]
 
-        outputs = []
-        for image_record, curr_embedding in zip(batched_input, image_embeddings):
-            if "point_coords" in image_record:
-                points = (image_record["point_coords"], image_record["point_labels"])
-            else:
-                points = None
-            sparse_embeddings, dense_embeddings = self.prompt_encoder(
-                points=points,
-                boxes=image_record.get("boxes", None),
-                masks=image_record.get("mask_inputs", None),
-            )
-            low_res_masks, iou_predictions = self.mask_decoder(
-                image_embeddings=curr_embedding.unsqueeze(0),
-                image_pe=self.prompt_encoder.get_dense_pe(),
-                sparse_prompt_embeddings=sparse_embeddings,
-                dense_prompt_embeddings=dense_embeddings,
-                multimask_output=multimask_output,
-            )
-            masks = self.postprocess_masks(
-                low_res_masks,
-                input_size=image_record["image"].shape[-2:],
-                original_size=image_record["original_size"],
-            )
-            masks = masks > self.mask_threshold
-            outputs.append(
-                {
-                    "masks": masks,
-                    "iou_predictions": iou_predictions,
-                    "low_res_logits": low_res_masks,
-                }
-            )
-        return outputs
-
-    def postprocess_masks(
-        self,
-        masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: Tuple[int, ...],
-    ) -> torch.Tensor:
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Arguments:
-          masks (torch.Tensor): Batched masks from the mask_decoder,
-            in BxCxHxW format.
-          input_size (tuple(int, int)): The size of the image input to the
-            model, in (H, W) format. Used to remove padding.
-          original_size (tuple(int, int)): The original size of the image
-            before resizing for input to the model, in (H, W) format.
-
-        Returns:
-          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
-            is given by original_size.
-        """
-        masks = F.interpolate(
-            masks,
-            (self.image_encoder.img_size, self.image_encoder.img_size),
-            mode="bilinear",
-            align_corners=False,
+        if "point_coords" in batched_input:
+            points = (batched_input["point_coords"], batched_input["point_labels"])
+        else:
+            points = None
+        sparse_embeddings, dense_embeddings = self.prompt_encoder(
+            example_images=prompt_images_embeddings,
+            points=points,
+            boxes=batched_input.get("boxes", None),
+            masks=batched_input.get("mask_inputs", None),
         )
-        masks = masks[..., : input_size[0], : input_size[1]]
-        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
-        return masks
+        seg = self.mask_decoder(
+            image_embeddings=image_embeddings,
+            image_pe=self.prompt_encoder.get_dense_pe(),
+            sparse_prompt_embeddings=sparse_embeddings,
+            dense_prompt_embeddings=dense_embeddings
+        )
+
+        return seg
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
         """Normalize pixel values and pad to a square input."""
