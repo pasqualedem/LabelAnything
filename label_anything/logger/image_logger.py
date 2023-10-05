@@ -3,14 +3,38 @@ class Logger:
     def __init__(self, experiment):
         self.experiment = experiment
 
-    def log_image(self, nome, immagine):
-        self.experiment.log_image(nome, immagine)
+    def log_image(self, img_data, annotation):
+        self.experiment.log_image(img_data, annotation)
 
-    def log_artifact(self, nome, annotazione):
-        self.experiment.log_artifact(nome, annotazione)
+    def log_artifact(self, nome, annotation):
+        self.experiment.log_artifact(nome, annotation)
 
-    def log_metric(self, nome, valore):
-        self.experiment.log_metric(nome, valore)
+    def log_metric(self, nome, metric):
+        self.experiment.log_metric(nome, metric)
+
+    def _tensor_to_mask(self, tensor):
+        return mask
+
+    def _tensor_to_bboxes(self, tensor):
+        return bbox
+
+    def _create_bbox_annotation(data: list[dict]):
+        annotation = [
+            {
+                "name": "predictions",
+                "data": data,
+            }
+        ]
+        return annotation
+
+    def _create_mask_annotation(data: list[dict]):
+        annotation = [
+            {
+                "name": "predictions",
+                "data": data,
+            }
+        ]
+        return annotation
 
 
 """
