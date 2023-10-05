@@ -106,7 +106,7 @@ class Lam(nn.Module):
         else:
             points = None
         sparse_embeddings, dense_embeddings = self.prompt_encoder(
-            example_images=prompt_images_embeddings,
+            image_embeddings=prompt_images_embeddings,
             points=points,
             boxes=batched_input.get("boxes", None),
             masks=batched_input.get("mask_inputs", None),

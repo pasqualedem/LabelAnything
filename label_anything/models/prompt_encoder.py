@@ -262,13 +262,13 @@ class PromptImageEncoder(PromptEncoder):
 
     def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs. (B, C, H, W) """
-        B, C, H, W = masks.shape
-        masks = rearrange(masks, 'b c h w -> (b c) h w')
+        B, M, C, H, W = masks.shape
+        masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
         mask_embedding = self.mask_downscaling(masks)
-        mask_embedding = rearrange(mask_embedding, '(b c) h w -> b c h w', b=B)
+        mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
         return mask_embedding
     
-    def _get_batch_class_size(
+    def _get_batch_examples_class_size(
         self,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[torch.Tensor],
@@ -279,11 +279,11 @@ class PromptImageEncoder(PromptEncoder):
         given the batch size and the number of classes of the input prompts.
         """
         if points is not None:
-            return points[0].shape[0], points[0].shape[1]
+            return points[0].shape[0], points[0].shape[1], points[0].shape[2]
         elif boxes is not None:
-            return boxes.shape[0], boxes.shape[1]
+            return boxes.shape[0], boxes.shape[1], boxes.shape[2]
         elif masks is not None:
-            return masks.shape[0], masks.shape[1]
+            return masks.shape[0], masks.shape[1], boxes.shape[2]
         else:
             return 1
     
@@ -311,8 +311,8 @@ class PromptImageEncoder(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
-        B, n_classes = self._get_batch_size(points, boxes, masks)
-        bs = B * n_classes
+        B, n_examples, n_classes = self._get_batch_examples_class_size(points, boxes, masks)
+        bs = B * n_examples * n_classes
 
         sparse_embeddings = torch.empty((bs, 0, self.embed_dim), device=self._get_device())
         if points is not None:
@@ -324,29 +324,27 @@ class PromptImageEncoder(PromptEncoder):
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
 
         # Attention over sparse embeddings
-        sparse_embeddings = rearrange(sparse_embeddings, 'b m c n d-> (b m) (c n) d')
+        sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
         sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings, sparse_embeddings, sparse_embeddings)
         sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
 
-        masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
         if masks is not None:
             dense_embeddings = self._embed_masks(masks)
         else:
-            dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                bs, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+            dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
+                bs, 1, 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
-        dense_embeddings = rearrange(masks, '(b m c) ch h w -> b m c ch h w', b=B)
 
         return sparse_embeddings, dense_embeddings
     
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         B = points.shape[0]
-        points = rearrange(points, 'b m c n 2 -> (b c m) n 2')
+        points = rearrange(points, 'b m c n xy -> (b c m) n xy')
         labels = rearrange(labels, 'b m c n -> (b m c) n')
         return super()._embed_points(points, labels, pad)
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
-        boxes = rearrange(boxes, 'b m c 2 2 -> (b c m) 2 2')
+        boxes = rearrange(boxes, 'b m c x y -> (b c m) x y')
         return super()._embed_boxes(boxes)
 
     def forward(
@@ -374,9 +372,10 @@ class PromptImageEncoder(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
+        B, n_examples, n_classes = self._get_batch_examples_class_size(points, boxes, masks)
         sparse_embeddings, dense_embeddings = self.embed_points_masks(points, boxes, masks)
-        sparse_embeddings = rearrange(sparse_embeddings, 'b m c n -> (b m) c n')
-        dense_embeddings = rearrange(dense_embeddings, 'b m c h w -> (b m) c h w')
+        sparse_embeddings = rearrange(sparse_embeddings, 'b (m c n) d -> (b m) c n d', b=B, m=n_examples, c=n_classes)
+        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m) c d h w')
 
         src = image_embeddings.unsqueeze(1).repeat(1, dense_embeddings.shape[1], 1, 1, 1)
         src = src + dense_embeddings
