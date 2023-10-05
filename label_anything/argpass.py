@@ -1,10 +1,7 @@
 import argparse
 from utils.utils import load_yaml
-import yaml
-
-
 import argparse
-import yaml
+from logger.logger import logger
 
 
 # Helper function to determine argument type
@@ -108,4 +105,3 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    print(args.train_params["seed"]["value"])
