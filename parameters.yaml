@@ -1,10 +1,11 @@
 experiment:
   name: Experiment
+  tags: ["iola"]
 
 parameters:
   phases:
     help: "List of phases"
-    value: ["train", "test"] # list of phases
+    value: [["train", "test"]] # list of phases
   dataset_interface:
     help: "Dataset Interface"
     value: [] # Path to the dataset interface class
@@ -12,18 +13,16 @@ parameters:
   train_params:
     seed:
       help: "Random Seed"
-      value: [42]
+      value: 42
     loss:
       help: "Loss Function"
-      value:
-        help: ["mean_squared_error"] # class loss name
-        params: {}
+      value: "cross_entropy"
     max_epochs:
       help: "Max Epochs"
       value: [1, 2]
     initial_lr:
       help: "Initial Learning Rate"
-      value: [0.0001]
+      value: 0.0001
     optimizer:
       help: "Optimizer"
       value: ["Adam"]
@@ -40,13 +39,13 @@ parameters:
   early_stop:
     patience:
       help: "Patience"
-      value: [10] # number of epochs before stopping
+      value: 10 # number of epochs before stopping
     monitor:
       help: "Monitor Metric"
-      value: ["loss"] # metric to monitor
+      value: "loss" # metric to monitor
     mode:
       help: "Mode"
-      value: ["min"] # metric to be minimized or maximized
+      value: "min" # metric to be minimized or maximized
 
   train_metrics:
     help: "Train Metrics"
@@ -57,7 +56,7 @@ parameters:
     # e.g., f1, precision, recall
   model:
     help: "Model"
-    params: {}
+    name: "Modellazzo"
 
   dataset:
     channels:
@@ -66,14 +65,14 @@ parameters:
     trainloader:
       batch_size:
         help: "Train Batch Size"
-        value: []
+        value: 64
       num_workers:
         help: "Train Num Workers"
-        value: []
+        value: 4
     testloader:
       batch_size:
         help: "Test Batch Size"
-        value: []
+        value: 64
       num_workers:
         help: "Test Num Workers"
-        value: []
+        value: 4
