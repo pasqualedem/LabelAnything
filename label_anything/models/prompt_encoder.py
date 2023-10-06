@@ -327,6 +327,7 @@ class PromptImageEncoder(PromptEncoder):
         sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
         sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings, sparse_embeddings, sparse_embeddings)
         sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
+        sparse_embeddings = rearrange(sparse_embeddings, '(b m) (c n) d -> b m c n d', b=B, m=n_examples, c=n_classes)
 
         if masks is not None:
             dense_embeddings = self._embed_masks(masks)
@@ -372,20 +373,22 @@ class PromptImageEncoder(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
-        B, n_examples, n_classes = self._get_batch_examples_class_size(points, boxes, masks)
         sparse_embeddings, dense_embeddings = self.embed_points_masks(points, boxes, masks)
-        sparse_embeddings = rearrange(sparse_embeddings, 'b (m c n) d -> (b m) c n d', b=B, m=n_examples, c=n_classes)
-        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m) c d h w')
+        sparse_embeddings = rearrange(sparse_embeddings, 'b m c n d -> (b m c) n d')
 
-        src = image_embeddings.unsqueeze(1).repeat(1, dense_embeddings.shape[1], 1, 1, 1)
+        b, m, c, d, h, w = dense_embeddings.shape
+        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
+
+        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, m, 1, 1, 1)
+        src = rearrange(src, "b m c d h w-> (b m c) d h w")
         src = src + dense_embeddings
-        pos_src = self.get_dense_pe().unsqueeze(1).repeat(1, dense_embeddings.shape[1], 1, 1)
-        b, c, h, w = src.shape
+        pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
 
         # Run the transformer
-        hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, H, W, D)
-        src = nn.functional.adaptive_avg_pool2d(src, (1, 1)).squeeze(3).squeeze(2) # (BMC, D)
-        src = rearrange(src, '(b m c) d -> b (m c) d', b=b)
+        hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, HW, D)
+        src = rearrange(src, 'b hw d-> b d hw')
+        src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2) # (BMC, D)
+        src = rearrange(src, '(b m c) d -> b (m c) d', b=b, m=m, c=c)
         
         src = self.example_attention(src, src, src)
         src = self.norm_example_attention(src)

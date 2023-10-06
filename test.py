@@ -64,7 +64,7 @@ def test_lam():
     box_torch = box_torch[None, :]
 
     images = torch.rand(1, 3, 3, 1024, 1024)
-    masks = torch.rand(1, 2, 1, 256, 256)
+    masks = torch.rand(1, 2, 2, 256, 256)
     print("inputs")
 
     batch = {

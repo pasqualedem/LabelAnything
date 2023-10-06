@@ -5,6 +5,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from einops import rearrange
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -184,6 +185,8 @@ class MaskDecoderLam(nn.Module):
         )
         self.norm_img_to_examples = nn.LayerNorm(attention_dim)
 
+        self.class_mlp = MLP(attention_dim, attention_dim, attention_dim // 8, 3)
+
     def forward(
         self,
         image_embeddings: torch.Tensor,
@@ -201,15 +204,17 @@ class MaskDecoderLam(nn.Module):
         Returns:
           torch.Tensor: batched predicted segmentations
         """
-        key_values = image_embeddings + image_pe
+        key_values = rearrange(image_embeddings + image_pe, "b c h w -> b (h w) c")
         queries = example_embeddings
         attn_out = self.cross_attn_img_to_examples(q=queries, k=key_values, v=key_values)
         queries = queries + attn_out
         queries = self.norm_img_to_examples(queries)
-
+        
         upscaled_embeddings = self.output_upscaling(image_embeddings)
         b, c, h, w = upscaled_embeddings.shape
-        seg = (queries @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+
+        class_embeddings = self.class_mlp(queries)
+        seg = (class_embeddings @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
         return seg
 
 

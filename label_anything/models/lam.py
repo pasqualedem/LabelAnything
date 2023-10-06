@@ -98,24 +98,24 @@ class Lam(nn.Module):
         prompt_images = rearrange(batched_input['example_images'], 'b n c h w -> (b n) c h w')
         images = torch.cat((batched_input['target_image'], prompt_images), dim=0)
         image_embeddings = self.image_encoder(images)
-        prompt_images_embeddings = image_embeddings[B:].view(B, N, -1)
+        prompt_images_embeddings = rearrange(image_embeddings[B:], '(b n) c h w -> b n c h w', b=B)
         image_embeddings = image_embeddings[:B]
 
         if "point_coords" in batched_input:
             points = (batched_input["point_coords"], batched_input["point_labels"])
         else:
             points = None
-        sparse_embeddings, dense_embeddings = self.prompt_encoder(
+        example_embeddings = self.prompt_encoder(
             image_embeddings=prompt_images_embeddings,
             points=points,
             boxes=batched_input.get("boxes", None),
             masks=batched_input.get("mask_inputs", None),
         )
+        
         seg = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            sparse_prompt_embeddings=sparse_embeddings,
-            dense_prompt_embeddings=dense_embeddings
+            example_embeddings=example_embeddings
         )
 
         return seg
