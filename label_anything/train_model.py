@@ -114,10 +114,12 @@ def get_single_data(batch_dict: dict, device):
         gt: The gt tensor.
     """
     # Per ogni chiave in batch_dict, sposta il tensor corrispondente sul dispositivo e lo memorizza nel dizionario output
+    data, gt = batch_dict
     output = {}
-    for key in batch_dict:
-        output[key] = batch_dict[key].to(device)
+
+    for key in data:
+        output[key] = data[key]
 
     # Estrae i tensori dal dizionario output
-    target, example, p_mask, p_point, p_bbox, flag_bbox, gt = output.values()
-    return target, example, p_mask, p_point, p_bbox, flag_bbox, gt
+    target, example, p_mask, p_point, p_bbox, flag_bbox = output.values()
+    return (target, example, p_mask, p_point, p_bbox, flag_bbox), gt
