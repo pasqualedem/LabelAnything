@@ -4,6 +4,7 @@ import numpy as np
 import itertools
 import json
 
+MAX_PIXELS_BBOX_NOISE = 20
 
 def compute_j_index(class_a, class_b):
     class_a = set(class_a)
@@ -44,10 +45,20 @@ def get_prompt_mask(annotations, image_shape, reshape, target_classes):
     ])
 
 
+def add_noise(bbox):
+    x, y, x1, y1 = bbox
+    std_w = abs(x - x1)/10
+    std_h = abs(y - y1)/10
+    noise_x = list(map(lambda val: val if abs(val) <= 20 else np.sign(val)*MAX_PIXELS_BBOX_NOISE, np.random.normal(loc=0, scale=std_w, size=2).tolist()))
+    noise_y = list(map(lambda val: val if abs(val) <= 20 else np.sign(val)*MAX_PIXELS_BBOX_NOISE, np.random.normal(loc=0, scale=std_h, size=2).tolist()))
+    return x+noise_x[0], y+noise_y[0], x1+noise_x[1], y1+noise_y[1]
+
+
+# need to add random noise
 def get_bboxes(bboxes_entries, image_id, category_id, len_bbox):
-    bbox = torch.Tensor(
-        bboxes_entries[(bboxes_entries.image_id == image_id) & (bboxes_entries.category_id == category_id)]['bbox'].tolist()
-    )
+    bbox = bboxes_entries[(bboxes_entries.image_id == image_id) & (bboxes_entries.category_id == category_id)]['bbox'].tolist()
+    bbox = list(map(lambda x: add_noise(x), bbox))
+    bbox = torch.Tensor(bbox)
     ans = torch.cat([
         bbox, torch.zeros((len_bbox - bbox.size(0), 4))
     ], dim=0)
