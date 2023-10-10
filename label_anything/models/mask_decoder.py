@@ -157,7 +157,8 @@ class MaskDecoderLam(nn.Module):
     def __init__(
         self,
         *,
-        attention_dim: int,
+        transformer_dim: int,
+        transformer: nn.Module,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -165,27 +166,24 @@ class MaskDecoderLam(nn.Module):
         transformer architecture.
 
         Arguments:
-          attention_dim (int): the channel dimension of the transformer
+          trasnformer_dim (int): the channel dimension of the transformer
           transformer (nn.Module): the transformer used to predict masks
           activation (nn.Module): the type of activation to use when
             upscaling masks
         """
         super().__init__()
-        self.attention_dim = attention_dim
+        self.attention_dim = transformer_dim
 
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(attention_dim, attention_dim // 4, kernel_size=2, stride=2),
-            LayerNorm2d(attention_dim // 4),
+            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(attention_dim // 4, attention_dim // 8, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
             activation(),
         )
-        self.cross_attn_img_to_examples = Attention(
-            attention_dim, 8, downsample_rate=2
-        )
-        self.norm_img_to_examples = nn.LayerNorm(attention_dim)
+        self.transformer = transformer
 
-        self.class_mlp = MLP(attention_dim, attention_dim, attention_dim // 8, 3)
+        self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
 
     def forward(
         self,
@@ -204,16 +202,19 @@ class MaskDecoderLam(nn.Module):
         Returns:
           torch.Tensor: batched predicted segmentations
         """
-        key_values = rearrange(image_embeddings + image_pe, "b c h w -> b (h w) c")
-        queries = example_embeddings
-        attn_out = self.cross_attn_img_to_examples(q=queries, k=key_values, v=key_values)
-        queries = queries + attn_out
-        queries = self.norm_img_to_examples(queries)
+        # key_values = rearrange(image_embeddings + image_pe, "b c h w -> b (h w) c")
+        # queries = example_embeddings
+        # attn_out = self.cross_attn_img_to_examples(q=queries, k=key_values, v=key_values)
+        # queries = queries + attn_out
+        # queries = self.norm_img_to_examples(queries)
+        b, c, h, w = image_embeddings.shape
+        class_embeddings, image_embeddings = self.transformer(image_embeddings, image_pe, example_embeddings)
+        image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)        
         
         upscaled_embeddings = self.output_upscaling(image_embeddings)
         b, c, h, w = upscaled_embeddings.shape
 
-        class_embeddings = self.class_mlp(queries)
+        class_embeddings = self.class_mlp(class_embeddings)
         seg = (class_embeddings @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
         return seg
 

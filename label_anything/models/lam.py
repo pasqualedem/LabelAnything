@@ -70,29 +70,21 @@ class Lam(nn.Module):
               'original_size': (tuple(int, int)) The original size of
                 the image before transformation, as (H, W).
               'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxCxNx2. Already transformed to the
+                this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
               'point_labels': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.
-              'boxes': (torch.Tensor) Batched box inputs, with shape BxCx4.
+              'boxes': (torch.Tensor) Batched box inputs, with shape BxMxCx4.
                 Already transformed to the input frame of the model.
+              'box_flags': (torch.Tensor) Batched box flags, with shape BxMxC.
               'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form BxCxHxW.
-          multimask_output (bool): Whether the model should predict multiple
-            disambiguating masks, or return a single mask.
+                in the form BxMxCxHxW.
 
         Returns:
-          (list(dict)): A list over input images, where each element is
-            as dictionary with the following keys.
-              'masks': (torch.Tensor) Batched binary mask predictions,
+          torch.Tensor: Batched multiclass mask predictions,
                 with shape BxCxHxW, where B is the number of input prompts,
-                C is determined by multimask_output, and (H, W) is the
+                C is the number of classes, (H, W) is the
                 original size of the image.
-              'iou_predictions': (torch.Tensor) The model's predictions
-                of mask quality, in shape BxC.
-              'low_res_logits': (torch.Tensor) Low resolution logits with
-                shape BxCxHxW, where H=W=256. Can be passed as mask input
-                to subsequent iterations of prediction.
         """
         B, N = batched_input['example_images'].shape[:2]
         prompt_images = rearrange(batched_input['example_images'], 'b n c h w -> (b n) c h w')
@@ -105,10 +97,16 @@ class Lam(nn.Module):
             points = (batched_input["point_coords"], batched_input["point_labels"])
         else:
             points = None
+        if "boxes" in batched_input:
+            boxes = batched_input["boxes"]
+            box_flags = batched_input["box_flags"]
+            boxes = (boxes, box_flags)
+        else:
+            boxes = None
         example_embeddings = self.prompt_encoder(
             image_embeddings=prompt_images_embeddings,
             points=points,
-            boxes=batched_input.get("boxes", None),
+            boxes=boxes,
             masks=batched_input.get("mask_inputs", None),
         )
         
@@ -120,14 +118,32 @@ class Lam(nn.Module):
 
         return seg
 
-    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize pixel values and pad to a square input."""
-        # Normalize colors
-        x = (x - self.pixel_mean) / self.pixel_std
+    def init_pretrained_weights(self, weights):
+        """
+        Initialize certain modules with pretrained weights from Sam.
+        """
+        # Load weights for the image encoder
+        image_encoder_weights = {k[len("image_encoder."):]: v for k, v in weights.items() if k.startswith("image_encoder")}
+        self.image_encoder.load_state_dict(image_encoder_weights)
+        # Load weights for the prompt encoder
+        pe_layer_weights = {k[len("prompt_encoder.pe_layer."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.pe_layer")}
+        self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
+        point_embeddings_weights = {k[len("prompt_encoder.point_embeddings."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.point_embeddings")}
+        self.prompt_encoder.point_embeddings.load_state_dict(point_embeddings_weights)
+        not_a_point_embed_weights = {k[len("prompt_encoder.not_a_point_embed."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.not_a_point_embed")}
+        self.prompt_encoder.not_a_point_embed.load_state_dict(not_a_point_embed_weights)
+        mask_downscaling_weights = {k[len("prompt_encoder.mask_downscaling."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.mask_downscaling")}
+        self.prompt_encoder.mask_downscaling.load_state_dict(mask_downscaling_weights)
+        no_mask_embed_weights = {k[len("prompt_encoder.no_mask_embed."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.no_mask_embed")}
+        self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
 
-        # Pad
-        h, w = x.shape[-2:]
-        padh = self.image_encoder.img_size - h
-        padw = self.image_encoder.img_size - w
-        x = F.pad(x, (0, padw, 0, padh))
-        return x
+        # Load tranformer weights
+        transformer_weights = {k[len("mask_decoder.transformer."):]: v for k, v in weights.items() if k.startswith("mask_decoder.transformer")}
+        self.prompt_encoder.transformer.load_state_dict(transformer_weights)
+
+        # Load weights for the mask decoder transformer
+        self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
+
+        # Load weights for the mask decoder output upscaling
+        output_upscaling_weights = {k[len("mask_decoder.output_upscaling."):]: v for k, v in weights.items() if k.startswith("mask_decoder.output_upscaling")}
+        self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)

@@ -279,8 +279,10 @@ class PromptImageEncoder(PromptEncoder):
         given the batch size and the number of classes of the input prompts.
         """
         if points is not None:
-            return points[0].shape[0], points[0].shape[1], points[0].shape[2]
+            points = points[0]
+            return points.shape[0], points.shape[1], points.shape[2]
         elif boxes is not None:
+            boxes = boxes[0]
             return boxes.shape[0], boxes.shape[1], boxes.shape[2]
         elif masks is not None:
             return masks.shape[0], masks.shape[1], boxes.shape[2]
@@ -301,8 +303,8 @@ class PromptImageEncoder(PromptEncoder):
           image_embeddings (torch.Tensor): the embeddings from the image encoder
           points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
             and labels to embed.
-          boxes (torch.Tensor or none): boxes to embed
-          masks (torch.Tensor or none): masks to embed
+          boxes (tuple(torch.Tensor, torch.Tensor) or none): boxes to embed and padding
+          masks (tuple(torch.Tensor, torch.Tensor) or none): masks to embed and padding
 
         Returns:
           torch.Tensor: sparse embeddings for the points and boxes, with shape
@@ -320,7 +322,8 @@ class PromptImageEncoder(PromptEncoder):
             point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
             sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
         if boxes is not None:
-            box_embeddings = self._embed_boxes(boxes)
+            boxes, flags = boxes
+            box_embeddings = self._embed_boxes(boxes, flags)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
 
         # Attention over sparse embeddings
@@ -340,13 +343,20 @@ class PromptImageEncoder(PromptEncoder):
     
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         B = points.shape[0]
-        points = rearrange(points, 'b m c n xy -> (b c m) n xy')
+        points = rearrange(points, 'b m c n xy -> (b m c) n xy')
         labels = rearrange(labels, 'b m c n -> (b m c) n')
         return super()._embed_points(points, labels, pad)
 
-    def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
-        boxes = rearrange(boxes, 'b m c x y -> (b c m) x y')
-        return super()._embed_boxes(boxes)
+    def _embed_boxes(self, boxes: torch.Tensor, padding) -> torch.Tensor:
+        b, m, c = boxes.shape[:3]
+        boxes = rearrange(boxes, 'b m c x y -> (b m c) x y')
+        box_embeddings = super()._embed_boxes(boxes)
+        box_embeddings = rearrange(box_embeddings, '(b m c) x y -> b m c x y', b=b, c=c)
+        two_points_padding = padding.repeat(1, 1, 1, 2)
+        box_embeddings[two_points_padding == 0] = 0.0
+        box_embeddings[two_points_padding == 0] += self.not_a_point_embed.weight
+        box_embeddings = rearrange(box_embeddings, 'b m c x y -> (b m c) x y')
+        return box_embeddings
 
     def forward(
         self,
@@ -384,9 +394,9 @@ class PromptImageEncoder(PromptEncoder):
         src = src + dense_embeddings
         pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
 
-        # Run the transformer
+        # Run the transformer to fuse the dense embeddings and sparse embeddings
         hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, HW, D)
-        src = rearrange(src, 'b hw d-> b d hw')
+        src = rearrange(src, 'b hw d -> b d hw')
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2) # (BMC, D)
         src = rearrange(src, '(b m c) d -> b (m c) d', b=b, m=m, c=c)
         

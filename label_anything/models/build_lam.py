@@ -91,7 +91,13 @@ def _build_lam(
             ),
         ),
         mask_decoder=MaskDecoderLam(
-            attention_dim=prompt_embed_dim
+            transformer_dim=prompt_embed_dim,
+            transformer=TwoWayTransformer(
+                depth=2,
+                embedding_dim=prompt_embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+            ),
         ),
         pixel_mean=[123.675, 116.28, 103.53],
         pixel_std=[58.395, 57.12, 57.375],
