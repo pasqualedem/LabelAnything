@@ -2,7 +2,7 @@ print("init")
 import torch
 import numpy as np
 print("torch")
-from label_anything.models import build_sam_vit_h, build_lam_vit_h, build_lam_vit_b
+from label_anything.models import build_sam_vit_h, build_lam_vit_l, build_lam_vit_b
 print("build")
 
 @torch.no_grad()
@@ -48,8 +48,10 @@ def test_lam():
     print("start")
     lam = build_lam_vit_b()
     print("lam")
-    weights = torch.load("checkpoints/sam_vit_b_01ec64.pth")
-    lam.init_pretrained_weights(weights)
+    weights = torch.load("checkpoints/sam_vit_b_01ec64.pth") 
+    lam.init_pretrained_weights(weights) 
+    lam = lam.cuda()
+
     input_box_1 = np.array([[[425, 600, 700, 875]], [[125, 200, 300, 175]]])
     input_padding_1 = np.array([[1], [1]])
     input_point_1 = np.array([[[575, 750]], [[275, 350]]])
@@ -74,14 +76,13 @@ def test_lam():
     print("inputs")
 
     batch = {
-        'target_image': images[:, 0],
-        'example_images': images[:, 1:],
-        'original_size': (1024, 1024),
-        'point_coords': coords_torch,
-        'point_labels': labels_torch,
-        'boxes': box_torch,
-        'box_flags': padding_torch,
-        'mask_inputs': masks,
+        'target_image': images[:, 0].cuda(),
+        'example_images': images[:, 1:].cuda(),
+        'point_coords': coords_torch.cuda(),
+        'point_labels': labels_torch.cuda(),
+        'boxes': box_torch.cuda(),
+        'box_flags': padding_torch.cuda(),
+        'mask_inputs': masks.cuda(),
     }
 
     seg = lam(batch)
