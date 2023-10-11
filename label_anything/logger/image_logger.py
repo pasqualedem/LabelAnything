@@ -1,23 +1,7 @@
-import torch
+from logger.text_logger import get_logger
 
 
-"""
-
-'query_image': The input image as a torch tensor in Bx3xHxW format,
-                already transformed for input to the model.
-'example_images': The example images as a torch tensor in BxMx3xHxW format,
-                already transformed for input to the model.
-'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxMxCxNx2. Already transformed to the
-                input frame of the model.
-'point_labels': (torch.Tensor) Batched labels for point prompts,
-                with shape BxMxCxN.
-'boxes': (torch.Tensor) Batched box inputs, with shape BxMxCxNx4.
-                Already transformed to the input frame of the model.
-'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form BxMxCxHxW.
-'box_flags': (torch.Tensor) Batched bounding box flags, with shape BxMxCxN.
-"""
+logger = get_logger(__name__)
 
 
 class Logger:
@@ -39,7 +23,7 @@ class Logger:
     def structure_annotations(annotations):
         return [{"name": "Predictions", "data": annotations}]
 
-    def __data_to_single__(data: dict) -> dict[torch.Tensor]:
+    def __data_to_single__(data: dict):
         output = {}
         for key in data:
             output[key] = data[key]
@@ -64,6 +48,24 @@ class Logger:
             mask_inputs,
             box_flags,
         )
+
+
+"""
+'query_image': The input image as a torch tensor in Bx3xHxW format,
+                already transformed for input to the model.
+'example_images': The example images as a torch tensor in BxMx3xHxW format,
+                already transformed for input to the model.
+'point_coords': (torch.Tensor) Batched point prompts for
+                this image, with shape BxMxCxNx2. Already transformed to the
+                input frame of the model.
+'point_labels': (torch.Tensor) Batched labels for point prompts,
+                with shape BxMxCxN.
+'boxes': (torch.Tensor) Batched box inputs, with shape BxMxCxNx4.
+                Already transformed to the input frame of the model.
+'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
+                in the form BxMxCxHxW.
+'box_flags': (torch.Tensor) Batched bounding box flags, with shape BxMxCxN.
+"""
 
 
 """
