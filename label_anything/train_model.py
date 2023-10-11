@@ -1,11 +1,11 @@
 import tqdm
-
-# TODO: remove and override by parameters
-from torch.optim import Adam
 import torch
+from torch.optim import Adam
 from save import save_model
 from utils.utils import log_every_n
-from label_anything.logger.logger import logger
+from label_anything.logger.text_logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
@@ -17,7 +17,6 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
         optimizer.zero_grad()
         image_dict, gt = batch_dict
 
-        # TODO: flag bbox parla con Pasq
         outputs = model(image_dict)
         loss = criterion(outputs, gt)
 
@@ -33,7 +32,7 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
         correct += batch_correct
         comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
         if log_every_n(batch_idx, args.logger["n_iter"]):
-            big_logger()
+            comet_logger.log_image()
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
@@ -41,7 +40,7 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
     comet_logger.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
 
 
-def test(args, model, criterion, dataloader, epoch, comet_logger):
+def test(model, criterion, dataloader, epoch, comet_logger):
     model.eval()
     total_loss = 0
     correct = 0
@@ -65,7 +64,7 @@ def test(args, model, criterion, dataloader, epoch, comet_logger):
 
 
 def run(args, model, dataloader, comet_logger, experiment, hyper_params):
-    logger.info("Running")
+    logger.info("Start run")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
@@ -95,31 +94,3 @@ def run(args, model, dataloader, comet_logger, experiment, hyper_params):
 
     logger.info(f"Finished Testing {args.name}")
     experiment.end()
-
-
-# DEPRECATED
-def get_single_data(batch_dict: dict, device):
-    """Convert the dictionary into the elements for training
-
-    Args:
-        batch_dict (dict): data dictionary with the training data
-
-    Returns:
-        target: The target tensor.
-        example: The example tensor.
-        prompt_mask: The prompt_mask tensor.
-        prompt_point: The prompt_point tensor.
-        prompt_bbox: The prompt_bbox tensor.
-        flag_bbox: The flag_bbox tensor.
-        gt: The gt tensor.
-    """
-    # Per ogni chiave in batch_dict, sposta il tensor corrispondente sul dispositivo e lo memorizza nel dizionario output
-    data, gt = batch_dict
-    output = {}
-
-    for key in data:
-        output[key] = data[key]
-
-    # Estrae i tensori dal dizionario output
-    target, example, p_mask, p_point, p_bbox, flag_bbox = output.values()
-    return (target, example, p_mask, p_point, p_bbox, flag_bbox), gt

@@ -1,9 +1,11 @@
 from label_anything.parameters import parse_args
 from train_model import run
-from logger.logger import logger
+from logger.text_logger import get_logger
+from logger.image_logger import Logger
 from experiment import comet_experiment
 import os
 
+logger = get_logger(__name__)
 
 if __name__ == "__main__":
     logger.info("Starting Comet Training")
