@@ -4,7 +4,6 @@ import numpy as np
 import itertools
 import json
 
-
 MAX_PIXELS_BBOX_NOISE = 20
 
 
@@ -49,27 +48,30 @@ def get_prompt_mask(annotations, image_shape, reshape, target_classes):
 
 def add_noise(bbox):
     x, y, x1, y1 = bbox
-    std_w = abs(x - x1)/10
-    std_h = abs(y - y1)/10
-    noise_x = list(map(lambda val: val if abs(val) <= 20 else np.sign(val)*MAX_PIXELS_BBOX_NOISE, np.random.normal(loc=0, scale=std_w, size=2).tolist()))
-    noise_y = list(map(lambda val: val if abs(val) <= 20 else np.sign(val)*MAX_PIXELS_BBOX_NOISE, np.random.normal(loc=0, scale=std_h, size=2).tolist()))
-    return x+noise_x[0], y+noise_y[0], x1+noise_x[1], y1+noise_y[1]
+    std_w = abs(x - x1) / 10
+    std_h = abs(y - y1) / 10
+    noise_x = list(map(lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
+                       np.random.normal(loc=0, scale=std_w, size=2).tolist()))
+    noise_y = list(map(lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
+                       np.random.normal(loc=0, scale=std_h, size=2).tolist()))
+    return x + noise_x[0], y + noise_y[0], x1 + noise_x[1], y1 + noise_y[1]
 
 
 def get_bboxes(bboxes_entries, image_id, category_id, len_bbox):
-    bbox = bboxes_entries[(bboxes_entries.image_id == image_id) & (bboxes_entries.category_id == category_id)]['bbox'].tolist()
+    bbox = bboxes_entries[(bboxes_entries.image_id == image_id) & (bboxes_entries.category_id == category_id)][
+        'bbox'].tolist()
     bbox = list(map(lambda x: add_noise(x), bbox))
     bbox = torch.Tensor(bbox)
     ans = torch.cat([
         bbox, torch.zeros((len_bbox - bbox.size(0), 4))
     ], dim=0)
     if bbox.size(0) == 0:
-        flag = torch.full((len_bbox, ), fill_value=False)
+        flag = torch.full((len_bbox,), fill_value=False)
     elif bbox.size(0) == len_bbox:
-        flag = torch.full((len_bbox, ), fill_value=True)
+        flag = torch.full((len_bbox,), fill_value=True)
     else:
         flag = torch.cat(
-            [torch.full((bbox.size(0), ), fill_value=True), torch.full(((len_bbox - bbox.size(0)), ), fill_value=False)]
+            [torch.full((bbox.size(0),), fill_value=True), torch.full(((len_bbox - bbox.size(0)),), fill_value=False)]
         )
     return ans, flag
 
@@ -114,40 +116,70 @@ def load_instances(json_path):
 def get_coords(annotation, max_num_coords, original_shape, reshape):
     if annotation["segmentation"] == [[]]:  # empty segmentation
         return torch.Tensor([0.0, 0.0]), torch.Tensor([False])
-    mask = get_mask(img_shape=original_shape, reshape=reshape, segmentations=convert_polygons(annotation["segmentation"]))
-    num_coords = np.random.randint(1, max_num_coords)
+    mask = get_mask(img_shape=original_shape, reshape=reshape, segmentations=annotation["segmentation"]).squeeze(dim=0)
+    # num_coords = np.random.randint(1, max_num_coords)
+    num_coords = max_num_coords
     coords = torch.nonzero(mask == 1)
-    if coords.size(0) > num_coords:  # for very small masks
-        return torch.cat([coords, torch.zeros(size=(num_coords - coords.size(0)))]),\
-               torch.cat([torch.full(size=coords.size(0), fill_value=True), torch.full(size=(num_coords - coords.size(0)), fill_value=False)])
+    if coords.size(0) < num_coords:  # for very small masks
+        return torch.cat([coords, torch.zeros(size=((num_coords - coords.size(0)), *coords.shape[1:]))]), \
+               torch.cat([torch.full(size=(coords.size(0),), fill_value=True),
+                          torch.full(size=((num_coords - coords.size(0)),), fill_value=False)])
     indexes = np.random.randint(0, coords.size(0), size=num_coords).tolist()
-    return coords[indexes], torch.full(size=num_coords, fill_value=True)
+    return coords[indexes], torch.full(size=(num_coords,), fill_value=True)
 
 
-def pad_coords_image_class(max_coords, coords, flags):
-    if coords.size(0) == max_coords:
+# forse non serve paddare qui
+def pad_coords_image_class(num_coords, coords, flags):
+    if coords.size(0) == num_coords:
         return coords, flags
-    return torch.cat([coords, torch.zeros(max_coords - coords.size(0))]), torch.cat([flags, torch.full(size=(max_coords - coords.size(0)), fill_value=False)])
+    return torch.cat([coords, torch.zeros((num_coords - coords.size(0)), 2)]), torch.cat(
+        [flags, torch.full(size=((num_coords - coords.size(0)),), fill_value=False)])
 
 
-def get_coords_per_image_class(annotations, image_id, class_id, num_max_coords, original_shape, reshape):
+def get_coords_per_image_class(annotations, image_id, class_id, num_coords, original_shape, reshape):
     target_annotations = annotations[(annotations.image_id == image_id) & (annotations.category_id == class_id)]
-    coords_flags = [get_coords(row, num_max_coords, original_shape, reshape) for _, row in target_annotations.iterrows()]
-    max_coords = max((tensor.size(0) for tensor, flag in coords_flags))
-    coords_flags = [pad_coords_image_class(max_coords, tensor, flag) for tensor, flag in coords_flags]
+    if len(target_annotations) == 0:
+        return torch.zeros(size=(1, num_coords, 2)), torch.full(size=(1, num_coords), fill_value=False)# aggiungi una coordinata in testa per i punti
+    coords_flags = [get_coords(row, num_coords, original_shape, reshape) for _, row in
+                    target_annotations.iterrows()]
     coords = [x[0] for x in coords_flags]
     flags = [x[1] for x in coords_flags]
     return torch.stack(coords), torch.stack(flags)
 
 
-def pad_coords_image():
-    pass
+def pad_coords_image(coords_flags, max_annotations):
+    coords, flags = coords_flags
+    if coords.size(0) == max_annotations:
+        return coords, flags
+    return torch.cat([coords, torch.zeros(size=((max_annotations - coords.size(0)), *coords.shape[1:]))]), \
+           torch.cat([flags, torch.full(size=((max_annotations - flags.size(0)), flags.size(1)), fill_value=False)])
 
 
-def get_coords_per_image(annotations, image_id, target_classes, original_shape, resize):
-    pass
+def get_coords_per_image(annotations, image_id, target_classes, num_coords, original_shape, resize):
+    coords_flags = [get_coords_per_image_class(annotations, image_id, class_id, num_coords, original_shape, resize)
+                    for class_id in target_classes]
+    max_annotations = max([x[0].shape[0] for x in coords_flags])
+    padded = [pad_coords_image(x, max_annotations) for x in coords_flags]
+    coords = [x[0] for x in padded]
+    flags = [x[1] for x in padded]
+    return torch.stack(coords), torch.stack(flags)
 
 
-def get_prompt_coords(annotations, target_classes, original_shapes, resize):
-    max_segmentations = get_max_bbox(annotations)
-    return
+def pad_coords(coords_flags, max_annotations):
+    coords, flags = coords_flags
+    if coords.size(1) == max_annotations:
+        return coords, flags
+    coords = coords.permute(1, 0, 2, 3)
+    flags = flags.permute(1, 0, 2)
+    return torch.cat([coords, torch.zeros(size=((max_annotations - coords.size(0)), *coords.shape[1:]))]).permute(1, 0, 2, 3),\
+           torch.cat([flags, torch.full(size=((max_annotations - flags.size(0)), *flags.shape[1:]), fill_value=False)]).permute(1, 0, 2)
+
+
+def get_prompt_coords(annotations, target_classes, num_coords, original_shape, resize):
+    coords_flags = [get_coords_per_image(annotations, image_id, target_classes, num_coords, original_shape, resize)
+                    for image_id in annotations["image_id"].unique().tolist()]
+    max_annotations = max(x[1].size(1) for x in coords_flags)
+    coords_flags = [pad_coords(x, max_annotations) for x in coords_flags]
+    coords = [x[0] for x in coords_flags]
+    flags = [x[1] for x in coords_flags]
+    return torch.stack(coords), torch.stack(flags)
