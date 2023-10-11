@@ -3,6 +3,8 @@ import importlib
 from inspect import signature
 import torch
 from ruamel.yaml import YAML, comments
+from io import StringIO
+from typing import Any, Mapping
 
 
 def get_module_class_from_path(path):
@@ -74,3 +76,29 @@ def log_every_n(batch_idx: int, n: int):
         return True
     else:
         return False
+
+
+def dict_to_yaml_string(mapping: Mapping) -> str:
+    """
+    Convert a nested dictionary or list to a string
+    """
+    string_stream = StringIO()
+    yaml = YAML()
+    yaml.dump(mapping, string_stream)
+    output_str = string_stream.getvalue()
+    string_stream.close()
+    return output_str
+
+
+def get_checkpoints_dir_path(
+    project_name: str, group_name: str, ckpt_root_dir: str = None
+):
+    """Creating the checkpoint directory of a given experiment.
+    :param experiment_name:     Name of the experiment.
+    :param ckpt_root_dir:       Local root directory path where all experiment logging directories will
+                                reside. When none is give, it is assumed that pkg_resources.resource_filename('checkpoints', "")
+                                exists and will be used.
+    :return:                    checkpoints_dir_path
+    """
+    if ckpt_root_dir:
+        return os.path.join(ckpt_root_dir, project_name, group_name)
