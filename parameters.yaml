@@ -1,80 +1,70 @@
 experiment:
-  name: Experiment
-  tags: ["iola"]
+  # It contains all the about the grids and the group of runs:
+  name: Classification # name of the logger platform experiment
+  group: FirstGroup # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+  logger: clearml # logger platform to use
+  tracking_dir: "./examplesExp" # dir where results will be saved
+  entity: null # Wandb entity (username)
+  excluded_files: null # glob of files to not upload to Wandb
 
 parameters:
-  phases:
-    help: "List of phases"
-    value: [["train", "test"]] # list of phases
-  dataset_interface:
-    help: "Dataset Interface"
-    value: [] # Path to the dataset interface class
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  tags: [[mytag1, mytag2]] # list of tags to attach to the run in logger platform
+  phases: [[train, test]] # list of phases
+  dataset_interface: [examples/cifar10/Cifar10] # Path to the dataset interface class
 
   train_params:
-    seed:
-      help: "Random Seed"
-      value: 42
     loss:
-      help: "Loss Function"
-      value: "cross_entropy"
-    max_epochs:
-      help: "Max Epochs"
-      value: [1, 2]
-    initial_lr:
-      help: "Initial Learning Rate"
-      value: 0.0001
-    optimizer:
-      help: "Optimizer"
-      value: ["Adam"]
-    average_best_models:
-      help: "Average Best Models"
-      value: [False]
-    metric_to_watch:
-      help: "Metric to Watch"
-      value: ["loss"]
-    freeze_pretrained:
-      help: "Freeze Pretrained Weights"
-      value: [False] # freeze the loaded pretrained weights
+      name: [cross_entropy] # class loss name
+      params:
+    seed: [42] # random seed to set
+    max_epochs: [10]
+    initial_lr: [0.0001, 0.01]
+    optimizer: [Adam]
+    zero_weight_decay_on_bias_and_bn: [True]
+    average_best_models: [False]
+    greater_metric_to_watch_is_better: [False]
+    metric_to_watch: [loss]
+    freeze_pretrained: [False] # freeze the loaded pretrained weights
+    # Other parameters relative to Super-Gradients (see their docs)
 
-  early_stop:
-    patience:
-      help: "Patience"
-      value: 10 # number of epochs before stopping
-    monitor:
-      help: "Monitor Metric"
-      value: "loss" # metric to monitor
-    mode:
-      help: "Mode"
-      value: "min" # metric to be minimized or maximized
+  early_stopping:
+    patience: [10] # number of epochs before stopping
+    monitor: [loss] # metric to monitor
+    mode: [min] # metric to be minimized or maximized
 
   train_metrics:
-    help: "Train Metrics"
-    # list of metrics to load from torch metrics
+    # list of metrics to load from PyTorch metrics
+    # where the values are their parameters used for training
+    f1: &metric_params
+      num_classes: &num_classes [10]
   test_metrics:
-    help: "Test Metrics"
-    # list of metrics to load from torch metrics
-    # e.g., f1, precision, recall
-  model:
-    help: "Model"
-    name: "Modellazzo"
+    # list of metrics to load from PyTorch metrics
+    # where the values are their parameters used for validation and test
+    f1: *metric_params
+    precision: *metric_params
+    recall: *metric_params
 
-  dataset:
-    channels:
-      help: "Channels"
-      value: [["R", "G", "B"]]
-    trainloader:
-      batch_size:
-        help: "Train Batch Size"
-        value: 64
-      num_workers:
-        help: "Train Num Workers"
-        value: 4
-    testloader:
-      batch_size:
-        help: "Test Batch Size"
-        value: 64
-      num_workers:
-        help: "Test Num Workers"
-        value: 4
-  logger:
-    n_iter: 8
+  model:
+    name: [resnet18] # path to model class or model name contained in EzDL or super-gradients
+    params: # model parameters
+      pretrained_weights: [imagenet]
+      num_classes: *num_classes
+
+  dataset: # parameters depending on the class you defined for the dataset
+    reduce: [True]
+    channels: [["R", "G", "B"]]
+    num_classes: *num_classes
+    trainset:
+    testset:
+    trainloader: &loader_params
+      batch_size: [8]
+      num_workers: [0]
+    testloader: *loader_params
+
+other_grids:
+  # List of supplementary grids (can be empty) in which the parameters defined will override the first grid.
