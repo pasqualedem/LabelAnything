@@ -1,4 +1,4 @@
-from argpass import parse_args
+from label_anything.parameters import parse_args
 from train_model import run
 from logger.logger import logger
 from experiment import comet_experiment

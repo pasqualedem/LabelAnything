@@ -4,7 +4,8 @@ from inspect import signature
 import torch
 from ruamel.yaml import YAML, comments
 from io import StringIO
-from typing import Any, Mapping
+import collections.abc
+from typing import Mapping
 
 
 def get_module_class_from_path(path):
@@ -13,6 +14,31 @@ def get_module_class_from_path(path):
     module = ".".join(splitted[:-1])
     cls = splitted[-1]
     return module, cls
+
+
+def update_collection(collec, value, key=None):
+    if isinstance(collec, dict):
+        if isinstance(value, dict):
+            for keyv, valuev in value.items():
+                collec = update_collection(collec, valuev, keyv)
+        elif key is not None:
+            if value is not None:
+                collec[key] = value
+        else:
+            collec = {**collec, **value} if value is not None else collec
+    else:
+        collec = value if value is not None else collec
+    return collec
+
+
+def nested_dict_update(d, u):
+    if u is not None:
+        for k, v in u.items():
+            if isinstance(v, collections.abc.Mapping):
+                d[k] = nested_dict_update(d.get(k) or {}, v)
+            else:
+                d[k] = v
+    return d
 
 
 def instantiate_class(name, params):
