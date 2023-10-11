@@ -6,6 +6,7 @@ import importlib
 import tqdm
 
 from logger.text_logger import get_logger
+from logger import LOGGERS
 from logger.basesg_logger import BaseSGLogger as BaseLogger
 
 from piptools.scripts.sync import _get_installed_distributions
@@ -13,7 +14,9 @@ from pprint import pformat
 from typing import Mapping, Dict, Tuple
 from label_anything.callbacks import callback_factory
 from label_anything.callbacks.metrics import AuxMetricsUpdateCallback
-from label_anything.models import MODELS as MODEL_DICT, WrappedModel
+
+# TODO sistemare il WrappedModel
+from label_anything.models import MODELS as MODELS_DICT, WrappedModel
 from utils.utils import get_module_class_from_path, instantiate_class
 
 
