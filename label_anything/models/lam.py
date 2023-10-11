@@ -67,8 +67,6 @@ class Lam(nn.Module):
                 already transformed for input to the model.
               'example_images': The example images as a torch tensor in BxNx3xHxW format,
                 already transformed for input to the model.
-              'original_size': (tuple(int, int)) The original size of
-                the image before transformation, as (H, W).
               'point_coords': (torch.Tensor) Batched point prompts for
                 this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
@@ -103,7 +101,7 @@ class Lam(nn.Module):
             boxes = (boxes, box_flags)
         else:
             boxes = None
-        example_embeddings = self.prompt_encoder(
+        class_embeddings = self.prompt_encoder(
             image_embeddings=prompt_images_embeddings,
             points=points,
             boxes=boxes,
@@ -113,7 +111,7 @@ class Lam(nn.Module):
         seg = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            example_embeddings=example_embeddings
+            class_embeddings=class_embeddings
         )
 
         return seg

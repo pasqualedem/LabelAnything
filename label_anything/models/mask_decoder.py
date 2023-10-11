@@ -189,7 +189,7 @@ class MaskDecoderLam(nn.Module):
         self,
         image_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
-        example_embeddings: torch.Tensor,
+        class_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -197,18 +197,13 @@ class MaskDecoderLam(nn.Module):
         Arguments:
           image_embeddings (torch.Tensor): the embeddings from the image encoder
           image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
-          example_embeddings (torch.Tensor): the embeddings of the points and boxes over the examples
+          class_embeddings (torch.Tensor): the embeddings of the points and boxes over the examples
 
         Returns:
           torch.Tensor: batched predicted segmentations
         """
-        # key_values = rearrange(image_embeddings + image_pe, "b c h w -> b (h w) c")
-        # queries = example_embeddings
-        # attn_out = self.cross_attn_img_to_examples(q=queries, k=key_values, v=key_values)
-        # queries = queries + attn_out
-        # queries = self.norm_img_to_examples(queries)
         b, c, h, w = image_embeddings.shape
-        class_embeddings, image_embeddings = self.transformer(image_embeddings, image_pe, example_embeddings)
+        class_embeddings, image_embeddings = self.transformer(image_embeddings, image_pe, class_embeddings)
         image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)        
         
         upscaled_embeddings = self.output_upscaling(image_embeddings)

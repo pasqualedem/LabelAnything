@@ -2,8 +2,8 @@ print("init")
 import torch
 import numpy as np
 print("torch")
-from label_anything.models import build_sam_vit_h, build_lam_vit_l, build_lam_vit_b
-print("build")
+from label_anything.models import build_lam_vit_h, build_lam_vit_l, build_lam_vit_b, build_sam_vit_h, build_sam_vit_l, build_sam_vit_b
+int("build")
 
 @torch.no_grad()
 def test_sam():
@@ -46,7 +46,7 @@ def test_sam():
 @torch.no_grad()
 def test_lam():
     print("start")
-    lam = build_lam_vit_b()
+    lam = build_lam_vit_h()
     print("lam")
     weights = torch.load("checkpoints/sam_vit_b_01ec64.pth") 
     lam.init_pretrained_weights(weights) 
