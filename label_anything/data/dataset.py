@@ -151,6 +151,10 @@ class LabelAnythingDataset(Dataset):
         return data_dict, gts
 
 
+class LabelAnyThingOnlyImageDataset(LabelAnythingDataset):
+    def __getitem__(self, item):
+        image_id = self.images.iloc[item]  # image row id
+        return self.__load_image(image_id), image_id  # load image
 
 
 # main for testing the class
