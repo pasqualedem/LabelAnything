@@ -44,12 +44,15 @@ def build_lam_vit_b(checkpoint=None):
     )
 
 
-sam_model_registry = {
-    "default": build_lam_vit_h,
-    "vit_h": build_lam_vit_h,
-    "vit_l": build_lam_vit_l,
-    "vit_b": build_lam_vit_b,
-}
+def build_lam_no_vit(checkpoint=None):
+    return _build_lam(
+        encoder_embed_dim=None,
+        encoder_depth=None,
+        encoder_num_heads=None,
+        encoder_global_attn_indexes=None,
+        checkpoint=checkpoint,
+        use_vit=False,
+    )
 
 
 def _build_lam(
@@ -58,13 +61,13 @@ def _build_lam(
     encoder_num_heads,
     encoder_global_attn_indexes,
     checkpoint=None,
+    use_vit=True,
 ):
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
-    sam = Lam(
-        image_encoder=ImageEncoderViT(
+    vit = ImageEncoderViT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
             img_size=image_size,
@@ -77,7 +80,9 @@ def _build_lam(
             global_attn_indexes=encoder_global_attn_indexes,
             window_size=14,
             out_chans=prompt_embed_dim,
-        ),
+        ) if use_vit else None
+    sam = Lam(
+        image_encoder=vit,
         prompt_encoder=PromptImageEncoder(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
