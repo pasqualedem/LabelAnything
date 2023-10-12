@@ -2,6 +2,9 @@ from typing import Tuple
 import numpy as np
 import torch
 
+from super_gradients.training.utils.callbacks import LR_SCHEDULERS_CLS_DICT
+
+
 from label_anything import scheduler as schedulers
 from label_anything.loss import instiantiate_loss
 from label_anything.metrics import metrics_factory
@@ -144,6 +147,8 @@ def parse_scheduler(train_params: dict) -> dict:
     if "name" in scheduler:
         params = scheduler.get("params") or {}
         scheduler = scheduler["name"]
+    if scheduler in LR_SCHEDULERS_CLS_DICT:
+        return train_params
     if scheduler in schedulers.__dict__:
         scheduler = schedulers.__dict__[scheduler](**params)
         train_params["lr_mode"] = "function"

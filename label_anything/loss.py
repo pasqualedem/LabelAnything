@@ -3,7 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from label_anything.logger.text_logger import get_logger
-from label_anything.utils.utils import substitute_values
+from label_anything.models.kd.feature import FDOutput
+from label_anything.utils.utils import instantiate_class, substitute_values
 from einops import rearrange
 
 

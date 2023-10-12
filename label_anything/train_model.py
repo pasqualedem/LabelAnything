@@ -79,20 +79,21 @@ def run(args, model, dataloader, comet_logger, experiment, hyper_params):
     criterion = hyper_params["loss"]
     optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
 
-    # Train the Model
-    with experiment.train():
-        logger.info(f"Running Model Training {args.name}")
-        for epoch in range(hyper_params["num_epochs"]):
-            logger.info("Epoch: {}/{}".format(epoch, hyper_params["num_epochs"]))
-            train(args, model, optimizer, criterion, dataloader, epoch, comet_logger)
+    logger.info('CIOLA')
+    # # Train the Model
+    # with experiment.train():
+    #     logger.info(f"Running Model Training {args.name}")
+    #     for epoch in range(hyper_params["num_epochs"]):
+    #         logger.info("Epoch: {}/{}".format(epoch, hyper_params["num_epochs"]))
+    #         train(args, model, optimizer, criterion, dataloader, epoch, comet_logger)
 
-    save_model(experiment, model, model._get_name)
-    logger.info(f"Finished Training {args.name}")
+    # save_model(experiment, model, model._get_name)
+    # logger.info(f"Finished Training {args.name}")
 
-    with experiment.test():
-        logger.info(f"Running Model Testing {args.name}")
-        for epoch in range(hyper_params["num_epochs"]):
-            test(args, model, criterion, dataloader, comet_logger)
+    # with experiment.test():
+    #     logger.info(f"Running Model Testing {args.name}")
+    #     for epoch in range(hyper_params["num_epochs"]):
+    #         test(args, model, criterion, dataloader, comet_logger)
 
-    logger.info(f"Finished Testing {args.name}")
+    # logger.info(f"Finished Testing {args.name}")
     experiment.end()
