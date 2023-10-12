@@ -89,3 +89,6 @@ target/
 
 # Mypy cache
 .mypy_cache/
+
+/label_anything/data/*.json
+/label_anything/data/*.ipynb
