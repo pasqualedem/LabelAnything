@@ -10,6 +10,7 @@ __pycache__/
 venv/
 env/
 build/
+checkpoints/
 develop-eggs/
 dist/
 downloads/
@@ -89,5 +90,7 @@ target/
 # Mypy cache
 .mypy_cache/
 
-
 *.png
+
+/label_anything/data/*.json
+/label_anything/data/*.ipynb

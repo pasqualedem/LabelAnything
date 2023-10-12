@@ -5,11 +5,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from einops import rearrange
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from typing import List, Tuple, Type
+
+from label_anything.models.transformer import Attention
 
 from .common import LayerNorm2d
 
@@ -148,6 +151,68 @@ class MaskDecoder(nn.Module):
         iou_pred = self.iou_prediction_head(iou_token_out)
 
         return masks, iou_pred
+    
+
+class MaskDecoderLam(nn.Module):
+    def __init__(
+        self,
+        *,
+        transformer_dim: int,
+        transformer: nn.Module,
+        activation: Type[nn.Module] = nn.GELU,
+    ) -> None:
+        """
+        Predicts masks given an image and prompt embeddings, using a
+        transformer architecture.
+
+        Arguments:
+          trasnformer_dim (int): the channel dimension of the transformer
+          transformer (nn.Module): the transformer used to predict masks
+          activation (nn.Module): the type of activation to use when
+            upscaling masks
+        """
+        super().__init__()
+        self.attention_dim = transformer_dim
+
+        self.output_upscaling = nn.Sequential(
+            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            LayerNorm2d(transformer_dim // 4),
+            activation(),
+            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            activation(),
+        )
+        self.transformer = transformer
+
+        self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+
+    def forward(
+        self,
+        image_embeddings: torch.Tensor,
+        image_pe: torch.Tensor,
+        class_embeddings: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict masks given image and prompt embeddings.
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
+          class_embeddings (torch.Tensor): the embeddings of the points and boxes over the examples
+
+        Returns:
+          torch.Tensor: batched predicted segmentations
+        """
+        b, c, h, w = image_embeddings.shape
+        class_embeddings, image_embeddings = self.transformer(image_embeddings, image_pe, class_embeddings)
+        image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)        
+        
+        upscaled_embeddings = self.output_upscaling(image_embeddings)
+        b, c, h, w = upscaled_embeddings.shape
+
+        class_embeddings = self.class_mlp(class_embeddings)
+        seg = (class_embeddings @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+        return seg
+
 
 
 # Lightly adapted from

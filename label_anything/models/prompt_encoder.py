@@ -7,10 +7,12 @@
 import numpy as np
 import torch
 from torch import nn
+from einops import rearrange
 
 from typing import Any, Optional, Tuple, Type
 
-from .common import LayerNorm2d
+from .common import LayerNorm2d, MLPBlock
+from .transformer import TwoWayTransformer, Attention
 
 
 class PromptEncoder(nn.Module):
@@ -212,3 +214,199 @@ class PositionEmbeddingRandom(nn.Module):
         coords[:, :, 0] = coords[:, :, 0] / image_size[1]
         coords[:, :, 1] = coords[:, :, 1] / image_size[0]
         return self._pe_encoding(coords.to(torch.float))  # B x N x C
+    
+
+class PromptImageEncoder(PromptEncoder):
+    def __init__(
+        self,
+        embed_dim: int,
+        image_embedding_size: Tuple[int, int],
+        input_image_size: Tuple[int, int],
+        mask_in_chans: int,
+        transformer: nn.Module,
+        activation: Type[nn.Module] = nn.GELU,
+    ) -> None:
+        """
+        Encodes prompts for input to LAM's mask decoder.
+
+        Arguments:
+          embed_dim (int): The prompts' embedding dimension
+          image_embedding_size (tuple(int, int)): The spatial size of the
+            image embedding, as (H, W).
+          input_image_size (int): The padded size of the image as input
+            to the image encoder, as (H, W).
+          mask_in_chans (int): The number of hidden channels used for
+            encoding input masks.
+          activation (nn.Module): The activation to use when encoding
+            input masks.
+        """
+        super().__init__(embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation)
+
+        num_heads: int = 8
+        attention_downsample_rate: int = 2
+        self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
+        mlp_dim: int = 2048
+
+        self.transformer = transformer
+
+        self.sparse_embedding_attention = Attention(
+                    embed_dim, num_heads, downsample_rate=attention_downsample_rate
+                )
+        self.norm_sparse_embedding_attention = nn.LayerNorm(embed_dim)
+        self.example_attention = Attention(
+            embed_dim, num_heads, downsample_rate=attention_downsample_rate
+        )
+        self.norm_example_attention = nn.LayerNorm(embed_dim)
+        self.example_mlp = MLPBlock(embed_dim, mlp_dim)
+        self.norm_example_mlp = nn.LayerNorm(embed_dim)
+
+    def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
+        """Embeds mask inputs. (B, C, H, W) """
+        B, M, C, H, W = masks.shape
+        masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
+        mask_embedding = self.mask_downscaling(masks)
+        mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
+        return mask_embedding
+    
+    def _get_batch_examples_class_size(
+        self,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+    ) -> int:
+        """
+        Gets the batch size and the number classes of the output 
+        given the batch size and the number of classes of the input prompts.
+        """
+        if points is not None:
+            points = points[0]
+            return points.shape[0], points.shape[1], points.shape[2]
+        elif boxes is not None:
+            boxes = boxes[0]
+            return boxes.shape[0], boxes.shape[1], boxes.shape[2]
+        elif masks is not None:
+            return masks.shape[0], masks.shape[1], boxes.shape[2]
+        else:
+            return 1
+    
+    def embed_points_masks(
+        self,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning both sparse and dense
+        embeddings.
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
+            and labels to embed.
+          boxes (tuple(torch.Tensor, torch.Tensor) or none): boxes to embed and padding
+          masks (tuple(torch.Tensor, torch.Tensor) or none): masks to embed and padding
+
+        Returns:
+          torch.Tensor: sparse embeddings for the points and boxes, with shape
+            BxNx(embed_dim), where N is determined by the number of input points
+            and boxes.
+          torch.Tensor: dense embeddings for the masks, in the shape
+            Bx(embed_dim)x(embed_H)x(embed_W)
+        """
+        B, n_examples, n_classes = self._get_batch_examples_class_size(points, boxes, masks)
+        bs = B * n_examples * n_classes
+
+        sparse_embeddings = torch.empty((bs, 0, self.embed_dim), device=self._get_device())
+        if points is not None:
+            coords, labels = points
+            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
+            sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
+        if boxes is not None:
+            boxes, flags = boxes
+            box_embeddings = self._embed_boxes(boxes, flags)
+            sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
+
+        # Attention over sparse embeddings
+        sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
+        sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings, sparse_embeddings, sparse_embeddings)
+        sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
+        sparse_embeddings = rearrange(sparse_embeddings, '(b m) (c n) d -> b m c n d', b=B, m=n_examples, c=n_classes)
+
+        if masks is not None:
+            dense_embeddings = self._embed_masks(masks)
+        else:
+            dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
+                bs, 1, 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+            )
+
+        return sparse_embeddings, dense_embeddings
+    
+    def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
+        B = points.shape[0]
+        points = rearrange(points, 'b m c n xy -> (b m c) n xy')
+        labels = rearrange(labels, 'b m c n -> (b m c) n')
+        return super()._embed_points(points, labels, pad)
+
+    def _embed_boxes(self, boxes: torch.Tensor, padding) -> torch.Tensor:
+        b, m, c = boxes.shape[:3]
+        boxes = rearrange(boxes, 'b m c x y -> (b m c) x y')
+        box_embeddings = super()._embed_boxes(boxes)
+        box_embeddings = rearrange(box_embeddings, '(b m c) x y -> b m c x y', b=b, c=c)
+        two_points_padding = padding.repeat(1, 1, 1, 2)
+        box_embeddings[two_points_padding == 0] = 0.0
+        box_embeddings[two_points_padding == 0] += self.not_a_point_embed.weight
+        box_embeddings = rearrange(box_embeddings, 'b m c x y -> (b m c) x y')
+        return box_embeddings
+
+    def forward(
+        self,
+        image_embeddings: torch.Tensor,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning both sparse and dense
+        embeddings.
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
+            and labels to embed (B, M, C, 2)
+          boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
+          masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+
+        Returns:
+          torch.Tensor: sparse embeddings for the points and boxes, with shape
+            BxNx(embed_dim), where N is determined by the number of input points
+            and boxes.
+          torch.Tensor: dense embeddings for the masks, in the shape
+            Bx(embed_dim)x(embed_H)x(embed_W)
+        """
+        sparse_embeddings, dense_embeddings = self.embed_points_masks(points, boxes, masks)
+        sparse_embeddings = rearrange(sparse_embeddings, 'b m c n d -> (b m c) n d')
+
+        b, m, c, d, h, w = dense_embeddings.shape
+        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
+
+        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, m, 1, 1, 1)
+        src = rearrange(src, "b m c d h w-> (b m c) d h w")
+        src = src + dense_embeddings
+        pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
+
+        # Run the transformer to fuse the dense embeddings and sparse embeddings
+        hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, HW, D)
+        src = rearrange(src, 'b hw d -> b d hw')
+        src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2) # (BMC, D)
+        src = rearrange(src, '(b m c) d -> b (m c) d', b=b, m=m, c=c)
+        
+        src = self.example_attention(src, src, src)
+        src = self.norm_example_attention(src)
+        src = self.example_mlp(src) + src
+        src = self.norm_example_mlp(src)
+
+        # Average over examples
+        src = rearrange(src, 'b (m c) d -> b m c d', c=c)
+        src = torch.mean(src, dim=1) # (B, C, D)
+        return src
+        
