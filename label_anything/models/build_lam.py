@@ -9,14 +9,11 @@ import torch
 from functools import partial
 
 from . import ImageEncoderViT, MaskDecoderLam, PromptImageEncoder, Lam, TwoWayTransformer
-
+from .build_vit import build_vit_b, build_vit_h, build_vit_l
 
 def build_lam_vit_h(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=1280,
-        encoder_depth=32,
-        encoder_num_heads=16,
-        encoder_global_attn_indexes=[7, 15, 23, 31],
+        build_vit_h,
         checkpoint=checkpoint,
     )
 
@@ -26,37 +23,20 @@ build_sam = build_lam_vit_h
 
 def build_lam_vit_l(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=1024,
-        encoder_depth=24,
-        encoder_num_heads=16,
-        encoder_global_attn_indexes=[5, 11, 17, 23],
+        build_vit_l,
         checkpoint=checkpoint,
     )
 
 
 def build_lam_vit_b(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=768,
-        encoder_depth=12,
-        encoder_num_heads=12,
-        encoder_global_attn_indexes=[2, 5, 8, 11],
+        build_vit_b,
         checkpoint=checkpoint,
     )
 
 
-sam_model_registry = {
-    "default": build_lam_vit_h,
-    "vit_h": build_lam_vit_h,
-    "vit_l": build_lam_vit_l,
-    "vit_b": build_lam_vit_b,
-}
-
-
 def _build_lam(
-    encoder_embed_dim,
-    encoder_depth,
-    encoder_num_heads,
-    encoder_global_attn_indexes,
+    build_vit,
     checkpoint=None,
 ):
     prompt_embed_dim = 256
@@ -64,20 +44,7 @@ def _build_lam(
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
     sam = Lam(
-        image_encoder=ImageEncoderViT(
-            depth=encoder_depth,
-            embed_dim=encoder_embed_dim,
-            img_size=image_size,
-            mlp_ratio=4,
-            norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
-            num_heads=encoder_num_heads,
-            patch_size=vit_patch_size,
-            qkv_bias=True,
-            use_rel_pos=True,
-            global_attn_indexes=encoder_global_attn_indexes,
-            window_size=14,
-            out_chans=prompt_embed_dim,
-        ),
+        image_encoder=build_vit(),
         prompt_encoder=PromptImageEncoder(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
