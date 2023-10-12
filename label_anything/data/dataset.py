@@ -5,7 +5,7 @@ from io import BytesIO
 import pandas as pd
 import random
 import torch
-from torchvision.transforms import Resize, ToTensor
+from torchvision.transforms import Resize, ToTensor, InterpolationMode
 import warnings
 import utils
 
@@ -36,10 +36,12 @@ class LabelAnythingDataset(Dataset):
         self.j_index_value = j_index_value
         self.seed = seed
         self.resize = Resize((resize_dim, resize_dim))
+        self.resize_mask = Resize((resize_dim, resize_dim), interpolation=InterpolationMode.NEAREST)
         self.img_shape = (1, resize_dim, resize_dim)
         self.max_num_coords = max_mum_coords
         assert self.max_num_coords > 1, "maximum number of coords must be greater then 1."
         self.num_coords = random.randint(1, max_mum_coords)
+        self.num_examples = random.randint(1, self.num_max_examples)
 
     def __load_image(self, img):
         if self.load_from_dir:
@@ -54,9 +56,8 @@ class LabelAnythingDataset(Dataset):
             lambda x: utils.compute_j_index(target_classes, x.category_id),
             axis=1)
         class_projection = class_projection[class_projection['j_score'] > self.j_index_value]
-        num_samples = random.randint(1, self.num_max_examples)
-        print(f'extracting {num_samples} examples')
-        return class_projection.sample(n=num_samples, replace=True,
+        print(f'extracting {self.num_examples} examples')
+        return class_projection.sample(n=self.num_examples, replace=True,
                                        random_state=self.seed).image_id.tolist(), list(set(target_classes))
 
     def __getitem__(self, item):
@@ -78,12 +79,12 @@ class LabelAnythingDataset(Dataset):
 
         # masks
         mask_annotations = prompt_annotations[['image_id', 'segmentation', 'category_id']]
-        prompt_mask = utils.get_prompt_mask(mask_annotations, target.shape, self.resize, classes).squeeze(dim=2)
+        prompt_mask = utils.get_prompt_mask(mask_annotations, target.shape, self.resize_mask, classes).squeeze(dim=2)
 
         # gt
         target_annotations = self.annotations[self.annotations.image_id == image_id['id']][
             ['category_id', 'segmentation']]
-        gt = self.resize(utils.get_gt(target_annotations, target.shape, classes).unsqueeze(0)).squeeze(0)
+        gt = self.resize_mask(utils.get_gt(target_annotations, target.shape, classes).unsqueeze(0)).squeeze(0)
 
         if self.preprocess:
             examples = [self.resize(self.preprocess(x)) for x in examples]
@@ -93,7 +94,7 @@ class LabelAnythingDataset(Dataset):
                                                              target_classes=classes,
                                                              num_coords=self.num_coords,
                                                              original_shape=target.shape,
-                                                             resize=self.resize)
+                                                             resize=self.resize_mask)
 
         target = self.resize(target)
 
@@ -107,17 +108,55 @@ class LabelAnythingDataset(Dataset):
             'flag_bbox': flag_bbox,  # n x c x m
             'gt': gt,  # h x w
             'classes': {
-                c: ix for ix, c in enumerate(classes, start=1)
+                ix: c for ix, c in enumerate(classes, start=1)
             }
         }
 
     def __len__(self):
         return len(self.images)
 
+    def collate_fn(self, batched_input):
+        classes = [x['classes'] for x in batched_input]
+        new_classes = utils.rearrange_classes(classes)
+        gts = [x['gt'] for x in batched_input]
+        gts = torch.stack([utils.collate_gt(x, classes[ix], new_classes) for ix, x in enumerate(gts)])
+        masks = [x['prompt_mask'] for x in batched_input]
+        masks = torch.stack([utils.collate_mask(mask, classes[i], new_classes) for i, mask in enumerate(masks)])
+        bboxes = [x["prompt_bbox"] for x in batched_input]
+        flags = [x["flag_bbox"] for x in batched_input]
+        max_annotations = max(x.size(2) for x in bboxes)
+        bboxes_flags = [utils.collate_bbox(bboxes[i], flags[i], classes[i], new_classes, max_annotations)
+                        for i in range(len(bboxes))]
+        bboxes = torch.stack([x[0] for x in bboxes_flags])
+        bbox_flags = torch.stack([x[1] for x in bboxes_flags])
+        coords = [x['prompt_coords'] for x in batched_input]
+        flags = [x['flag_coords'] for x in batched_input]
+        coords_flags = [utils.collate_coords(coords[i], flags[i], classes[i], new_classes, max_annotations)
+                        for i in range(len(coords))]
+        coords = torch.stack([x[0] for x in coords_flags])
+        coord_flags = torch.stack([x[1] for x in coords_flags])
+        query_image = torch.stack([x["target"] for x in batched_input])
+        example_images = torch.stack([x["examples"] for x in batched_input])
+
+        data_dict = {
+            'query_image': query_image,
+            'example_images': example_images,
+            'point_coords': coords,
+            'point_flags': coord_flags,
+            'boxes': bboxes,
+            'box_flags': bbox_flags,
+            'mask_inputs': masks
+        }
+
+        return data_dict, gts
+
+
+
 
 # main for testing the class
 if __name__ == '__main__':
     from torchvision.transforms import Compose, ToTensor, Resize, ToPILImage
+    from torch.utils.data import DataLoader
 
     preprocess = Compose([
         ToTensor(),
@@ -125,13 +164,15 @@ if __name__ == '__main__':
     ])
 
     dataset = LabelAnythingDataset(
-        instances_path='preprocessed_data.json',
+        instances_path='lvis_v1_train.json',
         preprocess=preprocess,
         num_max_examples=10,
         j_index_value=.1,
     )
 
-    out = dataset[0]
+    dataloader = DataLoader(dataset=dataset, batch_size=2, shuffle=False, collate_fn=dataset.collate_fn)
+    data_dict, gt = next(iter(dataloader))
 
-    for k, v in out.items():
-        print(f'{k}: {v.size()}' if isinstance(v, torch.Tensor) else f'{k}: {v}')
+    print([f'{k}: {v.size()}' for k, v in data_dict.items()])
+    print(f'gt: {gt.size()}')
+

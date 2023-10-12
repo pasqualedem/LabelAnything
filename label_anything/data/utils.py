@@ -183,3 +183,43 @@ def get_prompt_coords(annotations, target_classes, num_coords, original_shape, r
     coords = [x[0] for x in coords_flags]
     flags = [x[1] for x in coords_flags]
     return torch.stack(coords), torch.stack(flags)
+
+
+def rearrange_classes(classes):
+    distinct_classes = itertools.chain(*[list(x.values()) for x in classes])
+    return {val: ix for ix, val in enumerate(distinct_classes, start=1)}
+
+
+def collate_gt(tensor, original_classes, new_classes):
+    for i in range(tensor.size(0)):
+        for j in range(tensor.size(0)):
+            tensor[i,j] = 0 if tensor[i,j].item() == 0 else new_classes[original_classes[tensor[i,j].item()]]
+    return tensor
+
+
+def collate_mask(tensor, original_classes, new_classes):
+    new_positions = [new_classes[x]-1 for x in original_classes.values()]
+    m, c, h, w, = tensor.shape
+    out = torch.zeros(size=(m, len(new_classes.keys()), h, w))
+    out[:, new_positions, :, :] = tensor
+    return out
+
+
+def collate_bbox(bbox, flag, original_classes, new_classes, max_annotations):
+    new_positions = [new_classes[x]-1 for x in original_classes.values()]
+    m, c, n, b_dim = bbox.shape
+    out_bbox = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, b_dim))
+    out_flag = torch.full(size=(m, len(new_classes.keys()), max_annotations), fill_value=False)
+    out_bbox[:, new_positions, :n, :] = bbox
+    out_flag[:, new_positions, :n] = flag
+    return out_bbox, out_flag
+
+
+def collate_coords(coords, flag, original_classes, new_classes, max_annotations):
+    new_positions = [new_classes[x] - 1 for x in original_classes.values()]
+    m, c, n, k, c_dim = coords.shape
+    out_coords = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, k, c_dim))
+    out_flag = torch.full(size=(m, len(new_classes.keys()), max_annotations, k), fill_value=False)
+    out_coords[:, new_positions, :n, :, :] = coords
+    out_flag[:, new_positions, :n, :] = flag
+    return out_coords, out_flag
