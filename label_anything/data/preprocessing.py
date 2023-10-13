@@ -1,2 +1,2 @@
 import pandas as pd
-import utils
+import label_anything.data.utils as utils
