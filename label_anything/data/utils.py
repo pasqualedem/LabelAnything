@@ -359,7 +359,7 @@ def get_coords_per_image(
         image_id: int,
         target_classes: List[int],
         num_coords: int,
-        original_shape: torch.size,
+        original_shape: torch.Size,
         resize: torchvision.transforms.Resize
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
