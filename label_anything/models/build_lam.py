@@ -9,14 +9,11 @@ import torch
 from functools import partial
 
 from . import ImageEncoderViT, MaskDecoderLam, PromptImageEncoder, Lam, TwoWayTransformer
-
+from .build_vit import build_vit_b, build_vit_h, build_vit_l
 
 def build_lam_vit_h(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=1280,
-        encoder_depth=32,
-        encoder_num_heads=16,
-        encoder_global_attn_indexes=[7, 15, 23, 31],
+        build_vit_h,
         checkpoint=checkpoint,
     )
 
@@ -26,22 +23,17 @@ build_sam = build_lam_vit_h
 
 def build_lam_vit_l(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=1024,
-        encoder_depth=24,
-        encoder_num_heads=16,
-        encoder_global_attn_indexes=[5, 11, 17, 23],
+        build_vit_l,
         checkpoint=checkpoint,
     )
 
 
 def build_lam_vit_b(checkpoint=None):
     return _build_lam(
-        encoder_embed_dim=768,
-        encoder_depth=12,
-        encoder_num_heads=12,
-        encoder_global_attn_indexes=[2, 5, 8, 11],
+        build_vit_b,
         checkpoint=checkpoint,
     )
+
 
 
 def build_lam_no_vit(checkpoint=None):
@@ -56,10 +48,7 @@ def build_lam_no_vit(checkpoint=None):
 
 
 def _build_lam(
-    encoder_embed_dim,
-    encoder_depth,
-    encoder_num_heads,
-    encoder_global_attn_indexes,
+    build_vit,
     checkpoint=None,
     use_vit=True,
 ):
@@ -67,6 +56,7 @@ def _build_lam(
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
+
     vit = ImageEncoderViT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
