@@ -73,7 +73,8 @@ def preprocess_images_to_embeddings(
         directory,
         batch_size=1,
         outfolder='data/processed/embeddings',
-        device="cuda"
+        device="cuda",
+        compile=False,
     ):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
@@ -88,7 +89,14 @@ def preprocess_images_to_embeddings(
     """
     os.makedirs(outfolder, exist_ok=True)
     model = model_registry[encoder_name](checkpoint=checkpoint, use_sam_checkpoint=use_sam_checkpoint)
+    print("Model loaded")
     model = model.to(device)
+    print("Model moved to device")
+    if compile:
+        model = torch.compile(model, dynamic=True)
+        print("Model compiled") 
     dataset = LabelAnyThingOnlyImageDataset(directory=directory, preprocess=preprocess_image)
+    print("Dataset created")
     dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
+    print("Dataloader created")
     create_image_embeddings(model, dataloader, outfolder, device=device)
