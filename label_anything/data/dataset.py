@@ -1,3 +1,4 @@
+import os
 from torch.utils.data import Dataset
 from PIL import Image
 import requests
@@ -7,7 +8,7 @@ import random
 import torch
 from torchvision.transforms import Resize, ToTensor, InterpolationMode
 import warnings
-import utils
+from . import utils
 
 warnings.filterwarnings('ignore')
 
@@ -151,10 +152,24 @@ class LabelAnythingDataset(Dataset):
         return data_dict, gts
 
 
-class LabelAnyThingOnlyImageDataset(LabelAnythingDataset):
+class LabelAnyThingOnlyImageDataset(Dataset):
+    def __init__(
+            self,
+            directory=None,
+            preprocess=None
+    ):
+        super().__init__()
+        self.directory = directory
+        self.files = os.listdir(directory)
+        self.preprocess = preprocess
+
+    def __len__(self):
+        return len(self.files)
+
     def __getitem__(self, item):
-        image_id = self.images.iloc[item]  # image row id
-        return self.preprocess(self.__load_image(image_id)), image_id  # load image
+        img = Image.open(os.path.join(self.directory, self.files[item]))
+        image_id, _ = os.path.splitext(self.files[item])
+        return self.preprocess(img), image_id  # load image
 
 
 # main for testing the class

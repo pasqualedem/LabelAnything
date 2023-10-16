@@ -1,5 +1,5 @@
 # from label_anything.parameters import parse_args
-from .preprocess import preprocess_images_to_embeddings
+from preprocess import preprocess_images_to_embeddings
 
 from train_model import run
 from logger.text_logger import get_logger
@@ -11,18 +11,16 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("operation", help="Select the operation to perform (preprocess, train, test)")
 parser.add_argument("--encoder", default="vit_h", help="Select the encoder to use")
-parser.add_argument("--checkpoint", default="vit_h", help="Select the file to use as checkpoint")
+parser.add_argument("--checkpoint", default="vit_h.pth", help="Select the file to use as checkpoint")
 parser.add_argument("--use_sam_checkpoint", action="store_true", help="Select the file to use as checkpoint")
-parser.add_argument("--instances_path", default="instances.json", help="Select the file to use as checkpoint")
 parser.add_argument("--directory", default="data/raw/train2017", help="Select the file to use as checkpoint")
 parser.add_argument("--batch_size", default=1, help="Batch size for the dataloader")
-parser.add_argument("--outfolder", default="data/preprocessed/embeddings", help="Folder to save the embeddings")
+parser.add_argument("--outfolder", default="data/processed/embeddings", help="Folder to save the embeddings")
 
 
 logger = get_logger(__name__)
 
 if __name__ == "__main__":
-    logger.info("Starting Comet Training")
     args = parser.parse_args()
 
     if args.operation == "preprocess":
@@ -30,7 +28,6 @@ if __name__ == "__main__":
             encoder_name=args.encoder,
             checkpoint=args.checkpoint,
             use_sam_checkpoint=args.use_sam_checkpoint,
-            instances_path=args.instances_path,
             directory=args.directory,
             batch_size=args.batch_size,
             outfolder=args.outfolder
@@ -50,6 +47,7 @@ if __name__ == "__main__":
         "loss": args.train_params["loss"]["value"],
         "tags": args.train_params["model"]["tags"],
     }
+    logger.info("Starting Comet Training")
 
     comet_logger, experiment = comet_experiment(comet_information, hyper_params)
     # TODO: dataset e dataloader da importare

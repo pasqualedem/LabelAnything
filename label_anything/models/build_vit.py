@@ -77,9 +77,9 @@ def _build_vit(
             out_chans=prompt_embed_dim,
         )
         if checkpoint is not None:
-            with open(checkpoint, "rb") as weights:
-                if use_sam_checkpoint:
-                     weights = {k[len("image_encoder."):]: v for k, v in weights.items() 
-                                if k[:len("image_encoder")] == "image_encoder"}
-                vit.load_state_dict(weights)
+            weights = torch.load(checkpoint, map_location="cpu")
+            if use_sam_checkpoint:
+                    weights = {k[len("image_encoder."):]: v for k, v in weights.items() 
+                            if k[:len("image_encoder")] == "image_encoder"}
+            vit.load_state_dict(weights)
         return vit

@@ -12,8 +12,6 @@ from torch.nn import functional as F
 
 from typing import List, Tuple, Type
 
-from label_anything.models.transformer import Attention
-
 from .common import LayerNorm2d
 
 

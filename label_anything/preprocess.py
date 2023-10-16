@@ -1,11 +1,13 @@
 import numpy as np
 import torch
+import os
 import torch.nn.functional as F
 
 from tqdm import tqdm
+from safetensors.torch import save_file
 from torchvision.transforms.functional import resize, to_pil_image
-from .data.dataset import LabelAnyThingOnlyImageDataset
-from .models import model_registry
+from data.dataset import LabelAnyThingOnlyImageDataset
+from models import model_registry
 
 
 def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
@@ -37,6 +39,7 @@ def preprocess_image(img):
         """
         Preprocess the image before getting fed to the Image Encoder
         """
+        img = img.convert("RGB")
         long_size = 1024
         img = np.array(img)
 
@@ -45,7 +48,7 @@ def preprocess_image(img):
         input_image = np.array(resize(to_pil_image(img), target_size))
 
         input_image_torch = torch.tensor(input_image)
-        input_image_torch = input_image_torch.permute(2, 0, 1).contiguous().unsqueeze(0)
+        input_image_torch = input_image_torch.permute(2, 0, 1).contiguous()
         return preprocess_tensor(input_image_torch)
 
 
@@ -60,17 +63,17 @@ def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
         img = img.to(device)
         out = model(img).cpu()
         for i in range(out.shape[0]):
-            torch.save(out[i], outfolder + image_id + '.pth')
+            save_file({"embedding": out[i]}, os.path.join(outfolder, image_id[i] + '.safetensors'))
 
 
 def preprocess_images_to_embeddings(
         encoder_name,
         checkpoint,
         use_sam_checkpoint,
-        instances_path,
         directory,
         batch_size=1,
-        outfolder='data/preprocessed/embeddings'
+        outfolder='data/processed/embeddings',
+        device="cuda"
     ):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
@@ -83,8 +86,9 @@ def preprocess_images_to_embeddings(
         batch_size (int): batch size for the dataloader
         outfolder (str): folder to save the embeddings
     """
-
+    os.makedirs(outfolder, exist_ok=True)
     model = model_registry[encoder_name](checkpoint=checkpoint, use_sam_checkpoint=use_sam_checkpoint)
-    dataset = LabelAnyThingOnlyImageDataset(instances_path=instances_path, directory=directory, preprocess=preprocess_image)
+    model = model.to(device)
+    dataset = LabelAnyThingOnlyImageDataset(directory=directory, preprocess=preprocess_image)
     dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
-    create_image_embeddings(model, dataloader, outfolder)
+    create_image_embeddings(model, dataloader, outfolder, device=device)

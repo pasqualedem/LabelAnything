@@ -1,5 +1,5 @@
 import comet_ml
-from label_anything.logger.image_logger import Logger
+from logger.image_logger import Logger
 
 
 # set configuration
