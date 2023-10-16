@@ -35,16 +35,44 @@ def build_lam_vit_b(checkpoint=None):
     )
 
 
+
+def build_lam_no_vit(checkpoint=None):
+    return _build_lam(
+        encoder_embed_dim=None,
+        encoder_depth=None,
+        encoder_num_heads=None,
+        encoder_global_attn_indexes=None,
+        checkpoint=checkpoint,
+        use_vit=False,
+    )
+
+
 def _build_lam(
     build_vit,
     checkpoint=None,
+    use_vit=True,
 ):
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
+
+    vit = ImageEncoderViT(
+            depth=encoder_depth,
+            embed_dim=encoder_embed_dim,
+            img_size=image_size,
+            mlp_ratio=4,
+            norm_layer=partial(torch.nn.LayerNorm, eps=1e-6),
+            num_heads=encoder_num_heads,
+            patch_size=vit_patch_size,
+            qkv_bias=True,
+            use_rel_pos=True,
+            global_attn_indexes=encoder_global_attn_indexes,
+            window_size=14,
+            out_chans=prompt_embed_dim,
+        ) if use_vit else None
     sam = Lam(
-        image_encoder=build_vit(),
+        image_encoder=vit,
         prompt_encoder=PromptImageEncoder(
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
