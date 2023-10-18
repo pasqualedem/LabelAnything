@@ -75,6 +75,7 @@ def generate_examples(query_image_id, sampled_classes, categories_to_imgs, min_s
         num_examples (int): number of examples to generate
 
     Returns:
+        image_ids (list): list of image ids of the sampled examples
         examples_sampled_classes (list): list of sets of classes sampled for each example
         jaccard (float): jacard index between the sets of classes sampled for each example
         mean_j_index (float): mean jaccard index between pairs of sets of classes sampled for each example
@@ -93,11 +94,11 @@ def generate_examples(query_image_id, sampled_classes, categories_to_imgs, min_s
             else:
                 max_frequency_class = max({k:v for k,v in frequencies.items() if k in example_sampled_classes}, key=lambda k: frequencies[k])
                 example_sampled_classes.remove(max_frequency_class)
-        example_id = selection_strategy(images_containing, )
+        example_id = selection_strategy(images_containing, categories_to_imgs, example_sampled_classes)
         image_ids.add(example_id)
         for cat in example_sampled_classes:
             frequencies[cat] += 1
         examples_sampled_classes.append(set(example_sampled_classes))
     jaccard = compute_j_index_n_sets(examples_sampled_classes)
     mean_j_index = mean_pairwise_j_index(examples_sampled_classes)
-    return examples_sampled_classes, jaccard, mean_j_index
+    return image_ids, examples_sampled_classes, jaccard, mean_j_index
