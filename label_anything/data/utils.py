@@ -143,7 +143,7 @@ def get_gt(annotations, image_shape, target_classes):
 
 
 def load_instances(json_path):
-    with open(json_path) as f:
+    with open(json_path, "r") as f:
         instances = json.load(f)
     return instances
 

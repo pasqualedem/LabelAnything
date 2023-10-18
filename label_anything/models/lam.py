@@ -24,9 +24,7 @@ class Lam(nn.Module):
         self,
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptImageEncoder,
-        mask_decoder: MaskDecoder,
-        pixel_mean: List[float] = [123.675, 116.28, 103.53],
-        pixel_std: List[float] = [58.395, 57.12, 57.375],
+        mask_decoder: MaskDecoder
     ) -> None:
         """
         LAM predicts object masks from an image and a list of examples images with prompts.
@@ -37,19 +35,11 @@ class Lam(nn.Module):
           prompt_encoder (PromptEncoder): Encodes various types of input prompts with their corresponding images.
           mask_decoder (MaskDecoder): Predicts masks from the image embeddings
             and encoded prompts.
-          pixel_mean (list(float)): Mean values for normalizing pixels in the input image.
-          pixel_std (list(float)): Std values for normalizing pixels in the input image.
         """
         super().__init__()
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
-        self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
-        self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
-
-    @property
-    def device(self) -> Any:
-        return self.pixel_mean.device
 
     def forward(
         self,
@@ -63,8 +53,14 @@ class Lam(nn.Module):
         Arguments:
           batched_input (dict): a dictionary with the following keys. A prompt key can be
             excluded if it is not present.
-              'target_image': The target image as a torch tensor in Bx3xHxW format,
+              'query_image': The query image as a torch tensor in Bx3xHxW format,
                 already transformed for input to the model.
+              'example_images': The example images as a torch tensor in BxNx3xHxW format,
+                already transformed for input to the model.
+              'query_embedding': The query image embedding as a torch tensor in BxCxHxW format.
+                In alternative to 'query_image', 'query_embedding' can be provided.
+              'example_embeddings': The example image embeddings as a torch tensor in BxNxCxHxW format.
+                In alternative to 'example_images', 'example_embeddings' can be provided.
               'example_images': The example images as a torch tensor in BxNx3xHxW format,
                 already transformed for input to the model.
               'point_coords': (torch.Tensor) Batched point prompts for
@@ -85,11 +81,16 @@ class Lam(nn.Module):
                 original size of the image.
         """
         B, N = batched_input['example_images'].shape[:2]
-        prompt_images = rearrange(batched_input['example_images'], 'b n c h w -> (b n) c h w')
-        images = torch.cat((batched_input['target_image'], prompt_images), dim=0)
-        image_embeddings = self.image_encoder(images)
-        prompt_images_embeddings = rearrange(image_embeddings[B:], '(b n) c h w -> b n c h w', b=B)
-        image_embeddings = image_embeddings[:B]
+        if "query_embedding" in batched_input and "example_embeddings" in batched_input:
+            image_embeddings = batched_input['query_embedding']
+            prompt_images_embeddings = batched_input['example_embeddings']
+        else:
+            prompt_images = rearrange(batched_input['example_images'], 'b n c h w -> (b n) c h w')
+            images = torch.cat((batched_input['query_image'], prompt_images), dim=0)
+            image_embeddings = self.image_encoder(images)
+            prompt_images_embeddings = rearrange(image_embeddings[B:], '(b n) c h w -> b n c h w', b=B)
+            image_embeddings = image_embeddings[:B]
+
 
         if "point_coords" in batched_input:
             points = (batched_input["point_coords"], batched_input["point_labels"])
@@ -121,8 +122,9 @@ class Lam(nn.Module):
         Initialize certain modules with pretrained weights from Sam.
         """
         # Load weights for the image encoder
-        image_encoder_weights = {k[len("image_encoder."):]: v for k, v in weights.items() if k.startswith("image_encoder")}
-        self.image_encoder.load_state_dict(image_encoder_weights)
+        if self.image_encoder is not None:
+          image_encoder_weights = {k[len("image_encoder."):]: v for k, v in weights.items() if k.startswith("image_encoder")}
+          self.image_encoder.load_state_dict(image_encoder_weights)
         # Load weights for the prompt encoder
         pe_layer_weights = {k[len("prompt_encoder.pe_layer."):]: v for k, v in weights.items() if k.startswith("prompt_encoder.pe_layer")}
         self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)

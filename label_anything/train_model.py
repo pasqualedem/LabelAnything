@@ -4,7 +4,7 @@ import torch
 from torch.optim import Adam
 from save import save_model
 from utils.utils import log_every_n
-from label_anything.logger.text_logger import get_logger
+from logger.text_logger import get_logger
 
 
 logger = get_logger(__name__)
