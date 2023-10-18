@@ -13,7 +13,7 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-  tags: [[mytag1, mytag2]] # list of tags to attach to the run in logger platform
+  tags: [mytag1, mytag2] # list of tags to attach to the run in logger platform
   phases: [[train, test]] # list of phases
   dataset_interface: [examples/cifar10/Cifar10] # Path to the dataset interface class
 
