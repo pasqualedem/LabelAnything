@@ -1,4 +1,6 @@
 from PIL import Image, ImageDraw
+from itertools import combinations
+
 import torch
 import numpy as np
 import itertools
@@ -11,6 +13,14 @@ def compute_j_index(class_a, class_b):
     class_a = set(class_a)
     class_b = set(class_b)
     return len(class_a.intersection(class_b)) / len(class_a.union(class_b))
+
+
+def compute_j_index_n_sets(sets):
+    return len(set.intersection(*sets)) / len(set.union(*sets))
+
+
+def mean_pairwise_j_index(sets):
+    return sum(compute_j_index(a, b) for a, b in combinations(sets, 2)) / (len(sets) * (len(sets) - 1))
 
 
 def convert_polygons(polygons):
