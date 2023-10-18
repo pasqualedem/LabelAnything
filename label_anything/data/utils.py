@@ -7,6 +7,8 @@ import itertools
 import json
 from typing import List, Tuple, Dict
 
+from pygments.lexer import default
+
 MAX_PIXELS_BBOX_NOISE = 20  # noise limit for bounding boxes taken from SA
 
 
@@ -332,7 +334,7 @@ def get_coords_per_image_class(
     target_annotations = annotations[(annotations.image_id == image_id) & (annotations.category_id == class_id)]
     if len(target_annotations) == 0:
         return torch.zeros(size=(1, num_coords, 2)), torch.full(size=(1, num_coords),
-                                                                fill_value=False)  # aggiungi una coordinata in testa per i punti
+                                                                fill_value=False)
     coords_flags = [get_coords(row, num_coords, original_shape, reshape) for _, row in
                     target_annotations.iterrows()]
     coords = [x[0] for x in coords_flags]
@@ -476,7 +478,9 @@ def collate_gt(
 def collate_mask(
         tensor: torch.Tensor,
         original_classes: Dict[int, int],
-        new_classes: Dict[int, int]
+        new_classes: Dict[int, int],
+        num_examples: int,
+        default_dim: int,
 ) -> torch.Tensor:
     """
     Rearranges the mask tensor for a single query image, rearranging the shape, according to the classes present in
@@ -493,6 +497,8 @@ def collate_mask(
                        image. The ith mask is rearranged such that it will be in jth position, according to the new
                        index in new classes' dict.
     """
+    if tensor is None:
+        return torch.zeros(size=(num_examples, len(new_classes), default_dim, default_dim))
     new_positions = [new_classes[x] - 1 for x in original_classes.values()]
     m, c, h, w, = tensor.shape
     out = torch.zeros(size=(m, len(new_classes.keys()), h, w))
@@ -505,7 +511,8 @@ def collate_bbox(
         flag: torch.Tensor,
         original_classes: Dict[int, int],
         new_classes: Dict[int, int],
-        max_annotations: int
+        max_annotations: int,
+        num_examples: int,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Rearranges the bbox tensor and its associated flag tensor for a single query image, according to the classes present
@@ -526,6 +533,8 @@ def collate_bbox(
         torch.Tensor: new bounding box flag tensor of shape M x C_new x N_new, with C_new equal to the number of
                       elements in new_classes dict and N_new equal to max annotations.
     """
+    if bbox is None:
+        return torch.zeros(size=(num_examples, len(new_classes), max_annotations, 4)), torch.full(size=(num_examples, len(new_classes), max_annotations), fill_value=False)
     new_positions = [new_classes[x] - 1 for x in original_classes.values()]
     m, c, n, b_dim = bbox.shape
     out_bbox = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, b_dim))
@@ -540,7 +549,9 @@ def collate_coords(
         flag: torch.Tensor,
         original_classes: Dict[int, int],
         new_classes: Dict[int, int],
-        max_annotations: int
+        max_annotations: int,
+        num_examples: int,
+        num_points: int,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Rearranges the coordinates tensor and its associated flag tensor for a single query image, according to the classes
@@ -561,6 +572,8 @@ def collate_coords(
         torch.Tensor: new prompt coords flag tensor of shape M x C_new x N_new x K, with C_new equal to the number of
                       elements in new_classes dict and N_new equal to max annotations.
     """
+    if coords is None:
+        return torch.zeros(size=(num_examples, len(new_classes), max_annotations, num_points, 2)), torch.full(size=(num_examples, len(new_classes), max_annotations, num_points), fill_value=False)
     new_positions = [new_classes[x] - 1 for x in original_classes.values()]
     m, c, n, k, c_dim = coords.shape
     out_coords = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, k, c_dim))
