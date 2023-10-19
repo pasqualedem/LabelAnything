@@ -348,8 +348,8 @@ class PromptImageEncoder(PromptEncoder):
     
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         B = points.shape[0]
-        points = rearrange(points, 'b m c n k xy -> (b m c k) n xy')
-        labels = rearrange(labels, 'b m c n k -> (b m c k) n')
+        points = rearrange(points, 'b m c n xy -> (b m c) n xy')
+        labels = rearrange(labels, 'b m c n -> (b m c) n')
         return super()._embed_points(points, labels, pad)
 
     def _embed_boxes(self, boxes: torch.Tensor, padding) -> torch.Tensor:
