@@ -10,15 +10,18 @@ from label_anything.logger.utils import (
 from save import save_model
 from utils.utils import log_every_n
 from logger.text_logger import get_logger
+from accelerate import Accelerator
 
 
 logger = get_logger(__name__)
 
 
-def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
+def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger, accelerator):
     model.train()
     total_loss = 0
     correct = 0
+
+    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
@@ -29,7 +32,7 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
 
         pred = outputs.argmax(dim=1, keepdim=True)
 
-        loss.backward()
+        accelerator.backward()
         optimizer.step()
 
         batch_correct = pred.eq(image_dict["example"].view_as(pred)).sum().item()
@@ -90,10 +93,7 @@ def run(args, model, dataloader, comet_logger, experiment, hyper_params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
-    if torch.cuda.device_count() > 1:
-        logger.info(f"Using {torch.cuda.device_count()} GPUs")
-        model = torch.nn.DataParallel(model)
-    model.to(device)
+    accelerator = Accelerator()
 
     # Loss and Optimizer da overraidere
     criterion = hyper_params["loss"]
