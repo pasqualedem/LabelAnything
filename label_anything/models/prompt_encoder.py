@@ -260,12 +260,16 @@ class PromptImageEncoder(PromptEncoder):
         self.example_mlp = MLPBlock(embed_dim, mlp_dim)
         self.norm_example_mlp = nn.LayerNorm(embed_dim)
 
-    def _embed_masks(self, masks: torch.Tensor) -> torch.Tensor:
+    def _embed_masks(self, masks: torch.Tensor, masks_flags: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs. (B, C, H, W) """
         B, M, C, H, W = masks.shape
         masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
         mask_embedding = self.mask_downscaling(masks)
         mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
+        mask_embedding[masks_flags == 0] = 0.0
+        mask_embedding[masks_flags == 0] += self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
+                B, M, 1, -1, H, W
+            )
         return mask_embedding
     
     def _get_batch_examples_class_size(
@@ -343,8 +347,8 @@ class PromptImageEncoder(PromptEncoder):
     
     def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
         B = points.shape[0]
-        points = rearrange(points, 'b m c n xy -> (b m c) n xy')
-        labels = rearrange(labels, 'b m c n -> (b m c) n')
+        points = rearrange(points, 'b m c n k xy -> (b m c k) n xy')
+        labels = rearrange(labels, 'b m c n k -> (b m c k) n')
         return super()._embed_points(points, labels, pad)
 
     def _embed_boxes(self, boxes: torch.Tensor, padding) -> torch.Tensor:
