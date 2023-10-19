@@ -93,4 +93,4 @@ target/
 *.png
 
 /label_anything/data/*.json
-/label_anything/data/*.ipynb
+*.ipynb
