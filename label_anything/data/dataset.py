@@ -16,6 +16,7 @@ import numpy as np
 warnings.filterwarnings('ignore')
 
 
+# TODO: cambiare gli indici dei df per accedere in O(1)
 class LabelAnythingDataset(Dataset):
     def __init__(
             self,
@@ -43,6 +44,9 @@ class LabelAnythingDataset(Dataset):
              seed: int value for reproducibility.
              resize_dim: int value for final dimension of images.
              max_mum_coords: maximum number of coordinates to extract at each batch.
+             mask_proba: float number in [0, 1] indicating the probability to extract the masks.
+             bbox_proba: float number in [0, 1] indicating the probability to extract the bounding boxes.
+             coords_proba: float number in [0, 1] indicating the probability to extract the points.
         """
         super().__init__()
         instances = utils.load_instances(instances_path)
@@ -103,7 +107,7 @@ class LabelAnythingDataset(Dataset):
         return class_projection.sample(n=self.num_examples, replace=True,
                                        random_state=self.seed).image_id.tolist(), list(target_classes)
 
-    def get_prompt_random_val(self):
+    def __get_prompt_random_val(self):
         val_bbox, val_mask, val_coords = torch.rand(size=(3, ))
         while val_bbox > self.bbox_proba and val_mask > self.mask_proba and val_coords > self.coords_proba:
             val_bbox, val_mask, val_coords = torch.rand(size=(3,))
@@ -162,7 +166,7 @@ class LabelAnythingDataset(Dataset):
                                               (self.annotations.category_id.isin(classes))]
 
         # bboxes
-        val_bbox, val_mask, val_coords = self.get_prompt_random_val()
+        val_bbox, val_mask, val_coords = self.__get_prompt_random_val()
         if val_bbox < self.bbox_proba:
             bbox_annotations = prompt_annotations[['image_id', 'bbox', 'category_id']]
             prompt_bbox, flag_bbox = utils.get_prompt_bbox(bbox_annotations, classes)
