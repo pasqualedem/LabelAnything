@@ -47,7 +47,7 @@ def train(
 
         if log_every_n(batch_idx, args.logger["n_iter"]):
             query_image = image_dict["query_image"][0]
-            points = image_dict["prompt_points"][0]
+            points = image_dict["prompt_points"][0,0]
             boxes = image_dict["prompt_boxes"][0, 0]
             mask = image_dict["prompt_mask"][0, 0]
             annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
