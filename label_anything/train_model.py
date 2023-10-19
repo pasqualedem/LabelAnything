@@ -5,6 +5,7 @@ from torch.optim import Adam
 from label_anything.logger.utils import (
     extract_boxes_from_tensor,
     extract_vertices_from_tensor,
+    image_with_points,
     structure_annotations,
 )
 from save import save_model
@@ -16,7 +17,9 @@ from accelerate import Accelerator
 logger = get_logger(__name__)
 
 
-def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger, accelerator):
+def train(
+    args, model, optimizer, criterion, dataloader, epoch, comet_logger, accelerator
+):
     model.train()
     total_loss = 0
     correct = 0
@@ -57,7 +60,7 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger, ac
                 query_image,
                 annotations_boxes,
             )
-            comet_logger.log_image(image_with_points(points))
+            comet_logger.log_image(image_with_points(query_image, points))
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
