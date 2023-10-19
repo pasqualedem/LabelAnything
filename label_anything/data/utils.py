@@ -7,7 +7,6 @@ import itertools
 import json
 from typing import List, Tuple, Dict
 
-from pygments.lexer import default
 
 MAX_PIXELS_BBOX_NOISE = 20  # noise limit for bounding boxes taken from SA
 
@@ -58,14 +57,14 @@ def get_mask(
         torch.Tensor: single mask of shape HxW. Each pixel is 1 if it is part of the annotations, and 0 if not.
     """
     if segmentations == [[]]:  # for empty segmentation
-        return reshape(torch.zeros(img_shape))[0]
+        return reshape(torch.zeros(img_shape))[0], torch.Tensor([0.0])
     image = Image.new('L', img_shape[1:][::-1], 0)  # due to problem with shapes
     draw = ImageDraw.Draw(image)
     for pol in convert_polygons(segmentations):
         draw.polygon(pol, outline=1, fill=1)
     mask = np.asarray(image)
     mask = torch.Tensor(mask)
-    return reshape(mask.unsqueeze(dim=0))
+    return reshape(mask.unsqueeze(dim=0)), torch.Tensor([1.0])
 
 
 def get_mask_per_image(
@@ -88,13 +87,9 @@ def get_mask_per_image(
     Returns:
         torch.Tensor: masks batched on classes, with shape C x H x W
     """
-    return torch.stack([
-        get_mask(image_shape,
-                 reshape,
-                 itertools.chain(*annotations[(annotations.image_id == image_id) &
-                                              (annotations.category_id == x)].segmentation.tolist()))
-        for x in target_classes
-    ])
+    masks_flags = [get_mask(image_shape, reshape, itertools.chain(*annotations[(annotations.image_id == image_id) & (annotations.category_id == x)].segmentation.tolist()))
+                    for x in target_classes]
+    return torch.stack([x[0] for x in masks_flags]), torch.stack([x[1] for x in masks_flags])
 
 
 def get_prompt_mask(
@@ -115,10 +110,9 @@ def get_prompt_mask(
     Returns:
         torch.Tensor: masks batched for all the example images of shape MxCxHxW
     """
-    return torch.stack([
-        get_mask_per_image(annotations, x, image_shape[ix], reshape, target_classes)
-        for ix, x in enumerate(annotations.image_id.unique().tolist())
-    ])
+    masks_flags = [get_mask_per_image(annotations, x, image_shape[ix], reshape, target_classes)
+        for ix, x in enumerate(annotations.image_id.unique().tolist())]
+    return torch.stack([x[0] for x in masks_flags]).squeeze(dim=2), torch.stack([x[1] for x in masks_flags]).squeeze(dim=2)
 
 
 def add_noise(
@@ -294,7 +288,7 @@ def get_coords(
         return torch.Tensor([0.0, 0.0]), torch.Tensor([False])
 
     # get the mask with respect to the annotation
-    mask = get_mask(img_shape=original_shape, reshape=reshape, segmentations=annotation["segmentation"]).squeeze(dim=0)
+    mask = get_mask(img_shape=original_shape, reshape=reshape, segmentations=annotation["segmentation"])[0].squeeze(dim=0)
     coords = torch.nonzero(mask == 1)  # get all the possible coordinates
 
     # pad the candidates if they are too few
@@ -476,12 +470,12 @@ def collate_gt(
 
 
 def collate_mask(
-        tensor: torch.Tensor,
-        original_classes: Dict[int, int],
-        new_classes: Dict[int, int],
+        masks: torch.Tensor,
+        flags: torch.Tensor,
+        num_classes: int,
         num_examples: int,
         default_dim: int,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor, torch.tensor]:
     """
     Rearranges the mask tensor for a single query image, rearranging the shape, according to the classes present in
     the whole batch.
@@ -497,20 +491,21 @@ def collate_mask(
                        image. The ith mask is rearranged such that it will be in jth position, according to the new
                        index in new classes' dict.
     """
-    if tensor is None:
-        return torch.zeros(size=(num_examples, len(new_classes), default_dim, default_dim))
-    new_positions = [new_classes[x] - 1 for x in original_classes.values()]
-    m, c, h, w, = tensor.shape
-    out = torch.zeros(size=(m, len(new_classes.keys()), h, w))
-    out[:, new_positions, :, :] = tensor
-    return out
+    if masks is None:
+        return torch.zeros(size=(num_examples, num_classes, default_dim, default_dim)), torch.zeros(size=(num_examples, num_classes))
+    m, c, h, w, = masks.shape
+    out = torch.zeros(size=(m, num_classes, h, w))
+    out_flags = torch.zeros(size=(m, num_classes))
+    out[:, :c, :, :] = masks
+    out_flags[:, :c] = flags
+
+    return out, out_flags
 
 
 def collate_bbox(
         bbox: torch.Tensor,
         flag: torch.Tensor,
-        original_classes: Dict[int, int],
-        new_classes: Dict[int, int],
+        num_classes: int,
         max_annotations: int,
         num_examples: int,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -534,21 +529,19 @@ def collate_bbox(
                       elements in new_classes dict and N_new equal to max annotations.
     """
     if bbox is None:
-        return torch.zeros(size=(num_examples, len(new_classes), max_annotations, 4)), torch.full(size=(num_examples, len(new_classes), max_annotations), fill_value=False)
-    new_positions = [new_classes[x] - 1 for x in original_classes.values()]
+        return torch.zeros(size=(num_examples, num_classes, max_annotations, 4)), torch.full(size=(num_examples, num_classes, max_annotations), fill_value=False)
     m, c, n, b_dim = bbox.shape
-    out_bbox = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, b_dim))
-    out_flag = torch.full(size=(m, len(new_classes.keys()), max_annotations), fill_value=False)
-    out_bbox[:, new_positions, :n, :] = bbox
-    out_flag[:, new_positions, :n] = flag
+    out_bbox = torch.zeros(size=(m, num_classes, max_annotations, b_dim))
+    out_flag = torch.full(size=(m, num_classes, max_annotations), fill_value=False)
+    out_bbox[:, :c, :n, :] = bbox
+    out_flag[:, :c, :n] = flag
     return out_bbox, out_flag
 
 
 def collate_coords(
         coords: torch.Tensor,
         flag: torch.Tensor,
-        original_classes: Dict[int, int],
-        new_classes: Dict[int, int],
+        num_classes: int,
         max_annotations: int,
         num_examples: int,
         num_points: int,
@@ -573,11 +566,10 @@ def collate_coords(
                       elements in new_classes dict and N_new equal to max annotations.
     """
     if coords is None:
-        return torch.zeros(size=(num_examples, len(new_classes), max_annotations, num_points, 2)), torch.full(size=(num_examples, len(new_classes), max_annotations, num_points), fill_value=False)
-    new_positions = [new_classes[x] - 1 for x in original_classes.values()]
+        return torch.zeros(size=(num_examples, num_classes, max_annotations, num_points, 2)), torch.full(size=(num_examples, num_classes, max_annotations, num_points), fill_value=False)
     m, c, n, k, c_dim = coords.shape
-    out_coords = torch.zeros(size=(m, len(new_classes.keys()), max_annotations, k, c_dim))
-    out_flag = torch.full(size=(m, len(new_classes.keys()), max_annotations, k), fill_value=False)
-    out_coords[:, new_positions, :n, :, :] = coords
-    out_flag[:, new_positions, :n, :] = flag
+    out_coords = torch.zeros(size=(m, num_classes, max_annotations, k, c_dim))
+    out_flag = torch.full(size=(m, num_classes, max_annotations, k), fill_value=False)
+    out_coords[:, :c, :n, :, :] = coords
+    out_flag[:, :c, :n, :] = flag
     return out_coords, out_flag

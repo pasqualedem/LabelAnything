@@ -1,5 +1,4 @@
 import itertools
-
 import torchvision.transforms
 from torch.utils.data import Dataset
 from PIL import Image
@@ -68,8 +67,6 @@ class LabelAnythingDataset(Dataset):
         self.bbox_proba = bbox_proba
         self.coords_proba = coords_proba
 
-
-
     def __load_image(
             self,
             img: pd.Series
@@ -78,8 +75,8 @@ class LabelAnythingDataset(Dataset):
         Loads an image from disk or downloading from the web, using the cooc url.
         """
         if self.load_from_dir:
-            return Image.open(f'{self.directory}/{img["id"]}.jpg')
-        return Image.open(BytesIO(requests.get(img["coco_url"]).content))
+            return Image.open(f'{self.directory}/{img["id"]}.jpg').convert('RGB')
+        return Image.open(BytesIO(requests.get(img["coco_url"]).content)).convert('RGB')
 
     def __extract_examples(
             self,
@@ -176,9 +173,9 @@ class LabelAnythingDataset(Dataset):
         mask_annotations = prompt_annotations[['image_id', 'segmentation', 'category_id']]
         example_shape = [x.shape for x in examples]
         if val_mask < self.mask_proba:
-            prompt_mask = utils.get_prompt_mask(mask_annotations, example_shape, self.resize_mask, classes).squeeze(dim=2)
+            prompt_mask, mask_flags = utils.get_prompt_mask(mask_annotations, example_shape, self.resize_mask, classes)
         else:
-            prompt_mask = None
+            prompt_mask, mask_flags = None, None
 
         # gt
         target_annotations = self.annotations[self.annotations.image_id == image_id['id']][
@@ -203,14 +200,13 @@ class LabelAnythingDataset(Dataset):
             'target': target,  # 3 x h x w
             'examples': examples,  # m x 3 x h x w
             'prompt_mask': prompt_mask,  # m x c x h x w
+            'mask_flags': mask_flags,
             'prompt_coords': prompt_coords,  # m x c x n x k x 2
             'flag_coords': flag_coords,  # m x c x n x k
             'prompt_bbox': prompt_bbox,  # m x c x n x 4
             'flag_bbox': flag_bbox,  # m x c x n
             'gt': gt,  # h x w
-            'classes': {
-                ix: c for ix, c in enumerate(classes, start=1)
-            }
+            'classes': len(classes)
         }
 
     def __len__(self):
@@ -292,16 +288,17 @@ class LabelAnythingDataset(Dataset):
         """
         # classes
         classes = [x['classes'] for x in batched_input]
-        new_classes = utils.rearrange_classes(classes)
+        max_classes = max(classes)
 
         # gt
-        gts = [x['gt'] for x in batched_input]
-        gts = torch.stack([utils.collate_gt(x, classes[ix], new_classes) for ix, x in enumerate(gts)])
+        gts = torch.stack([x['gt'] for x in batched_input])
 
         # prompt mask
         masks = [x['prompt_mask'] for x in batched_input]
-        masks = torch.stack([utils.collate_mask(mask, classes[i], new_classes, self.num_examples, self.resize_dim)
-                             for i, mask in enumerate(masks)])
+        flags = [x['mask_flags'] for x in batched_input]
+        masks_flags = [utils.collate_mask(masks[i], flags[i], max_classes, self.num_examples, self.resize_dim) for i in range(len(masks))]
+        masks = torch.stack([x[0] for x in masks_flags])
+        mask_flags = torch.stack([x[1] for x in masks_flags])
 
         # prompt bbox
         bboxes = [x["prompt_bbox"] for x in batched_input]
@@ -310,7 +307,7 @@ class LabelAnythingDataset(Dataset):
         annotations = itertools.chain([x.size(2) if isinstance(x, torch.Tensor) else 1 for x in bboxes],
                                       [x.size(2) if isinstance(x, torch.Tensor) else 1 for x in coords])
         max_annotations = max(annotations)
-        bboxes_flags = [utils.collate_bbox(bboxes[i], flags[i], classes[i], new_classes, max_annotations, self.num_examples)
+        bboxes_flags = [utils.collate_bbox(bboxes[i], flags[i], max_classes, max_annotations, self.num_examples)
                         for i in range(len(bboxes))]
         bboxes = torch.stack([x[0] for x in bboxes_flags])
         bbox_flags = torch.stack([x[1] for x in bboxes_flags])
@@ -318,7 +315,7 @@ class LabelAnythingDataset(Dataset):
         # prompt coords
         coords = [x['prompt_coords'] for x in batched_input]
         flags = [x['flag_coords'] for x in batched_input]
-        coords_flags = [utils.collate_coords(coords[i], flags[i], classes[i], new_classes, max_annotations, self.num_examples, self.num_coords)
+        coords_flags = [utils.collate_coords(coords[i], flags[i], max_classes, max_annotations, self.num_examples, self.num_coords)
                         for i in range(len(coords))]
         coords = torch.stack([x[0] for x in coords_flags])
         coord_flags = torch.stack([x[1] for x in coords_flags])
@@ -336,7 +333,8 @@ class LabelAnythingDataset(Dataset):
             'point_flags': coord_flags,
             'boxes': bboxes,
             'box_flags': bbox_flags,
-            'mask_inputs': masks
+            'mask_inputs': masks,
+            'mask_flags': mask_flags,
         }
 
         # reset dataset parameters
