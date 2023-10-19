@@ -105,7 +105,7 @@ class Lam(nn.Module):
             boxes = (boxes, box_flags)
         else:
             boxes = None
-        if "masks" in batched_input:
+        if "mask_inputs" in batched_input:
             masks = (batched_input["mask_inputs"], batched_input["mask_flags"])
         else:
             masks = None

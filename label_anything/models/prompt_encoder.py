@@ -59,7 +59,8 @@ class PromptEncoder(nn.Module):
             activation(),
             nn.Conv2d(mask_in_chans, embed_dim, kernel_size=1),
         )
-        self.no_mask_embed = nn.Embedding(1, embed_dim)
+        self.no_mask_embed = nn.Embedding(1, embed_dim) # For when no masks in input
+        self.not_a_mask_embed = nn.Embedding(1, embed_dim // 4) # For classes/examples with missing masks
 
     def get_dense_pe(self) -> torch.Tensor:
         """
@@ -262,14 +263,13 @@ class PromptImageEncoder(PromptEncoder):
 
     def _embed_masks(self, masks: torch.Tensor, masks_flags: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs. (B, C, H, W) """
-        B, M, C, H, W = masks.shape
+        B, M, C, _, _ = masks.shape
         masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
         mask_embedding = self.mask_downscaling(masks)
         mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
+        H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == 0] = 0.0
-        mask_embedding[masks_flags == 0] += self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
-                B, M, 1, -1, H, W
-            )
+        mask_embedding[masks_flags == 0] += self.not_a_mask_embed.weight
         return mask_embedding
     
     def _get_batch_examples_class_size(
@@ -337,7 +337,8 @@ class PromptImageEncoder(PromptEncoder):
         sparse_embeddings = rearrange(sparse_embeddings, '(b m) (c n) d -> b m c n d', b=B, m=n_examples, c=n_classes)
 
         if masks is not None:
-            dense_embeddings = self._embed_masks(masks)
+            mask_inputs, mask_flags = masks
+            dense_embeddings = self._embed_masks(mask_inputs, mask_flags)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
                 bs, 1, 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
@@ -394,7 +395,7 @@ class PromptImageEncoder(PromptEncoder):
         dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
 
         src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, m, 1, 1, 1)
-        src = rearrange(src, "b m c d h w-> (b m c) d h w")
+        src = rearrange(src, "b m c d h w -> (b m c) d h w")
         src = src + dense_embeddings
         pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
 

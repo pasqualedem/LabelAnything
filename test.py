@@ -54,13 +54,13 @@ def test_lam():
 
     input_box_1 = np.array([[[425, 600, 700, 875]], [[125, 200, 300, 175]]])
     input_padding_1 = np.array([[1], [1]])
-    input_point_1 = np.array([[[575, 750]], [[275, 350]]])
-    input_label_1 = np.array([[0], [1]])
+    input_point_1 = np.array([[[[575, 750]]], [[[275, 350]]]])
+    input_label_1 = np.array([[[0]], [[1]]])
 
     input_box_2 = np.array([[[425, 600, 700, 875]], [[125, 200, 300, 175]]])
     input_padding_2 = np.array([[0], [1]])
-    input_point_2 = np.array([[[575, 750]], [[275, 350]]])
-    input_label_2 = np.array([[0], [1]])
+    input_point_2 = np.array([[[[575, 750]]], [[[275, 350]]]])
+    input_label_2 = np.array([[[0]], [[1]]])
 
     coords_torch = torch.as_tensor([input_point_1, input_point_2], dtype=torch.float)
     labels_torch = torch.as_tensor([input_label_1, input_label_2], dtype=torch.int)
@@ -73,16 +73,18 @@ def test_lam():
 
     images = torch.rand(1, 3, 3, 1024, 1024)
     masks = torch.rand(1, 2, 2, 256, 256)
+    mask_flags = torch.randint(0, 2, (1, 2, 2)).bool()
     print("inputs")
 
     batch = {
-        'target_image': images[:, 0].cuda(),
+        'query_image': images[:, 0].cuda(),
         'example_images': images[:, 1:].cuda(),
         'point_coords': coords_torch.cuda(),
         'point_labels': labels_torch.cuda(),
         'boxes': box_torch.cuda(),
         'box_flags': padding_torch.cuda(),
         'mask_inputs': masks.cuda(),
+        'mask_flags': mask_flags.cuda(),
     }
 
     seg = lam(batch)
