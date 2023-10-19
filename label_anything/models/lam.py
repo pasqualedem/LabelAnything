@@ -63,7 +63,7 @@ class Lam(nn.Module):
               'example_images': The example images as a torch tensor in BxNx3xHxW format,
                 already transformed for input to the model.
               'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxMxCxNxKx2. Already transformed to the
+                this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
               'point_labels': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.

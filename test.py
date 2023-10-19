@@ -54,13 +54,13 @@ def test_lam():
 
     input_box_1 = np.array([[[425, 600, 700, 875]], [[125, 200, 300, 175]]])
     input_padding_1 = np.array([[1], [1]])
-    input_point_1 = np.array([[[[575, 750]]], [[[275, 350]]]])
-    input_label_1 = np.array([[[0]], [[1]]])
+    input_point_1 = np.array([[[575, 750]], [[275, 350]]])
+    input_label_1 = np.array([[0], [1]])
 
     input_box_2 = np.array([[[425, 600, 700, 875]], [[125, 200, 300, 175]]])
     input_padding_2 = np.array([[0], [1]])
-    input_point_2 = np.array([[[[575, 750]]], [[[275, 350]]]])
-    input_label_2 = np.array([[[0]], [[1]]])
+    input_point_2 = np.array([[[575, 750]], [[275, 350]]])
+    input_label_2 = np.array([[0], [1]])
 
     coords_torch = torch.as_tensor([input_point_1, input_point_2], dtype=torch.float)
     labels_torch = torch.as_tensor([input_label_1, input_label_2], dtype=torch.int)
