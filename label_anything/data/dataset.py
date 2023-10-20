@@ -13,6 +13,7 @@ import warnings
 
 import data.utils as utils
 from typing import Union, Dict, List, Tuple, Any
+from data.examples import generate_examples_power_law_uniform
 import numpy as np
 from transforms import (
     CustomResize,
@@ -128,15 +129,15 @@ class LabelAnythingDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of category ids of the examples.
         """
-        cats = list(self.img2cat_annotations[img_data["id"]].keys())
-        cats = cats[:2]
-        examples = [
-            set(self.cat2img_annotations[cats[0]].keys()),
-            set(self.cat2img_annotations[cats[1]].keys()),
-        ]
-        examples = list(examples[0].intersection(examples[1]))
+        peppino = 10 # TODO: remove OOOOOOOOOOOOOOOOOOOOOOO
 
-        return examples[:10], cats
+        return generate_examples_power_law_uniform(
+            query_image_id=img_data["id"],
+            image_classes=self.img2cat_annotations[img_data["id"]],
+            categories_to_imgs=self.cat2img_annotations,
+            min_size=1,
+            num_examples=peppino
+        )
 
     def __getitem__(self, item: int) -> dict:
         image_data = self.images[self.image_ids[item]]
