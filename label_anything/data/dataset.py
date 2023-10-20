@@ -149,9 +149,8 @@ class LabelAnythingDataset(Dataset):
         )
 
         # load the examples and categories for the query image
-        example_ids, cat_ids = self.__extract_examples(image_data)
-        print(cat_ids)
-        print(example_ids)
+        example_ids, aux_cat_ids = self.__extract_examples(image_data)
+        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
         examples = [
             self.__load_image(example_data)
             for example_data in [self.images[example_id] for example_id in example_ids]
@@ -178,6 +177,8 @@ class LabelAnythingDataset(Dataset):
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
                 # for each annotation of image img_id and category cat_id
+                if cat_id not in self.img2cat_annotations[img_id]:
+                    continue
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
                     prompt_type = random.choice(list(PromptType))
@@ -234,7 +235,7 @@ class LabelAnythingDataset(Dataset):
         )
         query_gt = torch.argmax(query_gt, 0)
 
-        dims = torch.Tensor(query_gt.size()).type(torch.uint8)
+        dims = torch.tensor(query_gt.size())
 
         return {
             "query_image": query_image,  # 3 x H x W
