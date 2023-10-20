@@ -17,9 +17,9 @@ def load_yaml(file_path):
             data = yaml.safe_load(yaml_file.read())
             return data
     except FileNotFoundError:
-        print(f"Il file '{file_path}' non esiste.")
+        print(f"File '{file_path}' not found.")
     except yaml.YAMLError as e:
-        print(f"Errore nell'analisi del file YAML: {e}")
+        print(f"Error parsing YAML file: {e}")
 
 
 def parse_params(params_dict):
