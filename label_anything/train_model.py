@@ -17,8 +17,16 @@ from accelerate import Accelerator
 logger = get_logger(__name__)
 
 
-def train(
-    args, model, optimizer, criterion, dataloader, epoch, comet_logger, accelerator
+def train_epoch(
+    args,
+    model,
+    optimizer,
+    criterion,
+    dataloader,
+    epoch,
+    comet_logger,
+    accelerator,
+    train_metrics,
 ):
     model.train()
     total_loss = 0
@@ -47,7 +55,7 @@ def train(
 
         if log_every_n(batch_idx, args.logger["n_iter"]):
             query_image = image_dict["query_image"][0]
-            points = image_dict["prompt_points"][0,0]
+            points = image_dict["prompt_points"][0, 0]
             boxes = image_dict["prompt_boxes"][0, 0]
             mask = image_dict["prompt_mask"][0, 0]
             annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
@@ -91,7 +99,7 @@ def test(model, criterion, dataloader, epoch, comet_logger):
         comet_logger.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
 
 
-def run(args, model, dataloader, comet_logger, experiment, hyper_params):
+def train(args, model, dataloader, comet_logger, experiment, hyper_params):
     logger.info("Start run")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
@@ -100,18 +108,29 @@ def run(args, model, dataloader, comet_logger, experiment, hyper_params):
 
     # Loss and Optimizer da overraidere
     criterion = hyper_params["loss"]
+    train_metrics = hyper_params["train_metrics"]
     optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
 
     logger.info("CIOLA")
-    # # Train the Model
-    # with experiment.train():
-    #     logger.info(f"Running Model Training {args.name}")
-    #     for epoch in range(hyper_params["num_epochs"]):
-    #         logger.info("Epoch: {}/{}".format(epoch, hyper_params["num_epochs"]))
-    #         train(args, model, optimizer, criterion, dataloader, epoch, comet_logger)
+    # Train the Model
+    with experiment.train():
+        logger.info(f"Running Model Training {args.name}")
+        for epoch in range(hyper_params["num_epochs"]):
+            logger.info("Epoch: {}/{}".format(epoch, hyper_params["num_epochs"]))
+            train_epoch(
+                args,
+                model,
+                optimizer,
+                criterion,
+                dataloader,
+                epoch,
+                comet_logger,
+                accelerator,
+                train_metrics,
+            )
 
-    # save_model(experiment, model, model._get_name)
-    # logger.info(f"Finished Training {args.name}")
+    save_model(experiment, model, model._get_name)
+    logger.info(f"Finished Training {args.name}")
 
     # with experiment.test():
     #     logger.info(f"Running Model Testing {args.name}")
