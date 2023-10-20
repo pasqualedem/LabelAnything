@@ -2,18 +2,29 @@ import tqdm
 import torch
 
 from torch.optim import Adam
+from label_anything.logger.utils import (
+    extract_boxes_from_tensor,
+    extract_vertices_from_tensor,
+    image_with_points,
+    structure_annotations,
+)
 from save import save_model
 from utils.utils import log_every_n
 from logger.text_logger import get_logger
+from accelerate import Accelerator
 
 
 logger = get_logger(__name__)
 
 
-def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
+def train(
+    args, model, optimizer, criterion, dataloader, epoch, comet_logger, accelerator
+):
     model.train()
     total_loss = 0
     correct = 0
+
+    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
@@ -24,7 +35,7 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
 
         pred = outputs.argmax(dim=1, keepdim=True)
 
-        loss.backward()
+        accelerator.backward()
         optimizer.step()
 
         batch_correct = pred.eq(image_dict["example"].view_as(pred)).sum().item()
@@ -33,8 +44,23 @@ def train(args, model, optimizer, criterion, dataloader, epoch, comet_logger):
         total_loss += loss.item()
         correct += batch_correct
         comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
+
         if log_every_n(batch_idx, args.logger["n_iter"]):
-            comet_logger.log_image()
+            query_image = image_dict["query_image"][0]
+            points = image_dict["prompt_points"][0,0]
+            boxes = image_dict["prompt_boxes"][0, 0]
+            mask = image_dict["prompt_mask"][0, 0]
+            annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
+            annotations_mask = structure_annotations(extract_vertices_from_tensor(mask))
+            comet_logger.log_image(
+                query_image,
+                annotations_mask,
+            )
+            comet_logger.log_image(
+                query_image,
+                annotations_boxes,
+            )
+            comet_logger.log_image(image_with_points(query_image, points))
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
@@ -70,16 +96,13 @@ def run(args, model, dataloader, comet_logger, experiment, hyper_params):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
-    if torch.cuda.device_count() > 1:
-        logger.info(f"Using {torch.cuda.device_count()} GPUs")
-        model = torch.nn.DataParallel(model)
-    model.to(device)
+    accelerator = Accelerator()
 
     # Loss and Optimizer da overraidere
     criterion = hyper_params["loss"]
     optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
 
-    logger.info('CIOLA')
+    logger.info("CIOLA")
     # # Train the Model
     # with experiment.train():
     #     logger.info(f"Running Model Training {args.name}")
