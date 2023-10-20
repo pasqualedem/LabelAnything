@@ -11,9 +11,9 @@ import torch
 from torchvision.transforms import Resize, ToTensor, InterpolationMode, Compose, PILToTensor
 import warnings
 
-import data.utils as utils
+import utils
 from typing import Union, Dict, List, Tuple, Any
-from data.examples import generate_examples_power_law_uniform
+from examples import generate_examples_power_law_uniform
 import numpy as np
 from transforms import (
     CustomResize,
@@ -133,7 +133,7 @@ class LabelAnythingDataset(Dataset):
 
         return generate_examples_power_law_uniform(
             query_image_id=img_data["id"],
-            image_classes=self.img2cat_annotations[img_data["id"]],
+            sampled_classes=self.img2cat_annotations[img_data["id"]],
             categories_to_imgs=self.cat2img_annotations,
             min_size=1,
             num_examples=peppino
@@ -150,6 +150,8 @@ class LabelAnythingDataset(Dataset):
 
         # load the examples and categories for the query image
         example_ids, cat_ids = self.__extract_examples(image_data)
+        print(cat_ids)
+        print(example_ids)
         examples = [
             self.__load_image(example_data)
             for example_data in [self.images[example_id] for example_id in example_ids]
@@ -463,7 +465,7 @@ if __name__ == '__main__':
     )
 
     dataset = LabelAnythingDataset(
-        instances_path="label_anything/data/lvis_v1_train.json",
+        instances_path="lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=.1,

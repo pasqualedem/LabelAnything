@@ -1,6 +1,6 @@
 import torch
 
-from data.utils import compute_j_index_n_sets, mean_pairwise_j_index
+from utils import compute_j_index_n_sets, mean_pairwise_j_index
 
 
 def sample_power_law(N, alpha, num_samples=1):
@@ -38,8 +38,10 @@ def sample_classes_from_query(class_set, min_size, sample_function):
     if len(class_set) <= min_size:
         return class_set
     else:
-        n_elements = sample_function(len(class_set))
-        return class_set[torch.randperm(len(class_set))[:n_elements]]
+        n_elements = sample_function(len(class_set)).item()
+        indices = torch.randperm(len(class_set))[:n_elements].tolist()
+        return torch.tensor(class_set)[indices]
+        # return class_set[torch.randperm(len(class_set))[:n_elements].tolist()]
 
 
 def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
@@ -47,7 +49,7 @@ def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
     Returns the set of image ids that contain all categories in the sublist
     except for the query image id.
     """
-    intersection = set.intersection(*[categories_to_imgs[cat] for cat in sublist])
+    intersection = set.intersection(*[set(categories_to_imgs[cat].keys()) for cat in sublist])
     return intersection - excluded_ids
 
 
@@ -93,11 +95,11 @@ def generate_examples(
         mean_j_index (float): mean jaccard index between pairs of sets of classes sampled for each example
     """
     sampled_classes = sample_classes_from_query(
-        set(image_classes), min_size, sample_function
+        list(set(image_classes)), min_size, sample_function
     )
     examples_sampled_classes = []
     image_ids = {query_image_id}
-    frequencies = {k: 0 for k in sampled_classes}
+    frequencies = {k: 0 for k in sampled_classes.tolist()}
     for i in range(num_examples):
         found = False
         example_sampled_classes = sample_classes_from_query(
@@ -147,7 +149,7 @@ def generate_examples_power_law_uniform(
     """
     return generate_examples(
         query_image_id=query_image_id,
-        sampled_classes=sampled_classes,
+        image_classes=sampled_classes,
         categories_to_imgs=categories_to_imgs,
         min_size=min_size,
         sample_function=lambda x: sample_power_law(x, alpha),
