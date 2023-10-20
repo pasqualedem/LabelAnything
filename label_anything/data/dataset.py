@@ -248,6 +248,7 @@ class LabelAnythingDataset(Dataset):
             "flag_bboxes": flag_bbox,
             "query_gt": query_gt,  # C x H x W
             "dims": dims,
+            "example_classes": aux_cat_ids
         }
 
     def __len__(self):
