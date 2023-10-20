@@ -1,3 +1,4 @@
+import os
 import itertools
 import torchvision.transforms
 from torch.utils.data import Dataset
@@ -9,7 +10,8 @@ import random
 import torch
 from torchvision.transforms import Resize, ToTensor, InterpolationMode, Compose, PILToTensor
 import warnings
-import utils
+
+import data.utils as utils
 from typing import Union, Dict, List, Tuple, Any
 import numpy as np
 from transforms import (
@@ -420,6 +422,29 @@ class LabelAnythingDataset(Dataset):
         return data_dict, gts
 
 
+class LabelAnyThingOnlyImageDataset(Dataset):
+    def __init__(
+            self,
+            directory=None,
+            preprocess=None
+    ):
+        super().__init__()
+        self.directory = directory
+        self.files = os.listdir(directory)
+        self.preprocess = preprocess
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, item):
+        img = Image.open(os.path.join(self.directory, self.files[item]))
+        image_id, _ = os.path.splitext(self.files[item])
+        return self.preprocess(img), image_id  # load image
+
+      
+# main for testing the class
+if __name__ == "__main__":
+    from torchvision.transforms import Compose, ToTensor, Resize, ToPILImage
 if __name__ == '__main__':
     from torchvision.transforms import Compose, ToTensor, Resize
     from torch.utils.data import DataLoader
@@ -437,7 +462,7 @@ if __name__ == '__main__':
     )
 
     dataset = LabelAnythingDataset(
-        instances_path='lvis_v1_train.json',
+        instances_path="label_anything/data/lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=.1,

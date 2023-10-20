@@ -7,6 +7,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from einops import rearrange
 
 from typing import Any, Dict, List, Tuple
 
@@ -24,8 +25,6 @@ class Lam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptImageEncoder,
         mask_decoder: MaskDecoder,
-        pixel_mean: List[float] = [123.675, 116.28, 103.53],
-        pixel_std: List[float] = [58.395, 57.12, 57.375],
     ) -> None:
         """
         LAM predicts object masks from an image and a list of examples images with prompts.
@@ -36,25 +35,14 @@ class Lam(nn.Module):
           prompt_encoder (PromptEncoder): Encodes various types of input prompts with their corresponding images.
           mask_decoder (MaskDecoder): Predicts masks from the image embeddings
             and encoded prompts.
-          pixel_mean (list(float)): Mean values for normalizing pixels in the input image.
-          pixel_std (list(float)): Std values for normalizing pixels in the input image.
         """
         super().__init__()
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
-        self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
-        self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
-    @property
-    def device(self) -> Any:
-        return self.pixel_mean.device
-
-    @torch.no_grad()
     def forward(
-        self,
-        batched_input: List[Dict[str, Any]],
-        multimask_output: bool,
+        self, batched_input: List[Dict[str, Any]]
     ) -> List[Dict[str, torch.Tensor]]:
         """
         Predicts masks end-to-end from provided images and prompts.
@@ -62,113 +50,139 @@ class Lam(nn.Module):
         recommended over calling the model directly.
 
         Arguments:
-          batched_input (list(dict)): A list over input images, each a
-            dictionary with the following keys. A prompt key can be
+          batched_input (dict): a dictionary with the following keys. A prompt key can be
             excluded if it is not present.
-              'image': The image as a torch tensor in 3xHxW format,
+              'query_image': The query image as a torch tensor in Bx3xHxW format,
                 already transformed for input to the model.
-              'original_size': (tuple(int, int)) The original size of
-                the image before transformation, as (H, W).
+              'example_images': The example images as a torch tensor in BxNx3xHxW format,
+                already transformed for input to the model.
+              'query_embedding': The query image embedding as a torch tensor in BxCxHxW format.
+                In alternative to 'query_image', 'query_embedding' can be provided.
+              'example_embeddings': The example image embeddings as a torch tensor in BxNxCxHxW format.
+                In alternative to 'example_images', 'example_embeddings' can be provided.
+              'example_images': The example images as a torch tensor in BxNx3xHxW format,
+                already transformed for input to the model.
               'point_coords': (torch.Tensor) Batched point prompts for
-                this image, with shape BxNx2. Already transformed to the
+                this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
               'point_labels': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.
-              'boxes': (torch.Tensor) Batched box inputs, with shape Bx4.
+              'boxes': (torch.Tensor) Batched box inputs, with shape BxMxCx4.
                 Already transformed to the input frame of the model.
+              'box_flags': (torch.Tensor) Batched box flags, with shape BxMxC.
               'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form Bx1xHxW.
-          multimask_output (bool): Whether the model should predict multiple
-            disambiguating masks, or return a single mask.
+                in the form BxMxCxHxW.
+              'mask_flags': (torch.Tensor) Batched mask flags to indicate which flag is valid, BxMxC
 
         Returns:
-          (list(dict)): A list over input images, where each element is
-            as dictionary with the following keys.
-              'masks': (torch.Tensor) Batched binary mask predictions,
+          torch.Tensor: Batched multiclass mask predictions,
                 with shape BxCxHxW, where B is the number of input prompts,
-                C is determined by multimask_output, and (H, W) is the
+                C is the number of classes, (H, W) is the
                 original size of the image.
-              'iou_predictions': (torch.Tensor) The model's predictions
-                of mask quality, in shape BxC.
-              'low_res_logits': (torch.Tensor) Low resolution logits with
-                shape BxCxHxW, where H=W=256. Can be passed as mask input
-                to subsequent iterations of prediction.
         """
-        input_images = torch.stack([self.preprocess(x["image"]) for x in batched_input], dim=0)
-        image_embeddings = self.image_encoder(input_images)
-
-        outputs = []
-        for image_record, curr_embedding in zip(batched_input, image_embeddings):
-            if "point_coords" in image_record:
-                points = (image_record["point_coords"], image_record["point_labels"])
-            else:
-                points = None
-            sparse_embeddings, dense_embeddings = self.prompt_encoder(
-                points=points,
-                boxes=image_record.get("boxes", None),
-                masks=image_record.get("mask_inputs", None),
+        B, N = batched_input["example_images"].shape[:2]
+        if "query_embedding" in batched_input and "example_embeddings" in batched_input:
+            image_embeddings = batched_input["query_embedding"]
+            prompt_images_embeddings = batched_input["example_embeddings"]
+        else:
+            prompt_images = rearrange(
+                batched_input["example_images"], "b n c h w -> (b n) c h w"
             )
-            low_res_masks, iou_predictions = self.mask_decoder(
-                image_embeddings=curr_embedding.unsqueeze(0),
-                image_pe=self.prompt_encoder.get_dense_pe(),
-                sparse_prompt_embeddings=sparse_embeddings,
-                dense_prompt_embeddings=dense_embeddings,
-                multimask_output=multimask_output,
+            images = torch.cat((batched_input["query_image"], prompt_images), dim=0)
+            image_embeddings = self.image_encoder(images)
+            prompt_images_embeddings = rearrange(
+                image_embeddings[B:], "(b n) c h w -> b n c h w", b=B
             )
-            masks = self.postprocess_masks(
-                low_res_masks,
-                input_size=image_record["image"].shape[-2:],
-                original_size=image_record["original_size"],
-            )
-            masks = masks > self.mask_threshold
-            outputs.append(
-                {
-                    "masks": masks,
-                    "iou_predictions": iou_predictions,
-                    "low_res_logits": low_res_masks,
-                }
-            )
-        return outputs
+            image_embeddings = image_embeddings[:B]
 
-    def postprocess_masks(
-        self,
-        masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: Tuple[int, ...],
-    ) -> torch.Tensor:
-        """
-        Remove padding and upscale masks to the original image size.
-
-        Arguments:
-          masks (torch.Tensor): Batched masks from the mask_decoder,
-            in BxCxHxW format.
-          input_size (tuple(int, int)): The size of the image input to the
-            model, in (H, W) format. Used to remove padding.
-          original_size (tuple(int, int)): The original size of the image
-            before resizing for input to the model, in (H, W) format.
-
-        Returns:
-          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
-            is given by original_size.
-        """
-        masks = F.interpolate(
-            masks,
-            (self.image_encoder.img_size, self.image_encoder.img_size),
-            mode="bilinear",
-            align_corners=False,
+        if "point_coords" in batched_input:
+            points = (batched_input["point_coords"], batched_input["point_labels"])
+        else:
+            points = None
+        if "boxes" in batched_input:
+            boxes = batched_input["boxes"]
+            box_flags = batched_input["box_flags"]
+            boxes = (boxes, box_flags)
+        else:
+            boxes = None
+        if "mask_inputs" in batched_input:
+            masks = (batched_input["mask_inputs"], batched_input["mask_flags"])
+        else:
+            masks = None
+        class_embeddings = self.prompt_encoder(
+            image_embeddings=prompt_images_embeddings,
+            points=points,
+            boxes=boxes,
+            masks=masks,
         )
-        masks = masks[..., : input_size[0], : input_size[1]]
-        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
-        return masks
 
-    def preprocess(self, x: torch.Tensor) -> torch.Tensor:
-        """Normalize pixel values and pad to a square input."""
-        # Normalize colors
-        x = (x - self.pixel_mean) / self.pixel_std
+        seg = self.mask_decoder(
+            image_embeddings=image_embeddings,
+            image_pe=self.prompt_encoder.get_dense_pe(),
+            class_embeddings=class_embeddings,
+        )
 
-        # Pad
-        h, w = x.shape[-2:]
-        padh = self.image_encoder.img_size - h
-        padw = self.image_encoder.img_size - w
-        x = F.pad(x, (0, padw, 0, padh))
-        return x
+        return seg
+
+    def init_pretrained_weights(self, weights):
+        """
+        Initialize certain modules with pretrained weights from Sam.
+        """
+        # Load weights for the image encoder
+        if self.image_encoder is not None:
+            image_encoder_weights = {
+                k[len("image_encoder.") :]: v
+                for k, v in weights.items()
+                if k.startswith("image_encoder")
+            }
+            self.image_encoder.load_state_dict(image_encoder_weights)
+        # Load weights for the prompt encoder
+        pe_layer_weights = {
+            k[len("prompt_encoder.pe_layer.") :]: v
+            for k, v in weights.items()
+            if k.startswith("prompt_encoder.pe_layer")
+        }
+        self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
+        point_embeddings_weights = {
+            k[len("prompt_encoder.point_embeddings.") :]: v
+            for k, v in weights.items()
+            if k.startswith("prompt_encoder.point_embeddings")
+        }
+        self.prompt_encoder.point_embeddings.load_state_dict(point_embeddings_weights)
+        not_a_point_embed_weights = {
+            k[len("prompt_encoder.not_a_point_embed.") :]: v
+            for k, v in weights.items()
+            if k.startswith("prompt_encoder.not_a_point_embed")
+        }
+        self.prompt_encoder.not_a_point_embed.load_state_dict(not_a_point_embed_weights)
+        mask_downscaling_weights = {
+            k[len("prompt_encoder.mask_downscaling.") :]: v
+            for k, v in weights.items()
+            if k.startswith("prompt_encoder.mask_downscaling")
+        }
+        self.prompt_encoder.mask_downscaling.load_state_dict(mask_downscaling_weights)
+        no_mask_embed_weights = {
+            k[len("prompt_encoder.no_mask_embed.") :]: v
+            for k, v in weights.items()
+            if k.startswith("prompt_encoder.no_mask_embed")
+        }
+        self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
+
+        # Load tranformer weights
+        transformer_weights = {
+            k[len("mask_decoder.transformer.") :]: v
+            for k, v in weights.items()
+            if k.startswith("mask_decoder.transformer")
+        }
+        self.prompt_encoder.transformer.load_state_dict(transformer_weights)
+
+        # Load weights for the mask decoder transformer
+        self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
+
+        # Load weights for the mask decoder output upscaling
+        output_upscaling_weights = {
+            k[len("mask_decoder.output_upscaling.") :]: v
+            for k, v in weights.items()
+            if k.startswith("mask_decoder.output_upscaling")
+        }
+        self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)

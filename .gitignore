@@ -89,5 +89,10 @@ target/
 # Mypy cache
 .mypy_cache/
 
+*.png
+
+# Checkpoints
+*.pth
+
 /label_anything/data/*.json
-/label_anything/data/*.ipynb
+*.ipynb

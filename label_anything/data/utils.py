@@ -1,6 +1,8 @@
 import pandas as pd
 import torchvision.transforms
 from PIL import Image, ImageDraw
+from itertools import combinations
+
 import torch
 import numpy as np
 import itertools
@@ -25,6 +27,14 @@ def compute_j_index(class_a: List[int], class_b: List[int]) -> float:
     class_a = set(class_a)
     class_b = set(class_b)
     return len(class_a.intersection(class_b)) / len(class_a.union(class_b))
+
+
+def compute_j_index_n_sets(sets):
+    return len(set.intersection(*sets)) / len(set.union(*sets))
+
+
+def mean_pairwise_j_index(sets):
+    return sum(compute_j_index(a, b) for a, b in combinations(sets, 2)) / (len(sets) * (len(sets) - 1))
 
 
 def convert_polygons(polygons: List[List[float]]) -> List[List[Tuple[int]]]:
@@ -125,10 +135,18 @@ def add_noise(
     x, y, x1, y1 = bbox
     std_w = abs(x - x1) / 10
     std_h = abs(y - y1) / 10
-    noise_x = list(map(lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
-                       np.random.normal(loc=0, scale=std_w, size=2).tolist()))
-    noise_y = list(map(lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
-                       np.random.normal(loc=0, scale=std_h, size=2).tolist()))
+    noise_x = list(
+        map(
+            lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
+            np.random.normal(loc=0, scale=std_w, size=2).tolist(),
+        )
+    )
+    noise_y = list(
+        map(
+            lambda val: val if abs(val) <= 20 else np.sign(val) * MAX_PIXELS_BBOX_NOISE,
+            np.random.normal(loc=0, scale=std_h, size=2).tolist(),
+        )
+    )
     return x + noise_x[0], y + noise_y[0], x1 + noise_x[1], y1 + noise_y[1]
 
 
@@ -166,7 +184,10 @@ def get_bboxes(
         flag = torch.full((len_bbox,), fill_value=True)
     else:
         flag = torch.cat(
-            [torch.full((bbox.size(0),), fill_value=True), torch.full(((len_bbox - bbox.size(0)),), fill_value=False)]
+            [
+                torch.full((bbox.size(0),), fill_value=True),
+                torch.full(((len_bbox - bbox.size(0)),), fill_value=False),
+            ]
         )
     return ans, flag
 
@@ -210,8 +231,10 @@ def get_prompt_bbox(
         torch.Tensor: tensor of bounding boxes flag, batched for example images. tensor shape: M x C x N.
     """
     max_anns = get_max_bbox(bbox_entries)
-    res = [get_prompt_bbox_per_image(bbox_entries, x, target_classes, max_anns)
-           for x in bbox_entries.image_id.unique().tolist()]
+    res = [
+        get_prompt_bbox_per_image(bbox_entries, x, target_classes, max_anns)
+        for x in bbox_entries.image_id.unique().tolist()
+    ]
     return torch.stack([x[0] for x in res]), torch.stack([x[1] for x in res])
 
 
@@ -222,8 +245,13 @@ def get_max_bbox(
     Calculates the maximum number of annotations present in ``annotations``, grouped by images and category id.
     """
     return max(
-        len(annotations[(annotations.image_id == img) & (annotations.category_id == cat)])
-        for img in annotations.image_id.unique() for cat in annotations.category_id.unique()
+        len(
+            annotations[
+                (annotations.image_id == img) & (annotations.category_id == cat)
+            ]
+        )
+        for img in annotations.image_id.unique()
+        for cat in annotations.category_id.unique()
     )
 
 
@@ -246,7 +274,11 @@ def get_gt(
     gt = Image.new('L', image_shape[1:][::-1], 0)
     draw = ImageDraw.Draw(gt)
     for ix, c in enumerate(target_classes, start=1):
-        polygons = convert_polygons(itertools.chain(*annotations[annotations.category_id == c].segmentation.tolist()))
+        polygons = convert_polygons(
+            itertools.chain(
+                *annotations[annotations.category_id == c].segmentation.tolist()
+            )
+        )
         for pol in polygons:
             draw.polygon(pol, outline=1, fill=ix)
     gt = np.asarray(gt)
@@ -346,8 +378,20 @@ def pad_coords_image(
     coords, flags = coords_flags
     if coords.size(0) == max_annotations:
         return coords, flags
-    return torch.cat([coords, torch.zeros(size=((max_annotations - coords.size(0)), *coords.shape[1:]))]), \
-           torch.cat([flags, torch.full(size=((max_annotations - flags.size(0)), flags.size(1)), fill_value=False)])
+    return torch.cat(
+        [
+            coords,
+            torch.zeros(size=((max_annotations - coords.size(0)), *coords.shape[1:])),
+        ]
+    ), torch.cat(
+        [
+            flags,
+            torch.full(
+                size=((max_annotations - flags.size(0)), flags.size(1)),
+                fill_value=False,
+            ),
+        ]
+    )
 
 
 def get_coords_per_image(
