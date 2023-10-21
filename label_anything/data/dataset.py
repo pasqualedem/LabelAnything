@@ -77,6 +77,14 @@ class LabelAnythingDataset(Dataset):
 
         self.j_index_value = j_index_value
         self.seed = seed
+        self.reset_num_examples()
+        self.reset_num_coords()
+
+    def reset_num_examples(self):
+        self.num_examples = random.randint(1, self.max_num_examples)
+
+    def reset_num_coords(self):
+        self.num_coords = random.randint(1, self.max_num_coords)
 
     def __load_annotation_dicts(self) -> (dict, dict):
         """Prepares dictionaries for fast access to annotations.
@@ -129,14 +137,13 @@ class LabelAnythingDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of category ids of the examples.
         """
-        peppino = 10 # TODO: remove OOOOOOOOOOOOOOOOOOOOOOO
 
         return generate_examples_power_law_uniform(
             query_image_id=img_data["id"],
             sampled_classes=self.img2cat_annotations[img_data["id"]],
             categories_to_imgs=self.cat2img_annotations,
             min_size=1,
-            num_examples=peppino
+            num_examples=self.num_examples
         )
 
     def __getitem__(self, item: int) -> dict:
@@ -254,7 +261,6 @@ class LabelAnythingDataset(Dataset):
     def __len__(self):
         return len(self.images)
 
-    # TODO: add max_annotations and mask shape
     def annotations_to_tensor(self, annotations, prompt_type) -> torch.Tensor:
         """Transform a dict of annotations of prompt_type to a padded tensor.
 
@@ -270,14 +276,16 @@ class LabelAnythingDataset(Dataset):
 
         m = 10  # max number of annotations by type
         if prompt_type == PromptType.BBOX:
-            tensor_shape = (n, c, 10, 4)
+            max_annotations = utils.get_max_annotations(annotations)
+            tensor_shape = (n, c, max_annotations, 4)
         elif prompt_type == PromptType.MASK:
             tensor_shape = (n, c, 256, 256)
         elif prompt_type == PromptType.POINT:
-            tensor_shape = (n, c, 10, 2)
+            max_annotations = utils.get_max_annotations(annotations)
+            tensor_shape = (n, c, max_annotations, 2)
 
         tensor = torch.zeros(tensor_shape)
-        flag = torch.zeros(tensor_shape[:-1]).type(torch.uint8)
+        flag = torch.zeros(tensor_shape[:-1]).type(torch.uint8) if prompt_type != PromptType.MASK else torch.zeros(tensor_shape[:2]).type(torch.uint8)
 
         if prompt_type == PromptType.MASK:
             for i, img_id in enumerate(annotations):
@@ -370,27 +378,26 @@ class LabelAnythingDataset(Dataset):
 
         """
         # classes
-        classes = [x['classes'] for x in batched_input]
-        max_classes = max(classes)
+        max_classes = max([x['prompt_mask'].size(1) for x in batched_input])
 
         # gt
-        gts = torch.stack([x['gt'] for x in batched_input])
+        dims = torch.stack([x['dims'] for x in batched_input])
+        max_dims = torch.max(dims, 0).values.tolist()
+        gts = [x['query_gt'] for x in batched_input]
+        gts = torch.stack([utils.collate_gts(x, max_dims) for x in gts])
 
         # prompt mask
         masks = [x['prompt_mask'] for x in batched_input]
-        flags = [x['mask_flags'] for x in batched_input]
-        masks_flags = [utils.collate_mask(masks[i], flags[i], max_classes, self.num_examples, self.resize_dim) for i in range(len(masks))]
+        flags = [x['flag_masks'] for x in batched_input]
+        masks_flags = [utils.collate_mask(m, f, max_classes) for (m, f) in zip(masks, flags)]
         masks = torch.stack([x[0] for x in masks_flags])
         mask_flags = torch.stack([x[1] for x in masks_flags])
 
         # prompt bbox
-        bboxes = [x["prompt_bbox"] for x in batched_input]
-        coords = [x['prompt_coords'] for x in batched_input]
-        flags = [x["flag_bbox"] for x in batched_input]
-        annotations = itertools.chain([x.size(2) if isinstance(x, torch.Tensor) else 1 for x in bboxes],
-                                      [x.size(2) if isinstance(x, torch.Tensor) else 1 for x in coords])
-        max_annotations = max(annotations)
-        bboxes_flags = [utils.collate_bbox(bboxes[i], flags[i], max_classes, max_annotations, self.num_examples)
+        bboxes = [x["prompt_bboxes"] for x in batched_input]
+        flags = [x["flag_bboxes"] for x in batched_input]
+        max_annotations = max(x.size(2) for x in bboxes)
+        bboxes_flags = [utils.collate_bbox(bboxes[i], flags[i], max_classes, max_annotations)
                         for i in range(len(bboxes))]
         bboxes = torch.stack([x[0] for x in bboxes_flags])
         bbox_flags = torch.stack([x[1] for x in bboxes_flags])
@@ -398,13 +405,14 @@ class LabelAnythingDataset(Dataset):
         # prompt coords
         coords = [x['prompt_coords'] for x in batched_input]
         flags = [x['flag_coords'] for x in batched_input]
-        coords_flags = [utils.collate_coords(coords[i], flags[i], max_classes, max_annotations, self.num_examples, self.num_coords)
+        max_annotations = max(x.size(2) for x in coords)
+        coords_flags = [utils.collate_coords(coords[i], flags[i], max_classes, max_annotations)
                         for i in range(len(coords))]
         coords = torch.stack([x[0] for x in coords_flags])
         coord_flags = torch.stack([x[1] for x in coords_flags])
 
         # query image
-        query_image = torch.stack([x["target"] for x in batched_input])
+        query_image = torch.stack([x["query_image"] for x in batched_input])
 
         # example image
         example_images = torch.stack([x["examples"] for x in batched_input])
@@ -418,6 +426,7 @@ class LabelAnythingDataset(Dataset):
             'box_flags': bbox_flags,
             'mask_inputs': masks,
             'mask_flags': mask_flags,
+            'gt_dims': dims
         }
 
         # reset dataset parameters
@@ -448,8 +457,6 @@ class LabelAnyThingOnlyImageDataset(Dataset):
 
       
 # main for testing the class
-if __name__ == "__main__":
-    from torchvision.transforms import Compose, ToTensor, Resize, ToPILImage
 if __name__ == '__main__':
     from torchvision.transforms import Compose, ToTensor, Resize
     from torch.utils.data import DataLoader
@@ -473,11 +480,11 @@ if __name__ == '__main__':
         j_index_value=.1,
     )
 
-    x = dataset[0]
-    print([f'{k}: {v.size()}' for k, v in x.items()])
-    exit()
+    #x = dataset[1]
+    #print([f'{k}: {v.size()}' for k, v in x.items() if isinstance(v, torch.Tensor)])
+    #exit()
 
-    dataloader = DataLoader(dataset=dataset, batch_size=8, shuffle=True, collate_fn=dataset.collate_fn)
+    dataloader = DataLoader(dataset=dataset, batch_size=8, shuffle=False, collate_fn=dataset.collate_fn)
     data_dict, gt = next(iter(dataloader))
 
     print([f'{k}: {v.size()}' for k, v in data_dict.items()])
