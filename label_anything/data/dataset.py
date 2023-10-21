@@ -241,22 +241,60 @@ class LabelAnythingDataset(Dataset):
             ]
         )
         query_gt = torch.argmax(query_gt, 0)
-
         dims = torch.tensor(query_gt.size())
 
+        example_gts = self.get_example_gt(example_ids, cat_ids)
+        example_gts_dim = torch.tensor(list(map(lambda x: x.size(), example_gts)))
+        max_dims = torch.max(example_gts_dim, 0).values.tolist()
+        example_gts = torch.stack([utils.collate_gts(x, max_dims) for x in example_gts])
+
         return {
-            "query_image": query_image,  # 3 x H x W
-            "examples": examples,  # N x 3 x H x W
-            "prompt_mask": masks,  # N x C x H_M x W_M
+            "query_image": query_image,
+            "examples": examples,
+            "prompt_mask": masks,
             "flag_masks": flag_masks,
-            "prompt_coords": points,  # N x C x M x 2
+            "prompt_coords": points,
             "flag_coords": flag_points,
-            "prompt_bboxes": bboxes,  # N x C x M x 4
+            "prompt_bboxes": bboxes,
             "flag_bboxes": flag_bbox,
-            "query_gt": query_gt,  # C x H x W
+            "query_gt": query_gt,
             "dims": dims,
-            "example_classes": aux_cat_ids
+            "example_classes": aux_cat_ids,
+            "example_gts": example_gts,
+            "example_dim": example_gts_dim,
         }
+
+    def get_example_gt(self, example_ids, cat_ids):
+        # initialization
+        example_masks = dict((img_id, {}) for img_id in example_ids)
+        for img_id in example_ids:
+            for cat_id in cat_ids:
+                example_masks[img_id][cat_id] = []
+
+        # generate masks
+        for img_id in example_ids:
+            img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
+            for cat_id in cat_ids:
+                # zero mask for no segmentation
+                if cat_id not in self.img2cat_annotations[img_id]:
+                    example_masks[img_id][cat_id].append(np.zeros(img_size).astype(np.uint8))
+                    continue
+                for ann in self.img2cat_annotations[img_id][cat_id]:
+                    example_masks[img_id][cat_id].append(
+                        self.prompts_processor.convert_mask(
+                            ann['segmentation'],
+                            *img_size
+                        )
+                    )
+            tensor = torch.as_tensor(
+                [
+                    np.logical_or.reduce(example_masks[img_id][cat_id]).astype(np.uint8)
+                    for cat_id in cat_ids
+                ]
+            )
+            example_masks[img_id] = torch.argmax(tensor, 0)
+
+        return list(example_masks.values())
 
     def __len__(self):
         return len(self.images)
@@ -458,12 +496,8 @@ class LabelAnyThingOnlyImageDataset(Dataset):
       
 # main for testing the class
 if __name__ == '__main__':
-    from torchvision.transforms import Compose, ToTensor, Resize
+    from torchvision.transforms import Compose, ToTensor
     from torch.utils.data import DataLoader
-
-    '''torch.manual_seed(1)
-    random.seed(1)
-    np.random.seed(1)'''
 
     preprocess = Compose(
         [
@@ -480,9 +514,9 @@ if __name__ == '__main__':
         j_index_value=.1,
     )
 
-    #x = dataset[1]
-    #print([f'{k}: {v.size()}' for k, v in x.items() if isinstance(v, torch.Tensor)])
-    #exit()
+    x = dataset[1]
+    print([f'{k}: {v.size()}' for k, v in x.items() if isinstance(v, torch.Tensor)])
+    exit()
 
     dataloader = DataLoader(dataset=dataset, batch_size=8, shuffle=False, collate_fn=dataset.collate_fn)
     data_dict, gt = next(iter(dataloader))
