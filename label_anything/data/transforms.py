@@ -28,7 +28,7 @@ class CustomResize(object):
         """
         Resize the image to the target long side length.
         """
-        oldh, oldw = sample.size
+        oldw, oldh = sample.size
         target_size = get_preprocess_shape(oldh, oldw, self.long_side_length)
         return resize(sample, target_size)
 
