@@ -109,7 +109,7 @@ class PromptsProcessor:
         positive_coords = np.argwhere(mask)
         # choose one at random
         row, col = positive_coords[np.random.choice(len(positive_coords))]
-        return row, col
+        return col, row
 
     def apply_coords(
         self, coords: np.ndarray, original_size: Tuple[int, ...]
