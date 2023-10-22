@@ -1,7 +1,5 @@
 import torch
 
-from utils import compute_j_index_n_sets, mean_pairwise_j_index
-
 
 def sample_power_law(N, alpha, num_samples=1):
     """
