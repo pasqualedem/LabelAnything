@@ -615,9 +615,15 @@ def collate_coords(
     return out_coords, out_flag
 
 
-
 def collate_gts(gt, dims):
     out = torch.zeros(dims)
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
+    return out.type(torch.uint8)
+
+
+def collate_example_gts(gt, dims):
+    out = torch.zeros(size=(gt.size(0), *dims))
+    _, dim0, dim1 = gt.shape
+    out[:, :dim0, :dim1] = gt
     return out.type(torch.uint8)

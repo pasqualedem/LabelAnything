@@ -137,6 +137,7 @@ class LabelAnythingDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of category ids of the examples.
         """
+
         return generate_examples_power_law_uniform(
             query_image_id=img_data["id"],
             sampled_classes=self.img2cat_annotations[img_data["id"]],
@@ -226,7 +227,6 @@ class LabelAnythingDataset(Dataset):
 
         # gt
         query_masks = dict((cat_id, []) for cat_id in cat_ids)
-        # collect and convert masks for each category
         for cat_id in cat_ids:
             for ann in self.img2cat_annotations[image_data["id"]][cat_id]:
                 query_masks[cat_id].append(
@@ -234,18 +234,12 @@ class LabelAnythingDataset(Dataset):
                         ann["segmentation"], image_data["height"], image_data["width"]
                     )
                 )
-        # make a single mask for each category
         query_gt = torch.as_tensor(
             [
                 np.logical_or.reduce(query_masks[cat_id]).astype(np.uint8)
                 for cat_id in cat_ids
             ]
         )
-        # add a zeroes tensor to the first dimension
-        query_gt = torch.cat(
-            [torch.zeros((1, *query_gt.shape[1:])).type(torch.uint8), query_gt]
-        )
-        # drop the first dimension
         query_gt = torch.argmax(query_gt, 0)
         dims = torch.tensor(query_gt.size())
 
@@ -329,7 +323,8 @@ class LabelAnythingDataset(Dataset):
             tensor_shape = (n, c, max_annotations, 2)
 
         tensor = torch.zeros(tensor_shape)
-        flag = torch.zeros(tensor_shape[:-1]).type(torch.uint8) if prompt_type != PromptType.MASK else torch.zeros(tensor_shape[:2]).type(torch.uint8)
+        flag = torch.zeros(tensor_shape[:-1]).type(torch.uint8) if prompt_type != PromptType.MASK else torch.zeros(
+            tensor_shape[:2]).type(torch.uint8)
 
         if prompt_type == PromptType.MASK:
             for i, img_id in enumerate(annotations):
@@ -341,36 +336,14 @@ class LabelAnythingDataset(Dataset):
                     flag[i, j] = 1
         else:
             for i, img_id in enumerate(annotations):
-                img_original_size = (self.images[img_id]["height"], self.images[img_id]["width"])
                 for j, cat_id in enumerate(annotations[img_id]):
                     if annotations[img_id][cat_id].size == 0:
                         continue
                     m = annotations[img_id][cat_id].shape[0]
-                    if prompt_type == PromptType.BBOX:
-                        boxes_ann = self.prompts_processor.apply_boxes(
-                            annotations[img_id][cat_id], img_original_size
-                        )
-                        tensor[i, j, :m, :] = torch.tensor(boxes_ann)
-                    elif prompt_type == PromptType.POINT:
-                        points_ann = self.prompts_processor.apply_coords(
-                            annotations[img_id][cat_id], img_original_size
-                        )
-                        tensor[i, j, :m, :] = torch.tensor(points_ann)
+                    tensor[i, j, :m, :] = torch.tensor(annotations[img_id][cat_id])
                     flag[i, j, :m] = 1
 
         return tensor, flag
-
-    '''def reset_num_coords(self):
-        """
-        Regenerates the number of coordinates to extract for each annotation selected.
-        """
-        self.num_coords = random.randint(1, self.max_num_coords)
-
-    def reset_num_examples(self):
-        """
-        Regenerates the number of examples to extract for each query image selected.
-        """
-        self.num_examples = random.randint(1, self.num_max_examples)'''
 
     def collate_fn(
             self,
@@ -470,6 +443,10 @@ class LabelAnythingDataset(Dataset):
 
         # example image
         example_images = torch.stack([x["examples"] for x in batched_input])
+        example_dims = torch.stack([x['example_dim'] for x in batched_input])
+        max_example_dims = torch.max(example_dims.view(-1, 2), 0).values.tolist()
+        example_gt = [x['example_gts'] for x in batched_input]
+        example_gt = torch.stack([utils.collate_example_gts(x, max_example_dims) for x in example_gt])
 
         data_dict = {
             'query_image': query_image,
@@ -480,7 +457,10 @@ class LabelAnythingDataset(Dataset):
             'box_flags': bbox_flags,
             'mask_inputs': masks,
             'mask_flags': mask_flags,
-            'gt_dims': dims
+            'gt_dims': dims,
+            'example_dims': example_dims,
+            'example_gts': example_gt,
+
         }
 
         # reset dataset parameters
@@ -509,7 +489,7 @@ class LabelAnyThingOnlyImageDataset(Dataset):
         image_id, _ = os.path.splitext(self.files[item])
         return self.preprocess(img), image_id  # load image
 
-      
+
 # main for testing the class
 if __name__ == '__main__':
     from torchvision.transforms import Compose, ToTensor
@@ -530,9 +510,9 @@ if __name__ == '__main__':
         j_index_value=.1,
     )
 
-    x = dataset[1]
+    '''x = dataset[1]
     print([f'{k}: {v.size()}' for k, v in x.items() if isinstance(v, torch.Tensor)])
-    exit()
+    exit()'''
 
     dataloader = DataLoader(dataset=dataset, batch_size=8, shuffle=False, collate_fn=dataset.collate_fn)
     data_dict, gt = next(iter(dataloader))
