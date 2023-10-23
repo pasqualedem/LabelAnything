@@ -10,6 +10,7 @@ from label_anything.logger.utils import (
 )
 from save import save_model
 from utils.utils import log_every_n
+from substitution import Substitutor
 from logger.text_logger import get_logger
 from accelerate import Accelerator
 
@@ -35,40 +36,47 @@ def train_epoch(
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
-        optimizer.zero_grad()
-        image_dict, gt = batch_dict
+        substitutor = Substitutor(
+            batch_dict,
+            threshold=args["substitution_threshold"],
+            num_points=args.get("num_points", 1),
+        )
+        for batch_dict in substitutor:
+            optimizer.zero_grad()
+            image_dict, gt = batch_dict
 
-        outputs = model(image_dict)
-        loss = criterion(outputs, gt)
+            outputs = model(image_dict)
+            loss = criterion(outputs, gt)
 
-        pred = outputs.argmax(dim=1, keepdim=True)
+            pred = outputs.argmax(dim=1, keepdim=True)
 
-        accelerator.backward()
-        optimizer.step()
+            accelerator.backward()
+            optimizer.step()
 
-        batch_correct = pred.eq(image_dict["example"].view_as(pred)).sum().item()
-        batch_total = image_dict["example"].size(0)
+            batch_correct = pred.eq(image_dict["example"].view_as(pred)).sum().item()
+            batch_total = image_dict["example"].size(0)
 
-        total_loss += loss.item()
-        correct += batch_correct
-        comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
+            total_loss += loss.item()
+            correct += batch_correct
+            comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
+            substitutor.generate_new_points(pred, gt)
 
-        if log_every_n(batch_idx, args.logger["n_iter"]):
-            query_image = image_dict["query_image"][0]
-            points = image_dict["prompt_points"][0, 0]
-            boxes = image_dict["prompt_boxes"][0, 0]
-            mask = image_dict["prompt_mask"][0, 0]
-            annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
-            annotations_mask = structure_annotations(extract_vertices_from_tensor(mask))
-            comet_logger.log_image(
-                query_image,
-                annotations_mask,
-            )
-            comet_logger.log_image(
-                query_image,
-                annotations_boxes,
-            )
-            comet_logger.log_image(image_with_points(query_image, points))
+            if log_every_n(batch_idx, args.logger["n_iter"]):
+                query_image = image_dict["query_image"][0]
+                points = image_dict["prompt_points"][0, 0]
+                boxes = image_dict["prompt_boxes"][0, 0]
+                mask = image_dict["prompt_mask"][0, 0]
+                annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
+                annotations_mask = structure_annotations(extract_vertices_from_tensor(mask))
+                comet_logger.log_image(
+                    query_image,
+                    annotations_mask,
+                )
+                comet_logger.log_image(
+                    query_image,
+                    annotations_boxes,
+                )
+                comet_logger.log_image(image_with_points(query_image, points))
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)

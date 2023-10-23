@@ -63,30 +63,31 @@ class Substitutor:
         """
         Generate new points from predictions errors and add them to the prompts
         """
-        sampled_points, labels = generate_points_from_errors(
-            prediction, ground_truth, self.num_points
-        )
-        sampled_points = rearrange(sampled_points, "b c n xy -> b 1 c n xy")
-        padding_points = torch.zeros(
-            sampled_points.shape[0],
-            self.batch["prompt_points"].shape[1] - 1,
-            *sampled_points.shape[2:],
-        )
-        labels = rearrange(labels, "b c n -> b 1 c n")
-        padding_labels = torch.zeros(
-            labels.shape[0],
-            self.batch["prompt_point_labels"].shape[1] - 1,
-            *labels.shape[2:],
-        )
-        sampled_points = torch.cat([padding_points, sampled_points], dim=1)
-        labels = torch.cat([padding_labels, labels], dim=1)
+        if self.substitute:
+            sampled_points, labels = generate_points_from_errors(
+                prediction, ground_truth, self.num_points
+            )
+            sampled_points = rearrange(sampled_points, "b c n xy -> b 1 c n xy")
+            padding_points = torch.zeros(
+                sampled_points.shape[0],
+                self.batch["prompt_points"].shape[1] - 1,
+                *sampled_points.shape[2:],
+            )
+            labels = rearrange(labels, "b c n -> b 1 c n")
+            padding_labels = torch.zeros(
+                labels.shape[0],
+                self.batch["prompt_point_labels"].shape[1] - 1,
+                *labels.shape[2:],
+            )
+            sampled_points = torch.cat([padding_points, sampled_points], dim=1)
+            labels = torch.cat([padding_labels, labels], dim=1)
 
-        self.batch["prompt_points"] = torch.cat(
-            [self.batch["prompt_points"], sampled_points], dim=3
-        )
-        self.batch["prompt_points_labels"] = torch.cat(
-            [self.batch["prompt_point_labels"], labels], dim=3
-        )
+            self.batch["prompt_points"] = torch.cat(
+                [self.batch["prompt_points"], sampled_points], dim=3
+            )
+            self.batch["prompt_points_labels"] = torch.cat(
+                [self.batch["prompt_point_labels"], labels], dim=3
+            )
 
     def __next__(self):
         if self.it == 0:
