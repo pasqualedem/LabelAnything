@@ -1,7 +1,6 @@
 # from label_anything.parameters import parse_args
 from preprocess import preprocess_images_to_embeddings
 
-from train_model import run
 from logger.text_logger import get_logger
 from logger.image_logger import Logger
 from experiment import comet_experiment
