@@ -12,6 +12,7 @@ from save import save_model
 from utils.utils import log_every_n
 from logger.text_logger import get_logger
 from accelerate import Accelerator
+from torchmetrics import JaccardIndex
 
 
 logger = get_logger(__name__)
@@ -31,8 +32,11 @@ def train_epoch(
     model.train()
     total_loss = 0
     correct = 0
+    total_jaccard = 0
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+
+    jaccard = JaccardIndex(task="multiclass", num_classes=outputs.shape[1])
 
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
@@ -42,6 +46,7 @@ def train_epoch(
         loss = criterion(outputs, gt)
 
         pred = outputs.argmax(dim=1, keepdim=True)
+        jaccard_val = jaccard(pred, gt)
 
         accelerator.backward()
         optimizer.step()
@@ -52,6 +57,7 @@ def train_epoch(
         total_loss += loss.item()
         correct += batch_correct
         comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
+        comet_logger.log_metric("batch_jaccard", jaccard_val.item())
 
         if log_every_n(batch_idx, args.logger["n_iter"]):
             query_image = image_dict["query_image"][0]
@@ -73,7 +79,10 @@ def train_epoch(
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
 
-    comet_logger.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
+    comet_logger.log_metrics(
+        {"accuracy": correct, "loss": total_loss, "jaccard": total_jaccard},
+        epoch=epoch,
+    )
 
 
 def test(model, criterion, dataloader, epoch, comet_logger):
