@@ -3,17 +3,16 @@ import os
 from label_anything.parameters import parse_params
 from label_anything.train_model import train
 from label_anything.utils.utils import load_yaml
-from logger.image_logger import Logger
-
-from models import model_registry
-from data import get_dataloader
+from label_anything.models import model_registry
+from label_anything.data import get_dataloader
+import torch
 
 # from label_anything.train_model import run
-from logger.text_logger import get_logger
-from logger.image_logger import Logger
+from label_anything.logger.text_logger import get_logger
+from label_anything.logger.image_logger import Logger
 
 
-def run_experiment():
+def run_experiment(checkpoint, use_sam_checkpoint):
     logger = get_logger(__name__)
 
     args = load_yaml("parameters.yaml")
@@ -41,8 +40,9 @@ def run_experiment():
     comet_logger, experiment = comet_experiment(comet_information, args, train_params)
 
     dataloader = get_dataloader(**dataset_params)
-    model = model_registry[model_params["name"][0]](model_params["checkpoint"][0])
-
+    model = model_registry[model_params["name"][0]](
+        checkpoint=model_params["checkpoint"][0]
+    )
     train(args, model, dataloader, comet_logger, experiment, train_params)
 
 
