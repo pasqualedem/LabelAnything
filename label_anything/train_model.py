@@ -1,7 +1,7 @@
 import tqdm
 import torch
 
-from torch.optim import Adam
+from torch.optim import AdamW
 from label_anything.logger.utils import (
     extract_boxes_from_tensor,
     extract_vertices_from_tensor,
@@ -12,8 +12,7 @@ from save import save_model
 from utils.utils import log_every_n
 from logger.text_logger import get_logger
 from accelerate import Accelerator
-from torchmetrics import JaccardIndex
-
+from torchmetrics.functional.classification import multiclass_jaccard_index
 
 logger = get_logger(__name__)
 
@@ -36,8 +35,6 @@ def train_epoch(
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
-    jaccard = JaccardIndex(task="multiclass", num_classes=outputs.shape[1])
-
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         optimizer.zero_grad()
         image_dict, gt = batch_dict
@@ -46,7 +43,7 @@ def train_epoch(
         loss = criterion(outputs, gt)
 
         pred = outputs.argmax(dim=1, keepdim=True)
-        jaccard_val = jaccard(pred, gt)
+        jaccard = multiclass_jaccard_index(pred, gt, num_classes=outputs.shape[1])
 
         accelerator.backward()
         optimizer.step()
@@ -55,9 +52,10 @@ def train_epoch(
         batch_total = image_dict["example"].size(0)
 
         total_loss += loss.item()
+        total_jaccard += jaccard.item()
         correct += batch_correct
         comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
-        comet_logger.log_metric("batch_jaccard", jaccard_val.item())
+        comet_logger.log_metric("batch_jaccard", jaccard.item())
 
         if log_every_n(batch_idx, args.logger["n_iter"]):
             query_image = image_dict["query_image"][0]
@@ -78,6 +76,7 @@ def train_epoch(
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
+    total_jaccard /= len(dataloader.dataset)
 
     comet_logger.log_metrics(
         {"accuracy": correct, "loss": total_loss, "jaccard": total_jaccard},
@@ -108,24 +107,20 @@ def test(model, criterion, dataloader, epoch, comet_logger):
         comet_logger.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
 
 
-def train(args, model, dataloader, comet_logger, experiment, hyper_params):
-    logger.info("Start run")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
-
+def train(args, model, dataloader, comet_logger, experiment, train_params):
+    logger.info("Start training loop...")
     accelerator = Accelerator()
 
     # Loss and Optimizer da overraidere
-    criterion = hyper_params["loss"]
-    train_metrics = hyper_params["train_metrics"]
-    optimizer = Adam(model.parameters(), lr=hyper_params["learning_rate"])
+    criterion = train_params["loss"]
+    train_metrics = train_params["optimizer"]
+    optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
 
-    logger.info("CIOLA")
     # Train the Model
     with experiment.train():
         logger.info(f"Running Model Training {args.name}")
-        for epoch in range(hyper_params["num_epochs"]):
-            logger.info("Epoch: {}/{}".format(epoch, hyper_params["num_epochs"]))
+        for epoch in range(train_params["max_epochs"]):
+            logger.info("Epoch: {}/{}".format(epoch, train_params["max_epochs"]))
             train_epoch(
                 args,
                 model,
@@ -138,7 +133,7 @@ def train(args, model, dataloader, comet_logger, experiment, hyper_params):
                 train_metrics,
             )
 
-    save_model(experiment, model, model._get_name)
+    # save_model(experiment, model, model._get_name)
     logger.info(f"Finished Training {args.name}")
 
     # with experiment.test():
