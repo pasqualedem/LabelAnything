@@ -47,6 +47,7 @@ if __name__ == "__main__":
             outfolder=args.outfolder,
             compile=args.compile,
         )
+        exit()
 
     comet_information = {
         "apykey": os.getenv("COMET_API_KEY"),
