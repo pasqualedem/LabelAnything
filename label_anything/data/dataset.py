@@ -152,43 +152,40 @@ class LabelAnythingDataset(Dataset):
         )
 
     def __getitem__(self, item: int) -> dict:
-        image_data = self.images[self.image_ids[item]]
-
-        # load (and preprocess) the query image
-        query_image = self.__load_image(image_data)
-        query_image = (
-            query_image if not self.preprocess else self.preprocess(query_image)
-        )
+        base_image_data = self.images[self.image_ids[item]]
 
         # load the examples and categories for the query image
-        example_ids, aux_cat_ids = self.__extract_examples(image_data)
+        image_ids, aux_cat_ids = self.__extract_examples(base_image_data)
+        image_ids.insert(0, base_image_data["id"])
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-        examples = [
-            self.__load_image(example_data)
-            for example_data in [self.images[example_id] for example_id in example_ids]
+
+        # load, stack and preprocess the images
+        images = [
+            self.__load_image(image_data)
+            for image_data in [self.images[image_id] for image_id in image_ids]
         ]
-        examples = torch.stack(
+        images = torch.stack(
             [
-                example if not self.preprocess else self.preprocess(example)
-                for example in examples
+                image if not self.preprocess else self.preprocess(image)
+                for image in images
             ],
             dim=0,
         )
 
         # create the prompt dicts
-        bboxes = dict((img_id, {}) for img_id in example_ids)
-        masks = dict((img_id, {}) for img_id in example_ids)
-        points = dict((img_id, {}) for img_id in example_ids)
+        bboxes = dict((img_id, {}) for img_id in image_ids)
+        masks = dict((img_id, {}) for img_id in image_ids)
+        points = dict((img_id, {}) for img_id in image_ids)
 
         # initialize the prompt dicts
-        for img_id in example_ids:
+        for img_id in image_ids:
             for cat_id in cat_ids:
                 bboxes[img_id][cat_id] = []
                 masks[img_id][cat_id] = []
                 points[img_id][cat_id] = []
 
-        # get prompts from examples' annotations
-        for img_id in example_ids:
+        # get prompts from annotations
+        for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
                 # for each annotation of image img_id and category cat_id
@@ -222,93 +219,73 @@ class LabelAnythingDataset(Dataset):
                         )
 
         # convert the lists of prompts to arrays
-        for img_id in example_ids:
+        for img_id in image_ids:
             for cat_id in cat_ids:
                 bboxes[img_id][cat_id] = np.array((bboxes[img_id][cat_id]))
                 masks[img_id][cat_id] = np.array((masks[img_id][cat_id]))
                 points[img_id][cat_id] = np.array((points[img_id][cat_id]))
 
         # obtain padded tensors
-        bboxes, flag_bbox = self.annotations_to_tensor(bboxes, PromptType.BBOX)
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
         masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
 
-        # gt
-        query_masks = dict((cat_id, []) for cat_id in cat_ids)
-        for cat_id in cat_ids:
-            for ann in self.img2cat_annotations[image_data["id"]][cat_id]:
-                query_masks[cat_id].append(
-                    self.prompts_processor.convert_mask(
-                        ann["segmentation"], image_data["height"], image_data["width"]
-                    )
-                )
-        query_gt = torch.as_tensor(
-            [
-                np.logical_or.reduce(query_masks[cat_id]).astype(np.uint8)
-                for cat_id in cat_ids
-            ]
-        )
-        # add a zeroes tensor to the first dimension
-        query_gt = torch.cat(
-            [torch.zeros((1, *query_gt.shape[1:])).type(torch.uint8), query_gt]
-        )
-        # drop the first dimension
-        query_gt = torch.argmax(query_gt, 0)
-        dims = torch.tensor(query_gt.size())
-
-        example_gts = self.get_example_gt(example_ids, cat_ids)
-        example_gts_dim = torch.tensor(list(map(lambda x: x.size(), example_gts)))
-        max_dims = torch.max(example_gts_dim, 0).values.tolist()
-        example_gts = torch.stack([utils.collate_gts(x, max_dims) for x in example_gts])
+        # obtain ground truths
+        ground_truths = self.get_ground_truths(image_ids, cat_ids)
+        dims = torch.tensor(list(map(lambda x: x.size(), ground_truths)))
+        max_dims = torch.max(dims, 0).values.tolist()
+        ground_truths = torch.stack([utils.collate_gts(x, max_dims) for x in ground_truths])
 
         return {
-            "query_image": query_image,
-            "examples": examples,
-            "prompt_mask": masks,
+            "images": images,
+            "prompt_masks": masks,
             "flag_masks": flag_masks,
-            "prompt_coords": points,
-            "flag_coords": flag_points,
+            "prompt_points": points,
+            "flag_points": flag_points,
             "prompt_bboxes": bboxes,
-            "flag_bboxes": flag_bbox,
-            "query_gt": query_gt,
+            "flag_bboxes": flag_bboxes,
             "dims": dims,
-            "example_classes": aux_cat_ids,
-            "example_gts": example_gts,
-            "example_dim": example_gts_dim,
+            "classes": aux_cat_ids,
+            "ground_truths": ground_truths, 
         }
 
-    def get_example_gt(self, example_ids, cat_ids):
+    def get_ground_truths(self, image_ids, cat_ids):
         # initialization
-        example_masks = dict((img_id, {}) for img_id in example_ids)
-        for img_id in example_ids:
+        ground_truths = dict((img_id, {}) for img_id in image_ids)
+        for img_id in image_ids:
             for cat_id in cat_ids:
-                example_masks[img_id][cat_id] = []
+                ground_truths[img_id][cat_id] = []
 
         # generate masks
-        for img_id in example_ids:
+        for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
                 # zero mask for no segmentation
                 if cat_id not in self.img2cat_annotations[img_id]:
-                    example_masks[img_id][cat_id].append(
+                    ground_truths[img_id][cat_id].append(
                         np.zeros(img_size).astype(np.uint8)
                     )
                     continue
                 for ann in self.img2cat_annotations[img_id][cat_id]:
-                    example_masks[img_id][cat_id].append(
+                    ground_truths[img_id][cat_id].append(
                         self.prompts_processor.convert_mask(
                             ann["segmentation"], *img_size
                         )
                     )
-            tensor = torch.as_tensor(
+            # make the ground truth tensor for image img_id
+            ground_truth = torch.as_tensor(
                 [
-                    np.logical_or.reduce(example_masks[img_id][cat_id]).astype(np.uint8)
+                    np.logical_or.reduce(ground_truths[img_id][cat_id]).astype(np.uint8)
                     for cat_id in cat_ids
                 ]
             )
-            example_masks[img_id] = torch.argmax(tensor, 0)
+            # add a zeroes tensor to the first dimension
+            ground_truth = torch.cat(
+                [torch.zeros((1, *ground_truth.shape[1:])).type(torch.uint8), ground_truth]
+            )
+            ground_truths[img_id] = torch.argmax(ground_truth, 0)
 
-        return list(example_masks.values())
+        return list(ground_truths.values())
 
     def __len__(self):
         return len(self.images)

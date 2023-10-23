@@ -128,7 +128,7 @@ def generate_examples(
             frequencies[cat] += 1
         examples_sampled_classes.append(set(example_sampled_classes))
     image_ids.remove(query_image_id)
-    return image_ids, examples_sampled_classes
+    return list(image_ids), examples_sampled_classes
 
 
 def uniform_sampling(images_containing, categories_to_imgs, example_sampled_classes):
