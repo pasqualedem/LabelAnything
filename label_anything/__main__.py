@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor
 
 from models.lam import Lam
-from parameters import parse_params
 from utils.utils import load_yaml
 
 
