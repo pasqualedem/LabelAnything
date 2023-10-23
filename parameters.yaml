@@ -17,13 +17,15 @@ parameters:
       name: [cross_entropy] # class loss name
       params:
     seed: [42] # random seed to set
+    substitution_threshold: 0.1 # threshold
+    num_points: 1 # number of points for class after the substitution
     max_epochs: [10]
     initial_lr: [0.0001, 0.01]
     optimizer: [AdamW]
 
   model:
     name: [lam_h] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint:  [/path/to/your/model.pth] # model parameters
+    checkpoint: [/path/to/your/model.pth] # model parameters
 
   dataset: # parameters depending on the class you defined for the dataset
     batch_size: [8]

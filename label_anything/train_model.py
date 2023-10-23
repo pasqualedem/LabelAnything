@@ -27,7 +27,7 @@ def train_epoch(
     epoch,
     comet_logger,
     accelerator,
-    train_metrics,
+    train_params,
 ):
     model.train()
     total_loss = 0
@@ -39,8 +39,8 @@ def train_epoch(
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         substitutor = Substitutor(
             batch_dict,
-            threshold=args["substitution_threshold"],
-            num_points=args.get("num_points", 1),
+            threshold=train_params["substitution_threshold"],
+            num_points=train_params.get("num_points", 1),
         )
         for batch_dict in substitutor:
             optimizer.zero_grad()
@@ -70,8 +70,12 @@ def train_epoch(
                 points = image_dict["prompt_points"][0, 0]
                 boxes = image_dict["prompt_boxes"][0, 0]
                 mask = image_dict["prompt_mask"][0, 0]
-                annotations_boxes = structure_annotations(extract_boxes_from_tensor(boxes))
-                annotations_mask = structure_annotations(extract_vertices_from_tensor(mask))
+                annotations_boxes = structure_annotations(
+                    extract_boxes_from_tensor(boxes)
+                )
+                annotations_mask = structure_annotations(
+                    extract_vertices_from_tensor(mask)
+                )
                 comet_logger.log_image(
                     query_image,
                     annotations_mask,
@@ -121,7 +125,6 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
 
     # Loss and Optimizer da overraidere
     criterion = train_params["loss"]
-    train_metrics = train_params["optimizer"]
     optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
 
     # Train the Model
@@ -138,7 +141,7 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
                 epoch,
                 comet_logger,
                 accelerator,
-                train_metrics,
+                train_params,
             )
 
     # save_model(experiment, model, model._get_name)
