@@ -19,12 +19,11 @@ parameters:
     seed: [42] # random seed to set
     max_epochs: [10]
     initial_lr: [0.0001, 0.01]
-    optimizer: [Adam]
+    optimizer: [AdamW]
 
   model:
     name: [lam_h] # path to model class or model name contained in EzDL or super-gradients
-    params: # model parameters
-      null
+    checkpoint:  [/path/to/your/model.pth] # model parameters
 
   dataset: # parameters depending on the class you defined for the dataset
     batch_size: [8]

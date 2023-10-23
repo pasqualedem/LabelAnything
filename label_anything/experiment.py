@@ -1,5 +1,8 @@
 import comet_ml
 import os
+from label_anything.parameters import parse_params
+from label_anything.train_model import train
+from label_anything.utils.utils import load_yaml
 from logger.image_logger import Logger
 
 from models import model_registry
@@ -8,26 +11,6 @@ from data import get_dataloader
 # from label_anything.train_model import run
 from logger.text_logger import get_logger
 from logger.image_logger import Logger
-import yaml
-
-
-def load_yaml(file_path):
-    try:
-        with open(file_path, "r") as yaml_file:
-            data = yaml.safe_load(yaml_file.read())
-            return data
-    except FileNotFoundError:
-        print(f"File '{file_path}' not found.")
-    except yaml.YAMLError as e:
-        print(f"Error parsing YAML file: {e}")
-
-
-def parse_params(params_dict):
-    train_params = params_dict.get("parameters", {}).get("train_params", {})
-    dataset_params = params_dict.get("parameters", {}).get("dataset", {})
-    model_params = params_dict.get("parameters", {}).get("model", {})
-
-    return train_params, dataset_params, model_params
 
 
 def run_experiment():
@@ -53,15 +36,14 @@ def run_experiment():
     #     "tags": args["parameters"]["tags"],
     # }
 
-    logger.info(train_params)
     logger.info("Starting Comet Training")
 
     comet_logger, experiment = comet_experiment(comet_information, args, train_params)
 
     dataloader = get_dataloader(**dataset_params)
-    model = model_registry[model_params["name"][0]](**model_params["params"])
+    model = model_registry[model_params["name"][0]](model_params["checkpoint"][0])
 
-    # run(args, model, dataloader, comet_logger, experiment, train_params)
+    train(args, model, dataloader, comet_logger, experiment, train_params)
 
 
 # set configuration

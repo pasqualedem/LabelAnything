@@ -7,6 +7,18 @@ from io import StringIO
 import collections.abc
 from typing import Mapping
 from models.lam import Lam
+import yaml
+
+
+def load_yaml(file_path):
+    try:
+        with open(file_path, "r") as yaml_file:
+            data = yaml.safe_load(yaml_file.read())
+            return data
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
 
 
 def unwrap_model_from_parallel(model, return_was_wrapped=False):
@@ -92,18 +104,18 @@ def substitute_values(x: torch.Tensor, values, unique=None):
     return lt[x]
 
 
-def load_yaml(path, return_string=False):
-    if hasattr(path, "readlines"):
-        d = convert_commentedmap_to_dict(YAML().load(path))
-        if return_string:
-            path.seek(0)
-            return d, path.read().decode("utf-8")
-    with open(path, "r") as param_stream:
-        d = convert_commentedmap_to_dict(YAML().load(param_stream))
-        if return_string:
-            param_stream.seek(0)
-            return d, str(param_stream.read())
-    return d
+# def load_yaml(path, return_string=False):
+#     if hasattr(path, "readlines"):
+#         d = convert_commentedmap_to_dict(YAML().load(path))
+#         if return_string:
+#             path.seek(0)
+#             return d, path.read().decode("utf-8")
+#     with open(path, "r") as param_stream:
+#         d = convert_commentedmap_to_dict(YAML().load(param_stream))
+#         if return_string:
+#             param_stream.seek(0)
+#             return d, str(param_stream.read())
+#     return d
 
 
 def convert_commentedmap_to_dict(data):
