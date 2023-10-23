@@ -2,7 +2,7 @@ import torch
 
 from einops import rearrange
 
-from data.utils import mean_pairwise_j_index
+from label_anything.data.utils import mean_pairwise_j_index
 
 
 def generate_points_from_errors(

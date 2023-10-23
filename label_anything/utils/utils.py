@@ -6,8 +6,9 @@ from ruamel.yaml import YAML, comments
 from io import StringIO
 import collections.abc
 from typing import Mapping
-from models.lam import Lam
 import yaml
+
+from label_anything.models.lam import Lam
 
 
 def load_yaml(file_path):

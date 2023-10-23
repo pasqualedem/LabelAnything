@@ -9,7 +9,8 @@ import torch
 from torchvision.transforms import Resize, ToTensor, InterpolationMode
 import warnings
 
-import data.utils as utils
+from label_anything.data import utils
+
 
 warnings.filterwarnings("ignore")
 

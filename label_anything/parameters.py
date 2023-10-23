@@ -4,7 +4,6 @@ import torch
 
 
 from label_anything import scheduler as schedulers
-from label_anything.loss import instiantiate_loss
 from label_anything.metrics import metrics_factory
 
 

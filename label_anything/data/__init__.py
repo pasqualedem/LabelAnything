@@ -1,6 +1,7 @@
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor
-from data.dataset import LabelAnythingDataset
+
+from label_anything.data.dataset import LabelAnythingDataset
 
 
 def get_dataloader(**kwargs):
