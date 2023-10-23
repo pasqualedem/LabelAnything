@@ -63,17 +63,36 @@ class Substitutor:
         """
         Generate new points from predictions errors and add them to the prompts
         """
-        sampled_points, labels = generate_points_from_errors(
-            prediction, ground_truth, self.num_points
-        )
-        self.batch["prompt_points"][:, 0] = torch.cat(
-            [self.batch["prompt_points"][:, 0], sampled_points], dim=2
-        )
-        self.batch["prompt_point_labels"][:, 0] = torch.cat(
-            [self.batch["prompt_point_labels"][:, 0], labels], dim=2
-        )
+        if self.substitute:
+            sampled_points, labels = generate_points_from_errors(
+                prediction, ground_truth, self.num_points
+            )
+            sampled_points = rearrange(sampled_points, "b c n xy -> b 1 c n xy")
+            padding_points = torch.zeros(
+                sampled_points.shape[0],
+                self.batch["prompt_points"].shape[1] - 1,
+                *sampled_points.shape[2:],
+            )
+            labels = rearrange(labels, "b c n -> b 1 c n")
+            padding_labels = torch.zeros(
+                labels.shape[0],
+                self.batch["prompt_point_labels"].shape[1] - 1,
+                *labels.shape[2:],
+            )
+            sampled_points = torch.cat([padding_points, sampled_points], dim=1)
+            labels = torch.cat([padding_labels, labels], dim=1)
+
+            self.batch["prompt_points"] = torch.cat(
+                [self.batch["prompt_points"], sampled_points], dim=3
+            )
+            self.batch["prompt_points_labels"] = torch.cat(
+                [self.batch["prompt_point_labels"], labels], dim=3
+            )
 
     def __next__(self):
+        if self.it == 0:
+            self.it = 1
+            return self.batch
         if not self.substitute:
             raise StopIteration
         num_examples = self.batch["example_classes"].shape[0]
@@ -91,11 +110,11 @@ class Substitutor:
         keys_to_exchange = [
             "prompt_points",
             "prompt_point_labels",
-            "prompt_mask",
+            "prompt_masks",
             "prompt_boxes",
-            "flag_mask",
-            "flag_boxes",
-            "point_flags",
+            "flags_masks",
+            "flags_boxes",
+            "flags_points",
             "ground_truth",
         ]
 
@@ -111,4 +130,5 @@ class Substitutor:
                 self.batch[key], dim=1, index=index_tensor
             )
 
+        self.it += 1
         return self.batch
