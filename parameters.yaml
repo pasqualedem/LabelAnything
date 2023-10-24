@@ -20,6 +20,7 @@ parameters:
     substitution_threshold: 0.1 # threshold
     num_points: 1 # number of points for class after the substitution
     max_epochs: 10
+    logger: 8
     initial_lr: 0.0001
     optimizer: [AdamW]
 
