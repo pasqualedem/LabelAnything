@@ -13,14 +13,14 @@ from .mask_decoder import MaskDecoder, MaskDecoderLam
 from .prompt_encoder import PromptEncoder, PromptImageEncoder
 from .transformer import TwoWayTransformer
 from .build_sam import build_sam_vit_b, build_sam_vit_h, build_sam_vit_l
-from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l
+from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_lam
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
 
 
 ComposedOutput = namedtuple("ComposedOutput", ["main", "aux"])
 
 model_registry = {
-    "lam": build_lam_vit_h,
+    "lam": build_lam,
     "lam_h": build_lam_vit_h,
     "lam_l": build_lam_vit_l,
     "lam_b": build_lam_vit_b,

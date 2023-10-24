@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from safetensors.torch import save_file
 from torchvision.transforms.functional import resize, to_pil_image
-from data.dataset import LabelAnyThingOnlyImageDataset
-from models import model_registry
+from label_anything.data.dataset import LabelAnyThingOnlyImageDataset
+from label_anything.models import model_registry
 
 
 def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):

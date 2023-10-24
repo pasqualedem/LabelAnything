@@ -52,27 +52,21 @@ class Lam(nn.Module):
         Arguments:
           batched_input (dict): a dictionary with the following keys. A prompt key can be
             excluded if it is not present.
-              'query_image': The query image as a torch tensor in Bx3xHxW format,
+              'images': The query + N example images as a torch tensor in Bx(N+1)x3xHxW format,
                 already transformed for input to the model.
-              'example_images': The example images as a torch tensor in BxNx3xHxW format,
-                already transformed for input to the model.
-              'query_embedding': The query image embedding as a torch tensor in BxCxHxW format.
+              'embeddings': The query + N example embeddings as a torch tensor in Bx(N+1)NCxHxW format.
                 In alternative to 'query_image', 'query_embedding' can be provided.
-              'example_embeddings': The example image embeddings as a torch tensor in BxNxCxHxW format.
-                In alternative to 'example_images', 'example_embeddings' can be provided.
-              'example_images': The example images as a torch tensor in BxNx3xHxW format,
-                already transformed for input to the model.
-              'point_coords': (torch.Tensor) Batched point prompts for
+              'prompt_points': (torch.Tensor) Batched point prompts for
                 this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
-              'point_labels': (torch.Tensor) Batched labels for point prompts,
+              'flags_points': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.
-              'boxes': (torch.Tensor) Batched box inputs, with shape BxMxCx4.
+              'prompt_bboxes': (torch.Tensor) Batched box inputs, with shape BxMxCx4.
                 Already transformed to the input frame of the model.
               'box_flags': (torch.Tensor) Batched box flags, with shape BxMxC.
-              'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
-                in the form BxMxCxHxW.
-              'mask_flags': (torch.Tensor) Batched mask flags to indicate which flag is valid, BxMxC
+              'prompt_masks': (torch.Tensor) Batched mask inputs to the model,
+                in the form BxMxCxHxW.s
+              'flags_masks': (torch.Tensor) Batched mask flags to indicate which flag is valid, BxMxC
 
         Returns:
           torch.Tensor: Batched multiclass mask predictions,
@@ -80,44 +74,43 @@ class Lam(nn.Module):
                 C is the number of classes, (H, W) is the
                 original size of the image.
         """
-        B, N = batched_input["example_images"].shape[:2]
-        if "query_embedding" in batched_input and "example_embeddings" in batched_input:
-            image_embeddings = batched_input["query_embedding"]
-            prompt_images_embeddings = batched_input["example_embeddings"]
+        if "embeddings" in batched_input:
+            embeddings = batched_input["embeddings"]
+            B, N, C, H, W = embeddings.shape
+            query_embeddings = embeddings[:, 0]
+            prompt_embeddings = embeddings[:, 1:]
+        elif "images" in batched_input:
+            B, N, C, H, W = batched_input["images"].shape
+            images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
+            embeddings = rearrange(self.image_encoder(images), "(b n) c h w -> b n c h w", b=B)
+            query_embeddings = embeddings[:, 0]
+            prompt_embeddings = embeddings[:, 1:]
         else:
-            prompt_images = rearrange(
-                batched_input["example_images"], "b n c h w -> (b n) c h w"
-            )
-            images = torch.cat((batched_input["query_image"], prompt_images), dim=0)
-            image_embeddings = self.image_encoder(images)
-            prompt_images_embeddings = rearrange(
-                image_embeddings[B:], "(b n) c h w -> b n c h w", b=B
-            )
-            image_embeddings = image_embeddings[:B]
+            raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
-        if "point_coords" in batched_input:
-            points = (batched_input["point_coords"], batched_input["point_labels"])
+        if "prompt_points" in batched_input:
+            points = (batched_input["prompt_points"], batched_input["flags_points"])
         else:
             points = None
-        if "boxes" in batched_input:
-            boxes = batched_input["boxes"]
-            box_flags = batched_input["box_flags"]
+        if "prompt_bboxes" in batched_input:
+            boxes = batched_input["prompt_bboxes"]
+            box_flags = batched_input["flags_bboxes"]
             boxes = (boxes, box_flags)
         else:
             boxes = None
-        if "mask_inputs" in batched_input:
-            masks = (batched_input["mask_inputs"], batched_input["mask_flags"])
+        if "prompt_masks" in batched_input:
+            masks = (batched_input["prompt_masks"], batched_input["flags_masks"])
         else:
             masks = None
         class_embeddings = self.prompt_encoder(
-            image_embeddings=prompt_images_embeddings,
+            image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
             masks=masks,
         )
 
         seg = self.mask_decoder(
-            image_embeddings=image_embeddings,
+            image_embeddings=query_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
             class_embeddings=class_embeddings,
         )

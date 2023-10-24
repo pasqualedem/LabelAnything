@@ -341,7 +341,7 @@ class PromptImageEncoder(PromptEncoder):
             dense_embeddings = self._embed_masks(mask_inputs, mask_flags)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
-                bs, 1, 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                B, n_examples, n_classes, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
 
         return sparse_embeddings, dense_embeddings
@@ -394,7 +394,7 @@ class PromptImageEncoder(PromptEncoder):
         b, m, c, d, h, w = dense_embeddings.shape
         dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
 
-        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, m, 1, 1, 1)
+        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, c, 1, 1, 1)
         src = rearrange(src, "b m c d h w -> (b m c) d h w")
         src = src + dense_embeddings
         pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
