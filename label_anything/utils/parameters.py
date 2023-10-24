@@ -3,7 +3,7 @@ from loss import instiantiate_loss
 from metrics import metrics_factory
 import scheduler
 
-def parse_params(params: dict):
+def parse_params_all(params: dict):
     # set seed
     torch.manual_seed(params['train_params']['seed'])
 

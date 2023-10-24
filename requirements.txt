@@ -1,7 +1,9 @@
+accelerate
 attrs==23.1.0
 certifi==2023.7.22
 charset-normalizer==3.3.0
 cmake==3.27.6
+click
 comet-ml==3.33.11
 configobj==5.0.8
 dulwich==0.21.6

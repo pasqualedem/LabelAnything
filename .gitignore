@@ -10,7 +10,6 @@ __pycache__/
 venv/
 env/
 build/
-checkpoints/
 develop-eggs/
 dist/
 downloads/
@@ -92,5 +91,8 @@ target/
 
 *.png
 
+# Checkpoints
+*.pth
+
 /label_anything/data/*.json
-/label_anything/data/*.ipynb
+*.ipynb
