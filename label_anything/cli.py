@@ -19,7 +19,6 @@ def main():
 @click.option(
     "--use_sam_checkpoint",
     is_flag=True,
-    default=True,
     help="Select if the checkpoint is a SAM checkpoint",
 )
 def experiment(
