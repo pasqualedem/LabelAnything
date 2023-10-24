@@ -341,7 +341,7 @@ class PromptImageEncoder(PromptEncoder):
             dense_embeddings = self._embed_masks(mask_inputs, mask_flags)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
-                bs, 1, 1, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                B, n_examples, n_classes, -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
 
         return sparse_embeddings, dense_embeddings
