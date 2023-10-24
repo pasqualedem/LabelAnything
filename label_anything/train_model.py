@@ -19,7 +19,6 @@ logger = get_logger(__name__)
 
 
 def train_epoch(
-    args,
     model,
     optimizer,
     criterion,
@@ -65,7 +64,7 @@ def train_epoch(
             comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
-            if log_every_n(batch_idx, args.logger["n_iter"]):
+            if log_every_n(batch_idx, train_params["logger"]):
                 query_image = image_dict["query_image"][0]
                 points = image_dict["prompt_points"][0, 0]
                 boxes = image_dict["prompt_boxes"][0, 0]
@@ -133,7 +132,6 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
         for epoch in range(train_params["max_epochs"]):
             logger.info("Epoch: {}/{}".format(epoch, train_params["max_epochs"]))
             train_epoch(
-                args,
                 model,
                 optimizer,
                 criterion,
