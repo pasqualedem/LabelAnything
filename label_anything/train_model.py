@@ -129,10 +129,9 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
 
     # Train the Model
     with experiment.train():
-        logger.info(f"Running Model Training {args.name}")
+        logger.info(f"Running Model Training {args.get('experiment').get('name')}")
         for epoch in range(train_params["max_epochs"]):
             logger.info("Epoch: {}/{}".format(epoch, train_params["max_epochs"]))
-            break
             train_epoch(
                 args,
                 model,
@@ -146,7 +145,7 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
             )
 
     # save_model(experiment, model, model._get_name)
-    logger.info(f"Finished Training {args.name}")
+    logger.info(f"Finished Training {args.get('experiment').get('name')}")
 
     # with experiment.test():
     #     logger.info(f"Running Model Testing {args.name}")
