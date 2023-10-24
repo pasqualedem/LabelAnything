@@ -158,6 +158,7 @@ class LabelAnythingDataset(Dataset):
         image_ids, aux_cat_ids = self.__extract_examples(base_image_data)
         image_ids.insert(0, base_image_data["id"])
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids.insert(0, -1) # add the background class
 
         # load, stack and preprocess the images
         images = [
@@ -190,6 +191,7 @@ class LabelAnythingDataset(Dataset):
             for cat_id in cat_ids:
                 # for each annotation of image img_id and category cat_id
                 if cat_id not in self.img2cat_annotations[img_id]:
+                    # this will also manage the background class
                     continue
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
@@ -326,8 +328,9 @@ class LabelAnythingDataset(Dataset):
                     mask = self.prompts_processor.apply_masks(
                         annotations[img_id][cat_id]
                     )
-                    tensor[i, j, :] = torch.tensor(mask)
-                    flag[i, j] = 1
+                    tensor_mask = torch.tensor(mask)
+                    tensor[i, j, :] = tensor_mask
+                    flag[i, j] = 1 if torch.sum(tensor_mask) > 0 else 0
         else:
             for i, img_id in enumerate(annotations):
                 img_original_size = (
