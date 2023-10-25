@@ -6,12 +6,12 @@ from torchmetrics import JaccardIndex, AUROC, F1Score, ConfusionMatrix
 from torchmetrics import Precision as TPrecision
 from torchmetrics import Recall as TRecall
 from torchmetrics import JaccardIndex as TJaccardIndex
-from torchmetrics.functional.classification.roc import _roc_compute
+from torchmetrics.functional.classification.roc import roc
 import torch
 
 from copy import deepcopy
 
-from models import ComposedOutput
+# from models import ComposedOutput
 
 
 class AUC(AUROC):
@@ -25,7 +25,7 @@ class AUC(AUROC):
             raise ValueError(
                 f"`num_classes` bas to be positive number, but got {self.num_classes}"
             )
-        return _roc_compute(preds, target, self.num_classes, self.pos_label)
+        return roc(preds, target, self.num_classes, self.pos_label)
 
 
 def PerClassAUC(name, code):

@@ -77,14 +77,13 @@ def test_lam():
     print("inputs")
 
     batch = {
-        'query_image': images[:, 0].cuda(),
-        'example_images': images[:, 1:].cuda(),
-        'point_coords': coords_torch.cuda(),
-        'point_labels': labels_torch.cuda(),
-        'boxes': box_torch.cuda(),
-        'box_flags': padding_torch.cuda(),
-        'mask_inputs': masks.cuda(),
-        'mask_flags': mask_flags.cuda(),
+        'images': images.cuda(),
+        'prompt_points': coords_torch.cuda(),
+        'flags_points': labels_torch.cuda(),
+        'prompt_bboxes': box_torch.cuda(),
+        'flags_bboxes': padding_torch.cuda(),
+        'prompt_masks': masks.cuda(),
+        'flags_masks': mask_flags.cuda(),
     }
 
     seg = lam(batch)
