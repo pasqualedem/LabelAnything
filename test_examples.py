@@ -5,7 +5,7 @@ from tqdm import tqdm
 
 import time
 
-from label_anything.data.examples import generate_examples, sample_power_law, sample_classes_from_query, generate_examples_power_law_uniform
+from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 
 DATA_DIR = Path.cwd() / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
@@ -35,16 +35,17 @@ MIN_SIZE = 1
 
 TRIALS = 10
 N_EXAMPLES = 10
-TIMEIT = False
+TIMEIT = True
+
+example_generator = ExampleGeneratorPowerLawUniform(categories_to_imgs=category_images)
 
 if TIMEIT:
     start = time.time()
     for _ in range(TRIALS):
         query = annotations[torch.randint(0, len(annotations) - 1, (1,)).item()]
         query_categories = torch.tensor(list(set(image_categories[query['image_id']])), dtype=torch.int64)
-        # print(f"Classes        : {[id2category[cat_id.item()] for cat_id in query_categories]}")
 
-        sampled_images, sampled_classes = generate_examples_power_law_uniform(query['image_id'], query_categories, category_images, N_EXAMPLES) 
+        orig, sampled_images, sampled_classes = example_generator.generate_examples(query['image_id'], query_categories, N_EXAMPLES) 
     end = time.time()
     print(f"Time taken: {(end - start) / TRIALS}")
 else:
@@ -55,7 +56,7 @@ else:
         print(f"Classes        : {[id2category[cat_id.item()] for cat_id in query_categories]}")
         print(f"Class ids: {query_categories.tolist()}")
 
-        orig, sampled_images, sampled_classes = generate_examples_power_law_uniform(query['image_id'], query_categories, category_images, N_EXAMPLES) 
+        orig, sampled_images, sampled_classes = example_generator.generate_examples(query['image_id'], query_categories, N_EXAMPLES) 
         print(f"Original classes: {orig}")
         for cat_set in sampled_classes:
             print([id2category[cat_id] for cat_id in cat_set])
