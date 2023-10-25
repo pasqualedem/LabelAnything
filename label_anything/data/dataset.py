@@ -145,7 +145,7 @@ class LabelAnythingDataset(Dataset):
 
         return generate_examples_power_law_uniform(
             query_image_id=img_data["id"],
-            sampled_classes=self.img2cat_annotations[img_data["id"]],
+            image_classes=self.img2cat_annotations[img_data["id"]],
             categories_to_imgs=self.cat2img_annotations,
             min_size=1,
             num_examples=self.num_examples,

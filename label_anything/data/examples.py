@@ -23,23 +23,29 @@ def sample_power_law(N, alpha, num_samples=1):
     return samples + 1  # Add 1 to map the sample indices to values in the range [1, N]
 
 
-def sample_classes_from_query(class_set, min_size, sample_function):
+def sample_classes_from_query(
+    class_list, min_size, n_sample_function, sample_function, frequencies=None
+):
     """
     Samples a subset of classes from a given set of classes.
     Args:
-        class_set (list): list of classes to sample from
+        class_list (list): list of classes to sample from
         min_size (int): minimum number of classes to sample
         sample_function (function): function to use to sample the number of classes
     Returns:
-        class_set (list): list of sampled classes
+        sampled_class_list (list): list of sampled classes
     """
-    if len(class_set) <= min_size:
-        return class_set
-    else:
-        n_elements = sample_function(len(class_set)).item()
-        indices = torch.randperm(len(class_set))[:n_elements].tolist()
-        return torch.tensor(class_set)[indices]
-        # return class_set[torch.randperm(len(class_set))[:n_elements].tolist()]
+    if len(class_list) <= min_size:
+        return class_list
+    n_elements = n_sample_function(len(class_list)).item()
+    sampled_classes = []
+    if n_elements == len(class_list):
+        return torch.tensor(class_list)
+    for _ in range(n_elements):
+        sampled_class = sample_function(class_list, sampled_classes, frequencies)
+        sampled_classes.append(sampled_class)
+
+    return torch.tensor(list(sampled_classes))
 
 
 def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
@@ -47,19 +53,31 @@ def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
     Returns the set of image ids that contain all categories in the sublist
     except for the query image id.
     """
-    intersection = set.intersection(*[set(categories_to_imgs[cat].keys()) for cat in sublist])
-    return intersection - excluded_ids
+    intersection = set.intersection(
+        *[set(categories_to_imgs[cat].keys()) for cat in sublist]
+    )
+    return intersection - set(excluded_ids)
 
 
-def sample_over_inverse_frequency(frequencies):
+def sample_over_inverse_frequency(class_set, sampled, frequencies):
+    frequencies = {k: v for k, v in frequencies.items() if k not in sampled}
     probs = {k: v + 1 for k, v in frequencies.items()}
     tot = sum(probs.values())
     probs = {k: 1 - v / tot for k, v in probs.items()}
-    return (
+    index = (
         torch.distributions.Categorical(probs=torch.tensor(list(probs.values())))
         .sample()
         .item()
     )
+    return list(probs.keys())[index]
+
+
+def uniform_sampling(class_set, sampled_classes, *args, **kwargs):
+    print(class_set, sampled_classes)
+    to_sample_from = [c for c in class_set if c not in sampled_classes]
+    return to_sample_from[
+        torch.randint(0, len(to_sample_from), (1,)).item()
+    ]
 
 
 def generate_examples(
@@ -67,8 +85,9 @@ def generate_examples(
     image_classes,
     categories_to_imgs,
     min_size,
-    sample_function,
-    selection_strategy,
+    n_classes_sample_function,
+    class_sample_function,
+    image_sample_function,
     num_examples,
 ):
     """
@@ -82,26 +101,29 @@ def generate_examples(
         image_classes (list): list of classes to sample from
         categories_to_imgs (dict): dictionary mapping category ids to image ids
         min_size (int): minimum number of classes to sample
-        sample_function (function): function to use to sample the number of classes
-        selection_strategy (function): function to use to select the image from the set of images containing the classes
+        n_classes_sample_function (function): function to use to sample the number of classes
+        class_sample_function (function): function to use to sample the classes
+        image_sample_function (function): function to use to select the image from the set of images containing the classes
         num_examples (int): number of examples to generate
 
     Returns:
         image_ids (list): list of image ids of the sampled examples
         examples_sampled_classes (list): list of sets of classes sampled for each example
-        jaccard (float): jacard index between the sets of classes sampled for each example
-        mean_j_index (float): mean jaccard index between pairs of sets of classes sampled for each example
     """
     sampled_classes = sample_classes_from_query(
-        list(set(image_classes)), min_size, sample_function
+        list(set(image_classes)), min_size, n_classes_sample_function, uniform_sampling
     )
     examples_sampled_classes = []
-    image_ids = {query_image_id}
+    image_ids = [query_image_id]
     frequencies = {k: 0 for k in sampled_classes.tolist()}
-    for i in range(num_examples):
+    for _ in range(num_examples):
         found = False
         example_sampled_classes = sample_classes_from_query(
-            torch.tensor(sampled_classes), min_size, sample_function
+            sampled_classes,
+            min_size,
+            n_classes_sample_function,
+            sample_function=class_sample_function,
+            frequencies=frequencies,
         )
         example_sampled_classes = [cat_id.item() for cat_id in example_sampled_classes]
         while not found:
@@ -120,24 +142,22 @@ def generate_examples(
                     key=lambda k: frequencies[k],
                 )
                 example_sampled_classes.remove(max_frequency_class)
-        example_id = selection_strategy(
+        example_id = image_sample_function(
             images_containing, categories_to_imgs, example_sampled_classes
         )
-        image_ids.add(example_id)
+        image_ids.append(example_id)
         for cat in example_sampled_classes:
             frequencies[cat] += 1
         examples_sampled_classes.append(set(example_sampled_classes))
-    image_ids.remove(query_image_id)
-    return list(image_ids), examples_sampled_classes
-
-
-def uniform_sampling(images_containing, categories_to_imgs, example_sampled_classes):
-    return list(images_containing)[torch.randint(0, len(images_containing), (1,)).item()]
+    examples_sampled_classes.insert(
+        0, (set.union(*examples_sampled_classes))
+    )  # Query image has all classes in examples
+    return image_ids, examples_sampled_classes
 
 
 def generate_examples_power_law_uniform(
     query_image_id,
-    sampled_classes,
+    image_classes,
     categories_to_imgs,
     num_examples,
     alpha=-1.0,
@@ -148,10 +168,11 @@ def generate_examples_power_law_uniform(
     """
     return generate_examples(
         query_image_id=query_image_id,
-        image_classes=sampled_classes,
+        image_classes=image_classes,
         categories_to_imgs=categories_to_imgs,
         min_size=min_size,
-        sample_function=lambda x: sample_power_law(x, alpha),
+        n_classes_sample_function=lambda x: sample_power_law(x, alpha),
         num_examples=num_examples,
-        selection_strategy=uniform_sampling,
+        class_sample_function=sample_over_inverse_frequency,
+        image_sample_function=uniform_sampling,
     )
