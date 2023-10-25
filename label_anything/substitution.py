@@ -46,7 +46,7 @@ class Substitutor:
     """
 
     def __init__(self, batch: dict, threshold: float, num_points: int) -> None:
-        self.batch = batch
+        self.batch, self.ground_truths = batch
         self.example_classes = batch["example_classes"]
         self.threshold = threshold
         self.num_points = num_points
@@ -130,5 +130,9 @@ class Substitutor:
                 self.batch[key], dim=1, index=index_tensor
             )
 
+        self.ground_truths = torch.index_select(
+            self.ground_truths, dim=1, index=index_tensor
+        )
+
         self.it += 1
-        return self.batch
+        return self.batch, self.ground_truths
