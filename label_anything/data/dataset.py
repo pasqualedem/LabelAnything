@@ -414,16 +414,16 @@ class LabelAnythingDataset(Dataset):
 
         """
         # classes
-        max_classes = max([x["prompt_mask"].size(1) for x in batched_input])
+        max_classes = max([x["prompt_masks"].size(1) for x in batched_input])
 
         # gt
         dims = torch.stack([x["dims"] for x in batched_input])
         max_dims = torch.max(dims, 0).values.tolist()
-        gts = [x["query_gt"] for x in batched_input]
-        gts = torch.stack([utils.collate_gts(x, max_dims) for x in gts])
+        ground_truths = [x["query_gt"] for x in batched_input]
+        ground_truths = torch.stack([utils.collate_gts(x, max_dims) for x in ground_truths])
 
         # prompt mask
-        masks = [x["prompt_mask"] for x in batched_input]
+        masks = [x["prompt_masks"] for x in batched_input]
         flags = [x["flag_masks"] for x in batched_input]
         masks_flags = [
             utils.collate_mask(m, f, max_classes) for (m, f) in zip(masks, flags)
@@ -483,7 +483,7 @@ class LabelAnythingDataset(Dataset):
         self.reset_num_coords()
         self.reset_num_examples()
 
-        return data_dict, gts
+        return data_dict, ground_truths
 
 
 class LabelAnyThingOnlyImageDataset(Dataset):
@@ -516,7 +516,7 @@ if __name__ == "__main__":
     )
 
     dataset = LabelAnythingDataset(
-        instances_path="lvis_v1_train.json",
+        instances_path="data/raw/lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,
