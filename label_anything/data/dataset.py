@@ -1,32 +1,29 @@
-import os
 import itertools
-import torchvision.transforms
-from torch.utils.data import Dataset
-from PIL import Image
-import requests
-from io import BytesIO
-import pandas as pd
+import os
 import random
+import timeit
+import warnings
+from enum import Enum
+from io import BytesIO
+from typing import Any, Dict, List, Tuple, Union
+
+import numpy as np
+import pandas as pd
+import requests
 import torch
+import torchvision.transforms
+import utils
+from examples import generate_examples_power_law_uniform
+from PIL import Image
+from torch.utils.data import Dataset
 from torchvision.transforms import (
+    Compose,
+    InterpolationMode,
+    PILToTensor,
     Resize,
     ToTensor,
-    InterpolationMode,
-    Compose,
-    PILToTensor,
 )
-import warnings
-
-import utils
-from typing import Union, Dict, List, Tuple, Any
-from examples import generate_examples_power_law_uniform
-import numpy as np
-from transforms import (
-    CustomResize,
-    CustomNormalize,
-    PromptsProcessor,
-)
-from enum import Enum
+from transforms import CustomNormalize, CustomResize, PromptsProcessor
 
 warnings.filterwarnings("ignore")
 
@@ -158,7 +155,7 @@ class LabelAnythingDataset(Dataset):
         image_ids, aux_cat_ids = self.__extract_examples(base_image_data)
         image_ids.insert(0, base_image_data["id"])
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-        cat_ids.insert(0, -1) # add the background class
+        cat_ids.insert(0, -1)  # add the background class
 
         # load, stack and preprocess the images
         images = [
@@ -236,7 +233,9 @@ class LabelAnythingDataset(Dataset):
         ground_truths = self.get_ground_truths(image_ids, cat_ids)
         dims = torch.tensor(list(map(lambda x: x.size(), ground_truths)))
         max_dims = torch.max(dims, 0).values.tolist()
-        ground_truths = torch.stack([utils.collate_gts(x, max_dims) for x in ground_truths])
+        ground_truths = torch.stack(
+            [utils.collate_gts(x, max_dims) for x in ground_truths]
+        )
 
         return {
             "images": images,
@@ -248,7 +247,7 @@ class LabelAnythingDataset(Dataset):
             "flag_bboxes": flag_bboxes,
             "dims": dims,
             "classes": aux_cat_ids,
-            "ground_truths": ground_truths, 
+            "ground_truths": ground_truths,
         }
 
     def get_ground_truths(self, image_ids, cat_ids):
@@ -283,7 +282,10 @@ class LabelAnythingDataset(Dataset):
             )
             # add a zeroes tensor to the first dimension
             ground_truth = torch.cat(
-                [torch.zeros((1, *ground_truth.shape[1:])).type(torch.uint8), ground_truth]
+                [
+                    torch.zeros((1, *ground_truth.shape[1:])).type(torch.uint8),
+                    ground_truth,
+                ]
             )
             ground_truths[img_id] = torch.argmax(ground_truth, 0)
 
@@ -414,16 +416,18 @@ class LabelAnythingDataset(Dataset):
 
         """
         # classes
-        max_classes = max([x["prompt_mask"].size(1) for x in batched_input])
+        max_classes = max([x["prompt_masks"].size(1) for x in batched_input])
 
         # gt
         dims = torch.stack([x["dims"] for x in batched_input])
         max_dims = torch.max(dims, 0).values.tolist()
-        gts = [x["query_gt"] for x in batched_input]
-        gts = torch.stack([utils.collate_gts(x, max_dims) for x in gts])
+        ground_truths = [x["query_gt"] for x in batched_input]
+        ground_truths = torch.stack(
+            [utils.collate_gts(x, max_dims) for x in ground_truths]
+        )
 
         # prompt mask
-        masks = [x["prompt_mask"] for x in batched_input]
+        masks = [x["prompt_masks"] for x in batched_input]
         flags = [x["flag_masks"] for x in batched_input]
         masks_flags = [
             utils.collate_mask(m, f, max_classes) for (m, f) in zip(masks, flags)
@@ -483,7 +487,7 @@ class LabelAnythingDataset(Dataset):
         self.reset_num_coords()
         self.reset_num_examples()
 
-        return data_dict, gts
+        return data_dict, ground_truths
 
 
 class LabelAnyThingOnlyImageDataset(Dataset):
@@ -504,8 +508,8 @@ class LabelAnyThingOnlyImageDataset(Dataset):
 
 # main for testing the class
 if __name__ == "__main__":
-    from torchvision.transforms import Compose, ToTensor
     from torch.utils.data import DataLoader
+    from torchvision.transforms import Compose, ToTensor
 
     preprocess = Compose(
         [
@@ -516,7 +520,7 @@ if __name__ == "__main__":
     )
 
     dataset = LabelAnythingDataset(
-        instances_path="lvis_v1_train.json",
+        instances_path="data/raw/lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,
