@@ -95,4 +95,3 @@ target/
 *.pth
 
 /label_anything/data/*.json
-*.ipynb
