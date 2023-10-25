@@ -1,6 +1,12 @@
 import torch
 
 
+class SamplingFailureException(Exception):
+    """
+    Raised when we can't find an image containing none of the classes in the query image that hasn't been sampled yet.
+    """
+
+
 def sample_power_law(N, alpha, num_samples=1):
     """
     Samples from a power law distribution.
@@ -40,12 +46,18 @@ def sample_classes_from_query(
     n_elements = n_sample_function(len(class_list)).item()
     sampled_classes = []
     if n_elements == len(class_list):
-        return torch.tensor(class_list)
-    for _ in range(n_elements):
-        sampled_class = sample_function(class_list, sampled_classes, frequencies)
-        sampled_classes.append(sampled_class)
+        return class_list
+    if n_elements > len(class_list) // 2:
+        for _ in range(len(class_list) - n_elements):
+            sampled_class = sample_function(class_list, sampled_classes, frequencies, inverse=False)
+            sampled_classes.append(sampled_class)
+        sampled_classes = [c for c in class_list if c not in sampled_classes]
+    else:
+        for _ in range(n_elements):
+            sampled_class = sample_function(class_list, sampled_classes, frequencies)
+            sampled_classes.append(sampled_class)
 
-    return torch.tensor(list(sampled_classes))
+    return torch.tensor(sampled_classes)
 
 
 def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
@@ -54,16 +66,16 @@ def get_image_ids_intersection(categories_to_imgs, sublist, excluded_ids):
     except for the query image id.
     """
     intersection = set.intersection(
-        *[set(categories_to_imgs[cat].keys()) for cat in sublist]
+        *[categories_to_imgs[cat] for cat in sublist]
     )
     return intersection - set(excluded_ids)
 
 
-def sample_over_inverse_frequency(class_set, sampled, frequencies):
+def sample_over_inverse_frequency(class_set, sampled, frequencies, inverse=True):
     frequencies = {k: v for k, v in frequencies.items() if k not in sampled}
     probs = {k: v + 1 for k, v in frequencies.items()}
     tot = sum(probs.values())
-    probs = {k: 1 - v / tot for k, v in probs.items()}
+    probs = {k: 1 - v / tot for k, v in probs.items()} if inverse else {k: v / tot for k, v in probs.items()}
     index = (
         torch.distributions.Categorical(probs=torch.tensor(list(probs.values())))
         .sample()
@@ -72,11 +84,21 @@ def sample_over_inverse_frequency(class_set, sampled, frequencies):
     return list(probs.keys())[index]
 
 
-def uniform_sampling(class_set, sampled_classes, *args, **kwargs):
-    to_sample_from = [c for c in class_set if c not in sampled_classes]
+def uniform_sampling(elem_set, sampled_elems, *args, **kwargs):
+    to_sample_from = [c for c in elem_set if c not in sampled_elems]
     return to_sample_from[
         torch.randint(0, len(to_sample_from), (1,)).item()
     ]
+
+
+def backup_sampling(class_set, image_ids, categories_to_imgs):
+    for cls in class_set:
+        images_containing = get_image_ids_intersection(
+                categories_to_imgs, [cls], image_ids
+            )
+        if len(images_containing) > 0:
+            return [cls]
+    raise SamplingFailureException("No image found")
 
 
 def generate_examples(
@@ -110,7 +132,7 @@ def generate_examples(
         examples_sampled_classes (list): list of sets of classes sampled for each example
     """
     sampled_classes = sample_classes_from_query(
-        list(set(image_classes)), min_size, n_classes_sample_function, uniform_sampling
+        torch.tensor(list(image_classes)), min_size, n_classes_sample_function, uniform_sampling
     )
     examples_sampled_classes = []
     image_ids = [query_image_id]
@@ -141,8 +163,10 @@ def generate_examples(
                     key=lambda k: frequencies[k],
                 )
                 example_sampled_classes.remove(max_frequency_class)
+            if not example_sampled_classes: # If no image found, sample a single class and try again
+                images_containing = backup_sampling(sampled_classes, image_ids, categories_to_imgs)
         example_id = image_sample_function(
-            images_containing, categories_to_imgs, example_sampled_classes
+            images_containing, image_ids
         )
         image_ids.append(example_id)
         for cat in example_sampled_classes:
@@ -151,7 +175,7 @@ def generate_examples(
     examples_sampled_classes.insert(
         0, (set.union(*examples_sampled_classes))
     )  # Query image has all classes in examples
-    return image_ids, examples_sampled_classes
+    return sampled_classes, image_ids, examples_sampled_classes
 
 
 def generate_examples_power_law_uniform(
@@ -159,7 +183,7 @@ def generate_examples_power_law_uniform(
     image_classes,
     categories_to_imgs,
     num_examples,
-    alpha=-1.0,
+    alpha=-2.0,
     min_size=1,
 ):
     """

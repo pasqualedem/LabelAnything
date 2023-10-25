@@ -61,7 +61,9 @@ class LabelAnythingDataset(Dataset):
         # img id to cat id to annotations
         # cat id to img id to annotations
         (
+            self.img2cat,
             self.img2cat_annotations,
+            self.cat2img,
             self.cat2img_annotations,
         ) = self.__load_annotation_dicts()
 
@@ -96,22 +98,28 @@ class LabelAnythingDataset(Dataset):
                 1. img2cat_annotations: image id to category id to annotations
                 2. cat2img_annotations: category id to image id to annotations
         """
-        img2cat_annotations = dict()
-        cat2img_annotations = dict()
+        img2cat_annotations = {}
+        cat2img_annotations = {}
 
         for ann in self.annotations.values():
-            if not ann["image_id"] in img2cat_annotations:
-                img2cat_annotations[ann["image_id"]] = dict()
-            if not ann["category_id"] in img2cat_annotations[ann["image_id"]]:
+            if ann["image_id"] not in img2cat_annotations:
+                img2cat_annotations[ann["image_id"]] = {}
+                img2cat = {}
+            if ann["category_id"] not in img2cat_annotations[ann["image_id"]]:
                 img2cat_annotations[ann["image_id"]][ann["category_id"]] = []
+                img2cat[ann["category_id"]] = set()
             img2cat_annotations[ann["image_id"]][ann["category_id"]].append(ann)
-            if not ann["category_id"] in cat2img_annotations:
-                cat2img_annotations[ann["category_id"]] = dict()
-            if not ann["image_id"] in cat2img_annotations[ann["category_id"]]:
+            img2cat[ann["category_id"]].add(ann["image_id"])
+            if ann["category_id"] not in cat2img_annotations:
+                cat2img_annotations[ann["category_id"]] = {}
+                cat2img = {}
+            if ann["image_id"] not in cat2img_annotations[ann["category_id"]]:
                 cat2img_annotations[ann["category_id"]][ann["image_id"]] = []
+                cat2img[ann["image_id"]] = set()
             cat2img_annotations[ann["category_id"]][ann["image_id"]].append(ann)
+            cat2img[ann['category_id']].add(ann['image_id'])
 
-        return img2cat_annotations, cat2img_annotations
+        return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def __load_image(self, img_data: dict) -> Image:
         """Load an image from disk or from url.
@@ -142,8 +150,8 @@ class LabelAnythingDataset(Dataset):
 
         return generate_examples_power_law_uniform(
             query_image_id=img_data["id"],
-            image_classes=self.img2cat_annotations[img_data["id"]],
-            categories_to_imgs=self.cat2img_annotations,
+            image_classes=self.img2cat[img_data["id"]],
+            categories_to_imgs=self.cat2img,
             min_size=1,
             num_examples=self.num_examples,
         )
