@@ -73,7 +73,6 @@ def sample_over_inverse_frequency(class_set, sampled, frequencies):
 
 
 def uniform_sampling(class_set, sampled_classes, *args, **kwargs):
-    print(class_set, sampled_classes)
     to_sample_from = [c for c in class_set if c not in sampled_classes]
     return to_sample_from[
         torch.randint(0, len(to_sample_from), (1,)).item()
