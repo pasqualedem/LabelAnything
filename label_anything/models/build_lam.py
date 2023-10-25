@@ -19,9 +19,6 @@ def build_lam_vit_h(checkpoint=None, use_sam_checkpoint=False):
     )
 
 
-build_sam = build_lam_vit_h
-
-
 def build_lam_vit_l(checkpoint=None, use_sam_checkpoint=False):
     return _build_lam(
         build_vit_l,
@@ -56,14 +53,15 @@ def _build_lam(
     checkpoint=None,
     use_sam_checkpoint=False,
     use_vit=True,
+    prompt_embed_dim=256,
+    image_size=1024,
+    vit_patch_size=16,
 ):
-    prompt_embed_dim = 256
-    image_size = 1024
-    vit_patch_size = 16
+
     image_embedding_size = image_size // vit_patch_size
 
     vit = build_vit() if use_vit else None
-    sam = Lam(
+    lam = Lam(
         image_encoder=vit,
         prompt_encoder=PromptImageEncoder(
             embed_dim=prompt_embed_dim,
@@ -87,13 +85,16 @@ def _build_lam(
             ),
         ),
     )
-    sam.eval()
+    lam.eval()
     if checkpoint is not None:
         with open(checkpoint, "rb") as f:
             state_dict = torch.load(f)
             
         if use_sam_checkpoint:
-            sam.init_pretrained_weights(state_dict)
+            lam.init_pretrained_weights(state_dict)
         else:
-            sam.load_state_dict(state_dict)
-    return sam
+            lam.load_state_dict(state_dict)
+    return lam
+
+
+build_lam = _build_lam

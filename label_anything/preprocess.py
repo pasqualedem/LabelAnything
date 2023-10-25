@@ -97,6 +97,6 @@ def preprocess_images_to_embeddings(
         print("Model compiled") 
     dataset = LabelAnyThingOnlyImageDataset(directory=directory, preprocess=preprocess_image)
     print("Dataset created")
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=16)
     print("Dataloader created")
     create_image_embeddings(model, dataloader, outfolder, device=device)
