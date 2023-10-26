@@ -198,6 +198,7 @@ class LabelAnythingDataset(Dataset):
 
         # get prompts from annotations
         #start = timeit.default_timer()
+        classes = {img_id: set() for img_id in image_ids}
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
@@ -205,6 +206,7 @@ class LabelAnythingDataset(Dataset):
                 if cat_id not in self.img2cat_annotations[img_id]:
                     # this will also manage the background class
                     continue
+                classes[img_id].add(cat_id)
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
                     prompt_type = random.choice(list(PromptType))
@@ -269,7 +271,7 @@ class LabelAnythingDataset(Dataset):
             "prompt_bboxes": bboxes,
             "flag_bboxes": flag_bboxes,
             "dims": dims,
-            "classes": aux_cat_ids,
+            "classes": list(classes.values()),
             "ground_truths": ground_truths,
         }
 
@@ -526,8 +528,11 @@ if __name__ == "__main__":
         ]
     )
 
+    from pathlib import Path
+    RAW_DATA_DIR = Path.cwd() / "data" / "raw"
+
     dataset = LabelAnythingDataset(
-        instances_path="lvis_v1_train.json",
+        instances_path=RAW_DATA_DIR / "lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,
