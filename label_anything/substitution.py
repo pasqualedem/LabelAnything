@@ -44,10 +44,18 @@ class Substitutor:
     """
     A class that cycle all the images in the examples as a query image.
     """
+    keys_to_exchange = [
+            "prompt_points",
+            "prompt_masks",
+            "prompt_bboxes",
+            "flags_masks",
+            "flags_bboxes",
+            "flags_points",
+        ]
 
     def __init__(self, batch: dict, threshold: float, num_points: int) -> None:
         self.batch, self.ground_truths = batch
-        self.example_classes = batch["example_classes"]
+        self.example_classes = self.batch["classes"]
         self.threshold = threshold
         self.num_points = num_points
         self.substitute = self.calculate_if_substitute()
@@ -76,7 +84,7 @@ class Substitutor:
             labels = rearrange(labels, "b c n -> b 1 c n")
             padding_labels = torch.zeros(
                 labels.shape[0],
-                self.batch["prompt_point_labels"].shape[1] - 1,
+                self.batch["flags_points"].shape[1] - 1,
                 *labels.shape[2:],
             )
             sampled_points = torch.cat([padding_points, sampled_points], dim=1)
@@ -85,14 +93,27 @@ class Substitutor:
             self.batch["prompt_points"] = torch.cat(
                 [self.batch["prompt_points"], sampled_points], dim=3
             )
-            self.batch["prompt_points_labels"] = torch.cat(
-                [self.batch["prompt_point_labels"], labels], dim=3
+            self.batch["flags_points"] = torch.cat(
+                [self.batch["flags_points"], labels], dim=3
             )
+
+    def divide_query_examples(self):
+        batch_examples = {}
+        for key in self.keys_to_exchange:
+            batch_examples[key] = self.batch[key][:, 1:]
+        gt = self.ground_truths[:, 0]
+        if "embeddings" in self.batch:
+            batch_examples["embeddings"] = self.batch["embeddings"]
+        elif "images" in self.batch:
+            batch_examples["images"] = self.batch["images"]
+        else:
+            raise ValueError("Batch must contain either images or embeddings")
+        return batch_examples, gt
 
     def __next__(self):
         if self.it == 0:
             self.it = 1
-            return self.batch
+            return self.divide_query_examples()
         if not self.substitute:
             raise StopIteration
         num_examples = self.batch["example_classes"].shape[0]
@@ -107,25 +128,14 @@ class Substitutor:
             ]
         ).long()
 
-        keys_to_exchange = [
-            "prompt_points",
-            "prompt_point_labels",
-            "prompt_masks",
-            "prompt_boxes",
-            "flags_masks",
-            "flags_boxes",
-            "flags_points",
-            "ground_truth",
-        ]
-
         if "images" in self.batch:
-            keys_to_exchange.append("images")
+            self.keys_to_exchange.append("images")
         elif "embeddings" in self.batch:
-            keys_to_exchange.append("embeddings")
+            self.keys_to_exchange.append("embeddings")
         else:
             raise ValueError("Batch must contain either images or embeddings")
 
-        for key in keys_to_exchange:
+        for key in self.keys_to_exchange:
             self.batch[key] = torch.index_select(
                 self.batch[key], dim=1, index=index_tensor
             )
@@ -135,4 +145,4 @@ class Substitutor:
         )
 
         self.it += 1
-        return self.batch, self.ground_truths
+        return self.divide_query_examples()

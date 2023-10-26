@@ -41,9 +41,8 @@ def train_epoch(
             threshold=train_params["substitution_threshold"],
             num_points=train_params.get("num_points", 1),
         )
-        for batch_dict in substitutor:
+        for image_dict, gt in substitutor:
             optimizer.zero_grad()
-            image_dict, gt = batch_dict
 
             outputs = model(image_dict)
             loss = criterion(outputs, gt)
