@@ -111,18 +111,23 @@ class LabelAnythingDataset(Dataset):
         for ann in self.annotations.values():
             if ann["image_id"] not in img2cat_annotations:
                 img2cat_annotations[ann["image_id"]] = {}
-                img2cat[ann["category_id"]] = set()
+                img2cat[ann["image_id"]] = set()
+
             if ann["category_id"] not in img2cat_annotations[ann["image_id"]]:
                 img2cat_annotations[ann["image_id"]][ann["category_id"]] = []
+                img2cat[ann["image_id"]].add(ann["category_id"])
+
             img2cat_annotations[ann["image_id"]][ann["category_id"]].append(ann)
-            img2cat[ann["category_id"]].add(ann["image_id"])
+
             if ann["category_id"] not in cat2img_annotations:
                 cat2img_annotations[ann["category_id"]] = {}
-                cat2img[ann["image_id"]] = set()
+                cat2img[ann["category_id"]] = set()
+
             if ann["image_id"] not in cat2img_annotations[ann["category_id"]]:
                 cat2img_annotations[ann["category_id"]][ann["image_id"]] = []
+                cat2img[ann["category_id"]].add(ann["image_id"])
+                
             cat2img_annotations[ann["category_id"]][ann["image_id"]].append(ann)
-            cat2img[ann['category_id']].add(ann['image_id'])
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 

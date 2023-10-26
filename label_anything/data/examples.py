@@ -182,7 +182,7 @@ class ExampleGenerator:
         examples_sampled_classes.insert(
             0, (set.union(*examples_sampled_classes))
         )  # Query image has all classes in examples
-        return sampled_classes, image_ids, examples_sampled_classes
+        return image_ids, examples_sampled_classes
         
 
 class ExampleGeneratorPowerLawUniform(ExampleGenerator):
