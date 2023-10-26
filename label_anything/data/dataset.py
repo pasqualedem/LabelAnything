@@ -51,13 +51,9 @@ class LabelAnythingDataset(Dataset):
         self.img_dir = img_dir
 
         # id to annotation
-        self.annotations = dict((x["id"], x) for x in instances["annotations"])
-        # list of image ids
-        self.image_ids = [x["id"] for x in instances["images"]]
-        # id to image
-        self.images = dict((x["id"], x) for x in instances["images"])
+        self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
-        self.categories = dict((x["id"], x) for x in instances["categories"])
+        self.categories = {x["id"]: x for x in instances["categories"]}
         # img id to cat id to annotations
         # cat id to img id to annotations
         (
@@ -66,6 +62,11 @@ class LabelAnythingDataset(Dataset):
             self.cat2img,
             self.cat2img_annotations,
         ) = self.__load_annotation_dicts()
+        # list of image ids
+        img2cat_keys = set(self.img2cat.keys())
+        self.image_ids = [x["id"] for x in instances["images"] if x["id"] in img2cat_keys]
+        # id to image
+        self.images = {x["id"]: x for x in instances["images"] if x["id"] in img2cat_keys}
 
         self.example_generator = ExampleGeneratorPowerLawUniform(
             categories_to_imgs=self.cat2img
