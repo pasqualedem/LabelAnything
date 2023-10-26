@@ -271,32 +271,24 @@ class LabelAnythingDataset(Dataset):
     def get_ground_truths(self, image_ids, cat_ids):
         # initialization
         ground_truths = dict((img_id, {}) for img_id in image_ids)
-        for img_id in image_ids:
-            for cat_id in cat_ids:
-                ground_truths[img_id][cat_id] = []
-
         # generate masks
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
+                ground_truths[img_id][cat_id] = np.zeros(img_size, dtype=np.uint8)
                 # zero mask for no segmentation
                 if cat_id not in self.img2cat_annotations[img_id]:
-                    ground_truths[img_id][cat_id].append(
-                        np.zeros(img_size).astype(np.uint8)
-                    )
                     continue
                 for ann in self.img2cat_annotations[img_id][cat_id]:
-                    ground_truths[img_id][cat_id].append(
+                    ground_truths[img_id][cat_id] = np.logical_or(
+                        ground_truths[img_id][cat_id],
                         self.prompts_processor.convert_mask(
                             ann["segmentation"], *img_size
-                        )
+                        ),
                     )
             # make the ground truth tensor for image img_id
-            ground_truth = torch.as_tensor(
-                [
-                    np.logical_or.reduce(ground_truths[img_id][cat_id]).astype(np.uint8)
-                    for cat_id in cat_ids
-                ]
+            ground_truth = torch.from_numpy(
+                np.array([ground_truths[img_id][cat_id].astype(np.uint8) for cat_id in cat_ids])
             )
             # add a zeroes tensor to the first dimension
             ground_truth = torch.cat(
