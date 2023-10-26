@@ -269,7 +269,7 @@ class LabelAnythingDataset(Dataset):
                 if cat_id not in self.img2cat_annotations[img_id]:
                     continue
                 for ann in self.img2cat_annotations[img_id][cat_id]:
-                    np.logical_or(
+                    ground_truths[img_id][cat_id] = np.logical_or(
                         ground_truths[img_id][cat_id],
                         self.prompts_processor.convert_mask(
                             ann["segmentation"], *img_size
