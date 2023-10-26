@@ -1,4 +1,4 @@
-import tqdm
+from tqdm import tqdm
 import torch
 
 from torch.optim import AdamW
@@ -19,7 +19,6 @@ logger = get_logger(__name__)
 
 
 def train_epoch(
-    args,
     model,
     optimizer,
     criterion,
@@ -65,7 +64,7 @@ def train_epoch(
             comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
-            if log_every_n(batch_idx, args.logger["n_iter"]):
+            if log_every_n(batch_idx, train_params["logger"]):
                 query_image = image_dict["query_image"][0]
                 points = image_dict["prompt_points"][0, 0]
                 boxes = image_dict["prompt_boxes"][0, 0]
@@ -129,12 +128,10 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
 
     # Train the Model
     with experiment.train():
-        logger.info(f"Running Model Training {args.name}")
+        logger.info(f"Running Model Training {args.get('experiment').get('name')}")
         for epoch in range(train_params["max_epochs"]):
             logger.info("Epoch: {}/{}".format(epoch, train_params["max_epochs"]))
-            break
             train_epoch(
-                args,
                 model,
                 optimizer,
                 criterion,
@@ -146,7 +143,7 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
             )
 
     # save_model(experiment, model, model._get_name)
-    logger.info(f"Finished Training {args.name}")
+    logger.info(f"Finished Training {args.get('experiment').get('name')}")
 
     # with experiment.test():
     #     logger.info(f"Running Model Testing {args.name}")
