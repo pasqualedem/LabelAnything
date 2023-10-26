@@ -1,5 +1,6 @@
 from comet_ml.integration.pytorch import log_model
-from logger.text_logger import get_logger
+
+from label_anything.logger.text_logger import get_logger
 
 
 logger = get_logger(__name__)

@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from safetensors.torch import save_file
 from torchvision.transforms.functional import resize, to_pil_image
-from data.dataset import LabelAnyThingOnlyImageDataset
-from models import model_registry
+from label_anything.data.dataset import LabelAnyThingOnlyImageDataset
+from label_anything.models import model_registry
 
 
 def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
@@ -97,6 +97,6 @@ def preprocess_images_to_embeddings(
         print("Model compiled") 
     dataset = LabelAnyThingOnlyImageDataset(directory=directory, preprocess=preprocess_image)
     print("Dataset created")
-    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False)
+    dataloader = torch.utils.data.DataLoader(dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=16)
     print("Dataloader created")
     create_image_embeddings(model, dataloader, outfolder, device=device)

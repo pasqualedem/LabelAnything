@@ -13,7 +13,7 @@ import requests
 import torch
 import torchvision.transforms
 import utils
-from examples import generate_examples_power_law_uniform
+from examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import (
@@ -61,9 +61,15 @@ class LabelAnythingDataset(Dataset):
         # img id to cat id to annotations
         # cat id to img id to annotations
         (
+            self.img2cat,
             self.img2cat_annotations,
+            self.cat2img,
             self.cat2img_annotations,
         ) = self.__load_annotation_dicts()
+
+        self.example_generator = ExampleGeneratorPowerLawUniform(
+            categories_to_imgs=self.cat2img
+        )
 
         self.max_num_examples = max_num_examples
         self.max_num_coords = max_mum_coords
@@ -96,22 +102,29 @@ class LabelAnythingDataset(Dataset):
                 1. img2cat_annotations: image id to category id to annotations
                 2. cat2img_annotations: category id to image id to annotations
         """
-        img2cat_annotations = dict()
-        cat2img_annotations = dict()
+        img2cat_annotations = {}
+        cat2img_annotations = {}
+
+        img2cat = {}
+        cat2img = {}
 
         for ann in self.annotations.values():
-            if not ann["image_id"] in img2cat_annotations:
-                img2cat_annotations[ann["image_id"]] = dict()
-            if not ann["category_id"] in img2cat_annotations[ann["image_id"]]:
+            if ann["image_id"] not in img2cat_annotations:
+                img2cat_annotations[ann["image_id"]] = {}
+                img2cat[ann["category_id"]] = set()
+            if ann["category_id"] not in img2cat_annotations[ann["image_id"]]:
                 img2cat_annotations[ann["image_id"]][ann["category_id"]] = []
             img2cat_annotations[ann["image_id"]][ann["category_id"]].append(ann)
-            if not ann["category_id"] in cat2img_annotations:
-                cat2img_annotations[ann["category_id"]] = dict()
-            if not ann["image_id"] in cat2img_annotations[ann["category_id"]]:
+            img2cat[ann["category_id"]].add(ann["image_id"])
+            if ann["category_id"] not in cat2img_annotations:
+                cat2img_annotations[ann["category_id"]] = {}
+                cat2img[ann["image_id"]] = set()
+            if ann["image_id"] not in cat2img_annotations[ann["category_id"]]:
                 cat2img_annotations[ann["category_id"]][ann["image_id"]] = []
             cat2img_annotations[ann["category_id"]][ann["image_id"]].append(ann)
+            cat2img[ann['category_id']].add(ann['image_id'])
 
-        return img2cat_annotations, cat2img_annotations
+        return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def __load_image(self, img_data: dict) -> Image:
         """Load an image from disk or from url.
@@ -140,11 +153,9 @@ class LabelAnythingDataset(Dataset):
                 2. cats: A list of category ids of the examples.
         """
 
-        return generate_examples_power_law_uniform(
+        return self.example_generator.generate_examples(
             query_image_id=img_data["id"],
-            image_classes=self.img2cat_annotations[img_data["id"]],
-            categories_to_imgs=self.cat2img_annotations,
-            min_size=1,
+            image_classes=self.img2cat[img_data["id"]],
             num_examples=self.num_examples,
         )
 
