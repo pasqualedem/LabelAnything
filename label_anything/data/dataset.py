@@ -168,15 +168,15 @@ class LabelAnythingDataset(Dataset):
         base_image_data = self.images[self.image_ids[item]]
 
         # load the examples and categories for the query image
-        start = timeit.default_timer()
+        #start = timeit.default_timer()
         image_ids, aux_cat_ids = self.__extract_examples(base_image_data)
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
         cat_ids.insert(0, -1)  # add the background class
-        end = timeit.default_timer()
-        print(f"Time to extract examples: {end - start}")
+        #end = timeit.default_timer()
+        #print(f"Time to extract examples: {end - start}")
 
         # load, stack and preprocess the images
-        start = timeit.default_timer()
+        #start = timeit.default_timer()
         images = [
             self.__load_image(image_data)
             for image_data in [self.images[image_id] for image_id in image_ids]
@@ -188,8 +188,8 @@ class LabelAnythingDataset(Dataset):
             ],
             dim=0,
         )
-        end = timeit.default_timer()
-        print(f"Time to load and preprocess images: {end - start}")
+        #end = timeit.default_timer()
+        #print(f"Time to load and preprocess images: {end - start}")
 
         # create the prompt dicts
         bboxes = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
@@ -197,7 +197,7 @@ class LabelAnythingDataset(Dataset):
         points = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
 
         # get prompts from annotations
-        start = timeit.default_timer()
+        #start = timeit.default_timer()
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
@@ -238,27 +238,27 @@ class LabelAnythingDataset(Dataset):
                 bboxes[img_id][cat_id] = np.array((bboxes[img_id][cat_id]))
                 masks[img_id][cat_id] = np.array((masks[img_id][cat_id]))
                 points[img_id][cat_id] = np.array((points[img_id][cat_id]))
-        end = timeit.default_timer()
-        print(f"Time to extract prompts: {end - start}")
+        #end = timeit.default_timer()
+        #print(f"Time to extract prompts: {end - start}")
 
         # obtain padded tensors
-        start = timeit.default_timer()
+        #start = timeit.default_timer()
         bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
         masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
-        end = timeit.default_timer()
-        print(f"Time to convert prompts to tensors: {end - start}")
+        #end = timeit.default_timer()
+        #print(f"Time to convert prompts to tensors: {end - start}")
 
         # obtain ground truths
-        start = timeit.default_timer()
+        #start = timeit.default_timer()
         ground_truths = self.get_ground_truths(image_ids, cat_ids)
         dims = torch.tensor(list(map(lambda x: x.size(), ground_truths)))
         max_dims = torch.max(dims, 0).values.tolist()
         ground_truths = torch.stack(
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
-        end = timeit.default_timer()
-        print(f"Time to obtain ground truths: {end - start}")
+        #end = timeit.default_timer()
+        #print(f"Time to obtain ground truths: {end - start}")
 
         return {
             "images": images,
@@ -435,10 +435,10 @@ class LabelAnythingDataset(Dataset):
 
         # gt
         dims = torch.stack([x["dims"] for x in batched_input])
-        max_dims = torch.max(dims, 0).values.tolist()
-        ground_truths = [x["query_gt"] for x in batched_input]
+        max_dims = torch.max(dims.view(-1, 2), 0).values.tolist()
+        ground_truths = [x["ground_truths"] for x in batched_input]
         ground_truths = torch.stack(
-            [utils.collate_gts(x, max_dims) for x in ground_truths]
+            [utils.collate_batch_gts(x, max_dims) for x in ground_truths]
         )
 
         # prompt mask
@@ -448,7 +448,7 @@ class LabelAnythingDataset(Dataset):
             utils.collate_mask(m, f, max_classes) for (m, f) in zip(masks, flags)
         ]
         masks = torch.stack([x[0] for x in masks_flags])
-        mask_flags = torch.stack([x[1] for x in masks_flags])
+        flag_masks = torch.stack([x[1] for x in masks_flags])
 
         # prompt bbox
         bboxes = [x["prompt_bboxes"] for x in batched_input]
@@ -459,43 +459,35 @@ class LabelAnythingDataset(Dataset):
             for i in range(len(bboxes))
         ]
         bboxes = torch.stack([x[0] for x in bboxes_flags])
-        bbox_flags = torch.stack([x[1] for x in bboxes_flags])
+        flag_bboxes = torch.stack([x[1] for x in bboxes_flags])
 
         # prompt coords
-        coords = [x["prompt_coords"] for x in batched_input]
-        flags = [x["flag_coords"] for x in batched_input]
-        max_annotations = max(x.size(2) for x in coords)
-        coords_flags = [
-            utils.collate_coords(coords[i], flags[i], max_classes, max_annotations)
-            for i in range(len(coords))
+        points = [x["prompt_points"] for x in batched_input]
+        flags = [x["flag_points"] for x in batched_input]
+        max_annotations = max(x.size(2) for x in points)
+        points_flags = [
+            utils.collate_coords(points[i], flags[i], max_classes, max_annotations)
+            for i in range(len(points))
         ]
-        coords = torch.stack([x[0] for x in coords_flags])
-        coord_flags = torch.stack([x[1] for x in coords_flags])
+        points = torch.stack([x[0] for x in points_flags])
+        flag_points = torch.stack([x[1] for x in points_flags])
 
-        # query image
-        query_image = torch.stack([x["query_image"] for x in batched_input])
+        # aux gts
+        classes = [x["classes"] for x in batched_input]
 
-        # example image
-        example_images = torch.stack([x["examples"] for x in batched_input])
-        example_dims = torch.stack([x["example_dim"] for x in batched_input])
-        max_example_dims = torch.max(example_dims.view(-1, 2), 0).values.tolist()
-        example_gt = [x["example_gts"] for x in batched_input]
-        example_gt = torch.stack(
-            [utils.collate_example_gts(x, max_example_dims) for x in example_gt]
-        )
+        # images
+        images = torch.stack([x["images"] for x in batched_input])
 
         data_dict = {
-            "query_image": query_image,
-            "example_images": example_images,
-            "point_coords": coords,
-            "point_flags": coord_flags,
-            "boxes": bboxes,
-            "box_flags": bbox_flags,
-            "mask_inputs": masks,
-            "mask_flags": mask_flags,
-            "gt_dims": dims,
-            "example_dims": example_dims,
-            "example_gts": example_gt,
+            "images": images,
+            "prompt_points": points,
+            "flag_points": flag_points,
+            "prompt_bboxes": bboxes,
+            "flag_bboxes": flag_bboxes,
+            "prompt_masks": masks,
+            "flag_masks": flag_masks,
+            "dims": dims,
+            "classes": classes,
         }
 
         # reset dataset parameters
@@ -535,7 +527,7 @@ if __name__ == "__main__":
     )
 
     dataset = LabelAnythingDataset(
-        instances_path="data/raw/lvis_v1_train.json",
+        instances_path="lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,
@@ -546,9 +538,9 @@ if __name__ == "__main__":
     exit()"""
 
     dataloader = DataLoader(
-        dataset=dataset, batch_size=8, shuffle=False, collate_fn=dataset.collate_fn
+        dataset=dataset, batch_size=4, shuffle=False, collate_fn=dataset.collate_fn
     )
     data_dict, gt = next(iter(dataloader))
 
-    print([f"{k}: {v.size()}" for k, v in data_dict.items()])
+    print([f"{k}: {v.size() if isinstance(v, torch.Tensor) else v}" for k, v in data_dict.items()])
     print(f"gt: {gt.size()}")
