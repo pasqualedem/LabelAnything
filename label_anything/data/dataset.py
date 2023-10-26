@@ -132,7 +132,7 @@ class LabelAnythingDataset(Dataset):
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
-    def __load_image(self, img_data: dict) -> Image:
+    def _load_image(self, img_data: dict) -> Image:
         """Load an image from disk or from url.
 
         Args:
@@ -179,7 +179,7 @@ class LabelAnythingDataset(Dataset):
         # load, stack and preprocess the images
         #start = timeit.default_timer()
         images = [
-            self.__load_image(image_data)
+            self._load_image(image_data)
             for image_data in [self.images[image_id] for image_id in image_ids]
         ]
         images = torch.stack(
