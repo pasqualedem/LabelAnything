@@ -110,6 +110,8 @@ class LabelAnythingDataset(Dataset):
         cat2img = {}
 
         for ann in self.annotations.values():
+            if "iscrowd" in ann and ann["iscrowd"] == 1:
+                continue
             if ann["image_id"] not in img2cat_annotations:
                 img2cat_annotations[ann["image_id"]] = {}
                 img2cat[ann["image_id"]] = set()
