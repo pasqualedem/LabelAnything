@@ -622,7 +622,7 @@ def collate_gts(gt, dims):
     return out.type(torch.uint8)
 
 
-def collate_example_gts(gt, dims):
+def collate_batch_gts(gt, dims):
     out = torch.zeros(size=(gt.size(0), *dims))
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
