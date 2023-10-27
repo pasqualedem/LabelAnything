@@ -16,6 +16,9 @@ def generate_points_from_errors(
         num_points (int): The number of points to generate for each class
     """
     device = prediction.device
+    ground_truth = rearrange(torch.nn.functional.one_hot(ground_truth, prediction.shape[1]), "b h w c -> b c h w")
+    prediction = prediction.argmax(dim=1)
+    prediction = rearrange(torch.nn.functional.one_hot(prediction, ground_truth.shape[1]), "b h w c -> b c h w")
     errors = ground_truth - prediction
     coords = torch.nonzero(errors)
     _, counts = torch.unique(coords[:, 0:2], dim=0, return_counts=True, sorted=True)
@@ -114,24 +117,25 @@ class Substitutor:
         return batch_examples, gt
 
     def __next__(self):
+        if "images" in self.batch:
+            self.keys_to_exchange.append("images")
+            num_examples = self.batch['images'].shape[1]
+            device = self.batch["images"].device
+        elif "embeddings" in self.batch:
+            self.keys_to_exchange.append("embeddings")
+            num_examples = self.batch['embeddings'].shape[1]
+            device = self.batch["embeddings"].device
+        else:
+            raise ValueError("Batch must contain either images or embeddings")
+
         if self.it == 0:
             self.it = 1
             return self.divide_query_examples()
         if not self.substitute:
             raise StopIteration
-        num_examples = len(self.batch["classes"])
         if self.it == num_examples:
             raise StopIteration
 
-        if "images" in self.batch:
-            self.keys_to_exchange.append("images")
-            device = self.batch["images"].device
-        elif "embeddings" in self.batch:
-            self.keys_to_exchange.append("embeddings")
-            device = self.batch["embeddings"].device
-        else:
-            raise ValueError("Batch must contain either images or embeddings")
-        
         index_tensor = torch.cat(
             [
                 torch.tensor([self.it], device=device),
