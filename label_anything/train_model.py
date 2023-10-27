@@ -46,25 +46,22 @@ def train_epoch(
 
             outputs = model(image_dict)
             loss = criterion(outputs, gt)
-            substitutor.generate_new_points(pred, gt)
+            substitutor.generate_new_points(outputs, gt)
 
-            pred = outputs.argmax(dim=1, keepdim=True)
+            pred = outputs.argmax(dim=1)
             jaccard = multiclass_jaccard_index(pred, gt, num_classes=outputs.shape[1])
 
-            accelerator.backward()
+            accelerator.backward(loss)
             optimizer.step()
 
-            batch_correct = pred.eq(image_dict["example"].view_as(pred)).sum().item()
-            batch_total = image_dict["example"].size(0)
+            batch_total = gt.size(0)
 
             total_loss += loss.item()
             total_jaccard += jaccard.item()
-            correct += batch_correct
-            comet_logger.log_metric("batch_accuracy", batch_correct / batch_total)
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
             if log_every_n(batch_idx, train_params["logger"]):
-                query_image = image_dict["query_image"][0]
+                query_image = image_dict["images"][0, 0]
                 points = image_dict["prompt_points"][0, 0]
                 boxes = image_dict["prompt_boxes"][0, 0]
                 mask = image_dict["prompt_mask"][0, 0]
@@ -122,7 +119,7 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
     accelerator = Accelerator()
 
     # Loss and Optimizer da overraidere
-    criterion = train_params["loss"]
+    criterion = lambda x, y: torch.nn.functional.cross_entropy(x, y.long())
     optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
 
     # Train the Model

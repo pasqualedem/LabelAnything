@@ -260,7 +260,7 @@ class PromptImageEncoder(PromptEncoder):
         self.example_mlp = MLPBlock(embed_dim, mlp_dim)
         self.norm_example_mlp = nn.LayerNorm(embed_dim)
         
-        # self.not_a_mask_embed = nn.Embedding(1, embed_dim // 4) # For classes/examples with missing masks
+        self.not_a_mask_embed = nn.Embedding(1, embed_dim // 4) # For classes/examples with missing masks
 
     def _embed_masks(self, masks: torch.Tensor, masks_flags: torch.Tensor) -> torch.Tensor:
         """Embeds mask inputs. (B, C, H, W) """
@@ -270,7 +270,7 @@ class PromptImageEncoder(PromptEncoder):
         mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
         H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == 0] = 0.0
-        mask_embedding[masks_flags == 0] += self.no_mask_embed.weight
+        mask_embedding[masks_flags == 0] += self.not_a_mask_embed.weight
         return mask_embedding
     
     def _get_batch_examples_class_size(

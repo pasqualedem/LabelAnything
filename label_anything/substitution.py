@@ -15,12 +15,13 @@ def generate_points_from_errors(
         ground_truth (torch.Tensor): The ground truth segmentation mask of shape (batch_size, num_classes, height, width)
         num_points (int): The number of points to generate for each class
     """
+    device = prediction.device
     errors = ground_truth - prediction
     coords = torch.nonzero(errors)
     _, counts = torch.unique(coords[:, 0:2], dim=0, return_counts=True, sorted=True)
     sampled_idxs = torch.cat(
-        [torch.randint(0, x, (num_points,)) for x in counts]
-    ) + torch.cat([torch.tensor([0]), counts.cumsum(dim=0)])[:-1].repeat_interleave(
+        [torch.randint(0, x, (num_points,), device=device) for x in counts]
+    ) + torch.cat([torch.tensor([0], device=device), counts.cumsum(dim=0)])[:-1].repeat_interleave(
         num_points
     )
     sampled_points = coords[sampled_idxs]
@@ -80,12 +81,14 @@ class Substitutor:
                 sampled_points.shape[0],
                 self.batch["prompt_points"].shape[1] - 1,
                 *sampled_points.shape[2:],
+                device=sampled_points.device,
             )
             labels = rearrange(labels, "b c n -> b 1 c n")
             padding_labels = torch.zeros(
                 labels.shape[0],
                 self.batch["flags_points"].shape[1] - 1,
                 *labels.shape[2:],
+                device=labels.device,
             )
             sampled_points = torch.cat([padding_points, sampled_points], dim=1)
             labels = torch.cat([padding_labels, labels], dim=1)

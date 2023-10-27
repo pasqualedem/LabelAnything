@@ -17,8 +17,8 @@ class RandomDataset(Dataset):
         D = 256
         N = 5
         return {
-            "embeddings": torch.rand(M, D, H // 4, W // 4),
-            "prompt_masks": torch.randint(0, 2, (M, C, H, W)).float(),
+            "embeddings": torch.rand(M, D, H // 16, W // 16),
+            "prompt_masks": torch.randint(0, 2, (M, C, H // 4, W // 4)).float(),
             "flags_masks": torch.randint(0, 2, (M, C)),
             "prompt_points": torch.randint(0, 2, (M, C, N, 2)),
             "flags_points": torch.randint(0, 2, (M, C, N)),
@@ -26,7 +26,7 @@ class RandomDataset(Dataset):
             "flags_bboxes": torch.randint(0, 2, (M, C, N)),
             "dims": torch.tensor([H, W]),
             "classes": [{1, 2}, {2, 3}]
-        }, torch.randint(0, 2, (M, C, H, W))
+        }, torch.randint(0, 3, (M, H // 4, W // 4))
 
     def __len__(self):
         return self.len
@@ -50,7 +50,7 @@ class RandomDataset(Dataset):
                         result_dict[key] = value
                     else:
                         result_dict[key] = [value]
-        return {k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()}, torch.cat(gt_list)
+        return {k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()}, torch.stack(gt_list)
 
 
 def get_dataloader(**kwargs):
