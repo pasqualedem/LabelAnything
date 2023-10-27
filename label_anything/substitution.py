@@ -119,24 +119,26 @@ class Substitutor:
             return self.divide_query_examples()
         if not self.substitute:
             raise StopIteration
-        num_examples = self.batch["example_classes"].shape[0]
+        num_examples = len(self.batch["classes"])
         if self.it == num_examples:
             raise StopIteration
 
-        index_tensor = torch.cat(
-            [
-                torch.tensor([self.it]),
-                torch.arange(0, self.it),
-                torch.arange(self.it + 1, num_examples),
-            ]
-        ).long()
-
         if "images" in self.batch:
             self.keys_to_exchange.append("images")
+            device = self.batch["images"].device
         elif "embeddings" in self.batch:
             self.keys_to_exchange.append("embeddings")
+            device = self.batch["embeddings"].device
         else:
             raise ValueError("Batch must contain either images or embeddings")
+        
+        index_tensor = torch.cat(
+            [
+                torch.tensor([self.it], device=device),
+                torch.arange(0, self.it, device=device),
+                torch.arange(self.it + 1, num_examples, device=device),
+            ]
+        ).long()
 
         for key in self.keys_to_exchange:
             self.batch[key] = torch.index_select(
