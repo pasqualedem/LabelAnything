@@ -8,15 +8,20 @@ class Logger:
             annotations=annotations,
         )
 
-    def log_metric(self, nome, metric):
+    def log_metric(self, name, metric, epoch=None):
         self.experiment.log_metric(
-            nome,
+            name,
             metric,
+            epoch
         )
 
-    def log_parameter(self, nome, parameter):
+    def log_metrics(self, metrics, epoch=None):
+        for name, metric in metrics.items():
+            self.log_metric(name, metric, epoch)
+
+    def log_parameter(self, name, parameter):
         self.experiment.log_parameter(
-            nome,
+            name,
             parameter,
         )
 

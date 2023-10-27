@@ -12,8 +12,8 @@ import pandas as pd
 import requests
 import torch
 import torchvision.transforms
-import utils
-from examples import ExampleGeneratorPowerLawUniform
+import label_anything.data.utils as utils
+from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import (
@@ -23,7 +23,7 @@ from torchvision.transforms import (
     Resize,
     ToTensor,
 )
-from transforms import CustomNormalize, CustomResize, PromptsProcessor
+from label_anything.data.transforms import CustomNormalize, CustomResize, PromptsProcessor
 
 warnings.filterwarnings("ignore")
 
