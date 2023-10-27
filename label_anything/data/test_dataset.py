@@ -1,5 +1,5 @@
 from torchvision.transforms import ToTensor
-from dataset import LabelAnythingDataset
+from dataset import LabelAnythingDataset, PromptType
 import utils
 from typing import Any, Dict, List, Tuple
 import torch
@@ -18,6 +18,26 @@ class LabelAnythingTestDataset(LabelAnythingDataset):
     ):
         super(LabelAnythingTestDataset, self).__init__(instances_path, img_dir, max_num_examples, preprocess,
                                                        j_index_value, seed, max_mum_coords)
+
+    def _extract_examples(self):
+        prompt_images = set()
+        for cat_id in self.categories.keys():
+            if cat_id not in self.cat2img:
+                continue
+            cat_images = self.cat2img[cat_id]
+            _, img = max(map(lambda x: (len(self.img2cat[x]), x), cat_images))
+            prompt_images.add(img)
+        return prompt_images
+
+    def extract_prompts(self):
+        image_ids = self._extract_examples()
+        cat_ids = list(self.categories.keys())
+        bboxes, masks, points, _ = self._get_annotations(image_ids, cat_ids)
+
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
+        masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
+        points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
+        return bboxes, masks, points
 
     def __getitem__(self, item):
         base_image_data = self.images[self.image_ids[item]]
@@ -73,6 +93,12 @@ if __name__ == '__main__':
         max_num_examples=10,
         j_index_value=0.1,
     )
+
+    boxes, masks, points = dataset.extract_prompts()
+    print(boxes.size())
+    print(masks.size())
+    points.size()
+    exit()
 
     """x = dataset[1]
     print([f'{k}: {v.size()}' for k, v in x.items() if isinstance(v, torch.Tensor)])

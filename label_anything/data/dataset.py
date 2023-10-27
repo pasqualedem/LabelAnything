@@ -149,7 +149,7 @@ class LabelAnythingDataset(Dataset):
             )  # probably needs to add zeroes
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
 
-    def __extract_examples(self, img_data: dict) -> (list, list):
+    def _extract_examples(self, img_data: dict) -> (list, list):
         """Chooses examples (and categories) for the query image.
 
         Args:
@@ -167,40 +167,13 @@ class LabelAnythingDataset(Dataset):
             num_examples=self.num_examples,
         )
 
-    def __getitem__(self, item: int) -> dict:
-        base_image_data = self.images[self.image_ids[item]]
-
-        # load the examples and categories for the query image
-        #start = timeit.default_timer()
-        image_ids, aux_cat_ids = self.__extract_examples(base_image_data)
-        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-        cat_ids.insert(0, -1)  # add the background class
-        #end = timeit.default_timer()
-        #print(f"Time to extract examples: {end - start}")
-
-        # load, stack and preprocess the images
-        #start = timeit.default_timer()
-        images = [
-            self._load_image(image_data)
-            for image_data in [self.images[image_id] for image_id in image_ids]
-        ]
-        images = torch.stack(
-            [
-                image if not self.preprocess else self.preprocess(image)
-                for image in images
-            ],
-            dim=0,
-        )
-        #end = timeit.default_timer()
-        #print(f"Time to load and preprocess images: {end - start}")
-
-        # create the prompt dicts
+    def _get_annotations(self, image_ids, cat_ids):
         bboxes = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
         masks = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
         points = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
 
         # get prompts from annotations
-        #start = timeit.default_timer()
+        # start = timeit.default_timer()
         classes = {img_id: set() for img_id in image_ids}
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
@@ -243,8 +216,37 @@ class LabelAnythingDataset(Dataset):
                 bboxes[img_id][cat_id] = np.array((bboxes[img_id][cat_id]))
                 masks[img_id][cat_id] = np.array((masks[img_id][cat_id]))
                 points[img_id][cat_id] = np.array((points[img_id][cat_id]))
+        return bboxes, masks, points, classes
+
+    def __getitem__(self, item: int) -> dict:
+        base_image_data = self.images[self.image_ids[item]]
+
+        # load the examples and categories for the query image
+        #start = timeit.default_timer()
+        image_ids, aux_cat_ids = self._extract_examples(base_image_data)
+        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids.insert(0, -1)  # add the background class
         #end = timeit.default_timer()
-        #print(f"Time to extract prompts: {end - start}")
+        #print(f"Time to extract examples: {end - start}")
+
+        # load, stack and preprocess the images
+        #start = timeit.default_timer()
+        images = [
+            self._load_image(image_data)
+            for image_data in [self.images[image_id] for image_id in image_ids]
+        ]
+        images = torch.stack(
+            [
+                image if not self.preprocess else self.preprocess(image)
+                for image in images
+            ],
+            dim=0,
+        )
+        #end = timeit.default_timer()
+        #print(f"Time to load and preprocess images: {end - start}")
+
+        # create the prompt dicts
+        bboxes, masks, points, classes = self._get_annotations(image_ids, cat_ids)
 
         # obtain padded tensors
         #start = timeit.default_timer()
@@ -530,12 +532,8 @@ if __name__ == "__main__":
             CustomNormalize(),
         ]
     )
-
-    from pathlib import Path
-    RAW_DATA_DIR = Path.cwd() / "data" / "raw"
-
     dataset = LabelAnythingDataset(
-        instances_path=RAW_DATA_DIR / "lvis_v1_train.json",
+        instances_path="lvis_v1_train.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,

@@ -102,7 +102,13 @@ class PromptsProcessor:
             binary mask (numpy 2D array)
         """
         rle = self.__ann_to_rle(mask, h, w)
-        return mask_utils.decode(rle)
+        matrix = mask_utils.decode(rle)
+        unique_values = np.unique(matrix).tolist()
+        if len(unique_values) == 1 and unique_values[0] == 0:
+            pol = torch.as_tensor(mask).view(-1, 2)
+            y, x = torch.mean(pol, 0).type(torch.int).tolist()
+            matrix[x, y] = 1
+        return matrix
 
     def sample_point(self, mask: np.ndarray):
         # make a list of positive (row, col) coordinates
