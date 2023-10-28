@@ -63,6 +63,11 @@ def experiment(
     help="Batch size for the dataloader",
 )
 @click.option(
+    "--num_workers",
+    default=0,
+    help="Number of workers for the dataloader",
+)
+@click.option(
     "--outfolder",
     default="data/processed/embeddings",
     help="Folder to save the embeddings",
@@ -74,6 +79,7 @@ def preprocess(
     compile,
     directory,
     batch_size,
+    num_workers,
     outfolder,
 ):
     preprocess_images_to_embeddings(
@@ -82,6 +88,7 @@ def preprocess(
         use_sam_checkpoint=use_sam_checkpoint,
         directory=directory,
         batch_size=batch_size,
+        num_workers=num_workers,
         outfolder=outfolder,
         compile=compile,
     )

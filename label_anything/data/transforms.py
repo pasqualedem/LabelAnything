@@ -35,8 +35,9 @@ class CustomResize(object):
 
 class CustomNormalize(object):
     def __init__(
-        self, mean: Any = [123.675, 116.28, 103.53], std: Any = [58.395, 57.12, 57.375]
+        self, long_side_length: int = 1024, mean: Any = [123.675, 116.28, 103.53], std: Any = [58.395, 57.12, 57.375]
     ):
+        self.long_side_length = long_side_length
         self.pixel_mean = torch.tensor(mean).view(-1, 1, 1)
         self.pixel_std = torch.tensor(std).view(-1, 1, 1)
 
@@ -48,8 +49,8 @@ class CustomNormalize(object):
 
         # Pad
         h, w = sample.shape[-2:]
-        padh = 1024 - h
-        padw = 1024 - w
+        padh = self.long_side_length - h
+        padw = self.long_side_length - w
         sample = F.pad(sample, (0, padw, 0, padh))
         return sample
 
@@ -80,21 +81,39 @@ class PromptsProcessor:
             # rle
             rle = ann
         return rle
+    
+    def __add_bbox_noise(self, bbox, hb, wb, h, w):
+        x1, y1, x2, y2 = bbox
+        # take random number from normal distribution with mean 0 and std 0.1 * l
+        noise_x1 = np.clip(np.random.normal(0, 0.1 * wb), -20, 20)
+        noise_y1 = np.clip(np.random.normal(0, 0.1 * hb), -20, 20)
+        noise_x2 = np.clip(np.random.normal(0, 0.1 * wb), -20, 20)
+        noise_y2 = np.clip(np.random.normal(0, 0.1 * hb), -20, 20)
 
-    def convert_bbox(self, bbox):
+        x1 = float(np.clip(x1 + noise_x1, 0, w))
+        y1 = float(np.clip(y1 + noise_y1, 0, h))
+        x2 = float(np.clip(x2 + noise_x2, 0, w))
+        y2 = float(np.clip(y2 + noise_y2, 0, h))
+
+        return [x1, y1, x2, y2]
+
+
+    def convert_bbox(self, bbox, h, w, noise=False):
         # convert bbox from [x, y, w, h] to [x1, y1, x2, y2]
-        x, y, w, h = bbox
+        x, y, wb, hb = bbox
         x1 = x
         y1 = y
-        x2 = x + w
-        y2 = y + h
+        x2 = x + wb
+        y2 = y + hb
+        if noise:
+            return self.__add_bbox_noise([x1, y1, x2, y2], hb, wb, h, w)
         return [x1, y1, x2, y2]
 
     def convert_mask(self, mask, h, w):
         """Convert annotation which can be polygons, uncompressed RLE, or RLE
         to binary mask.
         Args:
-            ann (dict) : annotation object
+            mask: mask can be polygons, uncompressed RLE, or RLE
             h (int): image height
             w (int): image width
 
