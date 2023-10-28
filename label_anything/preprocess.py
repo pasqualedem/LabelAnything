@@ -24,7 +24,7 @@ def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
         for i in range(out.shape[0]):
             save_file(
                 {"embedding": out[i]},
-                os.path.join(outfolder, image_id[i] + ".safetensors"),
+                os.path.join(outfolder, f"{image_id[i]}.safetensors"),
             )
 
 
