@@ -136,8 +136,8 @@ class LabelAnythingDataset(Dataset):
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
-    def __load_safe_embeddings(self, id):
-        with safe_open(f"{self.emb_dir}/{id}.safetensors", framework="pt") as f:
+    def __load_safe_embeddings(self, img_data):
+        with safe_open(f"{self.emb_dir}/{img_data['id']}.safetensors", framework="pt") as f:
             tensor = f.get_slice("embedding")
         return tensor
 
@@ -154,8 +154,6 @@ class LabelAnythingDataset(Dataset):
             return Image.open(
                 f'{self.img_dir}/{img_data["file_name"]}'
             )  # probably needs to add zeroes
-        if self.load_embeddings:
-            return self.__load_safe_embeddings(img_data["id"])
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
 
     def _extract_examples(self, img_data: dict) -> (list, list):
@@ -226,37 +224,22 @@ class LabelAnythingDataset(Dataset):
                 points[img_id][cat_id] = np.array((points[img_id][cat_id]))
         return bboxes, masks, points, classes
 
+    def _load_and_preprocess_image(self, image_data):
+        image = self._load_image(image_data)
+        return image if not self.preprocess else self.preprocess(image)
+
     def _get_images_or_embeddings(self, image_ids):
+        if self.load_embeddings:
+            images = [
+                self.__load_safe_embeddings(image_data)
+                for image_data in [self.images[image_id] for image_id in image_ids]
+            ]
+            return torch.stack(images), "embeddings"
         images = [
-            self._load_image(image_data)
+            self._load_and_preprocess_image(image_data)
             for image_data in [self.images[image_id] for image_id in image_ids]
         ]
-        if self.load_embeddings:
-            return torch.stack(images), "embeddings"
-
-        images = torch.stack(
-            [
-                image if not self.preprocess else self.preprocess(image)
-                for image in images
-            ],
-            dim=0,
-        )
-        return images, "embeddings"
-
-    def load_images_for_logging(self, image_ids):
-        images = [
-            Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
-            for img_data in [self.images[image_id] for image_id in image_ids]
-        ]
-        images = torch.stack(
-            [
-                image if not self.preprocess else self.preprocess(image)
-                for image in images
-            ],
-            dim=0,
-        )
-        return images
-
+        return torch.stack(images), "images"
 
     def __getitem__(self, item: int) -> dict:
         base_image_data = self.images[self.image_ids[item]]
@@ -299,8 +282,11 @@ class LabelAnythingDataset(Dataset):
         }
 
         if self.log_images and self.load_embeddings:
-            log_images = self.load_images_for_logging(image_ids)
-            data_dict["images"] = log_images
+            log_images =[
+                self._load_and_preprocess_image(image_data)
+                for image_data in [self.images[image_id] for image_id in image_ids]
+            ]
+            data_dict["images"] = torch.stack(log_images)
 
         return data_dict
 
@@ -528,7 +514,6 @@ class LabelAnythingDataset(Dataset):
 
         if self.log_images and not self.load_embeddings:
             log_images = torch.stack([x["images"] for x in batched_input])
-            data_dict["images"] = log_images
             data_dict["images"] = log_images
 
         # reset dataset parameters
