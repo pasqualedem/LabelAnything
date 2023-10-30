@@ -8,9 +8,9 @@ from label_anything.metrics import metrics_factory
 
 
 def parse_params(params_dict):
-    train_params = params_dict.get("parameters", {}).get("train_params", {})
-    dataset_params = params_dict.get("parameters", {}).get("dataset", {})
-    model_params = params_dict.get("parameters", {}).get("model", {})
+    train_params = params_dict.get("train_params", {})
+    dataset_params = params_dict.get("dataset", {})
+    model_params = params_dict.get("model", {})
 
     return train_params, dataset_params, model_params
 

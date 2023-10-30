@@ -9,7 +9,7 @@ from label_anything.logger.utils import (
     image_with_points,
     structure_annotations,
 )
-from label_anything.substitution import Substitutor
+from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import log_every_n
 from .save import save_model
 from accelerate import Accelerator
@@ -60,26 +60,26 @@ def train_epoch(
             total_jaccard += jaccard.item()
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
-            if log_every_n(batch_idx, train_params["logger"]):
-                query_image = image_dict["images"][0, 0]
-                points = image_dict["prompt_points"][0, 0]
-                boxes = image_dict["prompt_boxes"][0, 0]
-                mask = image_dict["prompt_mask"][0, 0]
-                annotations_boxes = structure_annotations(
-                    extract_boxes_from_tensor(boxes)
-                )
-                annotations_mask = structure_annotations(
-                    extract_vertices_from_tensor(mask)
-                )
-                comet_logger.log_image(
-                    query_image,
-                    annotations_mask,
-                )
-                comet_logger.log_image(
-                    query_image,
-                    annotations_boxes,
-                )
-                comet_logger.log_image(image_with_points(query_image, points))
+            # if log_every_n(batch_idx, train_params["logger"]):
+            #     query_image = image_dict["images"][0, 0]
+            #     points = image_dict["prompt_points"][0, 0]
+            #     boxes = image_dict["prompt_boxes"][0, 0]
+            #     mask = image_dict["prompt_mask"][0, 0]
+            #     annotations_boxes = structure_annotations(
+            #         extract_boxes_from_tensor(boxes)
+            #     )
+            #     annotations_mask = structure_annotations(
+            #         extract_vertices_from_tensor(mask)
+            #     )
+            #     comet_logger.log_image(
+            #         query_image,
+            #         annotations_mask,
+            #     )
+            #     comet_logger.log_image(
+            #         query_image,
+            #         annotations_boxes,
+            #     )
+            #     comet_logger.log_image(image_with_points(query_image, points))
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
