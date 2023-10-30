@@ -1,26 +1,20 @@
 import itertools
 import os
 import random
-import timeit
 import warnings
 from enum import Enum
 from io import BytesIO
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
 import requests
 import torch
-import torchvision.transforms
 import utils
 from examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import (
-    Compose,
-    InterpolationMode,
     PILToTensor,
-    Resize,
     ToTensor,
 )
 from transforms import CustomNormalize, CustomResize, PromptsProcessor
@@ -186,7 +180,6 @@ class LabelAnythingDataset(Dataset):
         points = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
 
         # get prompts from annotations
-        # start = timeit.default_timer()
         classes = {img_id: set() for img_id in image_ids}
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
@@ -252,40 +245,28 @@ class LabelAnythingDataset(Dataset):
         base_image_data = self.images[self.image_ids[item]]
 
         # load the examples and categories for the query image
-        #start = timeit.default_timer()
         image_ids, aux_cat_ids = self._extract_examples(base_image_data)
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
         cat_ids.insert(0, -1)  # add the background class
-        #end = timeit.default_timer()
-        #print(f"Time to extract examples: {end - start}")
 
         # load, stack and preprocess the images
-        #start = timeit.default_timer()
         images, image_key = self._get_images_or_embeddings(image_ids)
-        #end = timeit.default_timer()
-        #print(f"Time to load and preprocess images: {end - start}")
 
         # create the prompt dicts
         bboxes, masks, points, classes = self._get_annotations(image_ids, cat_ids)
 
         # obtain padded tensors
-        #start = timeit.default_timer()
         bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
         masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
-        #end = timeit.default_timer()
-        #print(f"Time to convert prompts to tensors: {end - start}")
 
         # obtain ground truths
-        #start = timeit.default_timer()
         ground_truths = self.get_ground_truths(image_ids, cat_ids)
         dims = torch.tensor(list(map(lambda x: x.size(), ground_truths)))
         max_dims = torch.max(dims, 0).values.tolist()
         ground_truths = torch.stack(
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
-        #end = timeit.default_timer()
-        #print(f"Time to obtain ground truths: {end - start}")
 
         return {
             image_key: images,
