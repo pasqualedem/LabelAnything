@@ -179,3 +179,5 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+
+        def generate_class_embeddings(example_dict,)
