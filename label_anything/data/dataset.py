@@ -89,6 +89,8 @@ class LabelAnythingDataset(Dataset):
         self.reset_num_examples()
         self.reset_num_coords()
 
+        self.log_images = False
+
     def reset_num_examples(self):
         self.num_examples = random.randint(1, self.max_num_examples)
 
@@ -241,6 +243,21 @@ class LabelAnythingDataset(Dataset):
         )
         return images, "embeddings"
 
+    def load_images_for_logging(self, image_ids):
+        images = [
+            Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
+            for img_data in [self.images[image_id] for image_id in image_ids]
+        ]
+        images = torch.stack(
+            [
+                image if not self.preprocess else self.preprocess(image)
+                for image in images
+            ],
+            dim=0,
+        )
+        return images
+
+
     def __getitem__(self, item: int) -> dict:
         base_image_data = self.images[self.image_ids[item]]
 
@@ -268,7 +285,7 @@ class LabelAnythingDataset(Dataset):
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
 
-        return {
+        data_dict =  {
             image_key: images,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
@@ -280,6 +297,12 @@ class LabelAnythingDataset(Dataset):
             "classes": list(classes.values()),
             "ground_truths": ground_truths,
         }
+
+        if self.log_images and self.load_embeddings:
+            log_images = self.load_images_for_logging(image_ids)
+            data_dict["images"] = log_images
+
+        return data_dict
 
     def get_ground_truths(self, image_ids, cat_ids):
         # initialization
@@ -502,6 +525,11 @@ class LabelAnythingDataset(Dataset):
             "dims": dims,
             "classes": classes,
         }
+
+        if self.log_images and not self.load_embeddings:
+            log_images = torch.stack([x["images"] for x in batched_input])
+            data_dict["images"] = log_images
+            data_dict["images"] = log_images
 
         # reset dataset parameters
         self.reset_num_coords()
