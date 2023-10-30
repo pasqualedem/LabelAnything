@@ -277,7 +277,7 @@ class LabelAnythingDataset(Dataset):
             "prompt_bboxes": bboxes,
             "flag_bboxes": flag_bboxes,
             "dims": dims,
-            "classes": list(classes.values()),
+            "classes": list(map(list, classes.values())),
             "ground_truths": ground_truths,
         }
 
