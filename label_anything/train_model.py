@@ -41,10 +41,10 @@ def train_epoch(
             threshold=train_params["substitution_threshold"],
             num_points=train_params.get("num_points", 1),
         )
-        for image_dict, gt in substitutor:
+        for input_dict, gt in substitutor:
             optimizer.zero_grad()
 
-            outputs = model(image_dict)
+            outputs = model(input_dict)
             loss = criterion(outputs, gt)
             substitutor.generate_new_points(outputs, gt)
 
@@ -61,10 +61,10 @@ def train_epoch(
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
             if log_every_n(batch_idx, train_params["logger"]):
-                query_image = image_dict["images"][0, 0]
-                points = image_dict["prompt_points"][0, 0]
-                boxes = image_dict["prompt_boxes"][0, 0]
-                mask = image_dict["prompt_mask"][0, 0]
+                query_image = input_dict["images"][0, 0]
+                points = input_dict["prompt_points"][0, 0]
+                boxes = input_dict["prompt_bboxes"][0, 0]
+                mask = input_dict["prompt_masks"][0, 0]
                 annotations_boxes = structure_annotations(
                     extract_boxes_from_tensor(boxes)
                 )
