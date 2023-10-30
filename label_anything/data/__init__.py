@@ -53,7 +53,7 @@ class RandomDataset(Dataset):
         return {k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()}, torch.stack(gt_list)
 
 
-def get_dataloader(**kwargs):
+def get_dataloader(dataset_args, dataloader_args):
 
     preprocess = Compose(
         [
@@ -62,14 +62,11 @@ def get_dataloader(**kwargs):
         ]
     )
 
-    # dataset = LabelAnythingDataset(
-    #     instances_path="label_anything/data/lvis_v1_train.json",
-    #     preprocess=preprocess,
-    #     max_num_examples=10,
-    #     j_index_value=0.1,
-    # )
-    dataset = RandomDataset()
+    dataset = LabelAnythingDataset(
+        **dataset_args,
+        preprocess=preprocess,
+    )
     dataloader = DataLoader(
-        dataset=dataset, batch_size=kwargs.get("batch_size"), shuffle=False, collate_fn=dataset.collate_fn
+        dataset=dataset, **dataloader_args, collate_fn=dataset.collate_fn
     )
     return dataloader

@@ -29,6 +29,8 @@ parameters:
     use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
+    instances_path: [data/raw/lvis_v1_train.json]
+  dataloader:
     batch_size: [1]
     num_workers: [0]
 

@@ -41,28 +41,41 @@ class Run:
         (
             self.train_params,
             self.dataset_params,
+            self.dataloader_params,
             self.model_params,
         ) = parse_params(self.params)
 
     def init(self, params: dict):
         self.seg_trainer = None
         self.parse_params(params)
-        self.train_params, self.dataset_params, self.model_params = parse_params(params)
+        (
+            self.train_params,
+            self.dataset_params,
+            self.dataloader_params,
+            self.model_params,
+        ) = parse_params(params)
 
         comet_information = {
             "apykey": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
         }
 
-        self.comet_logger, self.experiment = comet_experiment(comet_information, self.params, self.train_params)
+        self.comet_logger, self.experiment = comet_experiment(
+            comet_information, self.params, self.train_params
+        )
         self.url = self.experiment.url
         self.name = self.experiment.name
 
-        self.dataloader = get_dataloader(**self.dataset_params)
-        model_name = self.model_params.pop('name')
-        self.model = model_registry[model_name](
-            **self.model_params
-        )
-        
+        self.dataloader = get_dataloader(self.dataset_params, self.dataloader_params)
+        model_name = self.model_params.pop("name")
+        self.model = model_registry[model_name](**self.model_params)
+
     def launch(self):
-        train(self.params, self.model, self.dataloader, self.comet_logger, self.experiment, self.train_params)
+        train(
+            self.params,
+            self.model,
+            self.dataloader,
+            self.comet_logger,
+            self.experiment,
+            self.train_params,
+        )
