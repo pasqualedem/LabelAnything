@@ -24,6 +24,8 @@ from torchvision.transforms import (
     ToTensor,
 )
 from transforms import CustomNormalize, CustomResize, PromptsProcessor
+from safetensors import safe_open
+
 
 warnings.filterwarnings("ignore")
 
@@ -44,11 +46,15 @@ class LabelAnythingDataset(Dataset):
         j_index_value=0.5,  # threshold for extracting examples
         seed=42,  # for reproducibility
         max_mum_coords=10,  # max number of coords for each example for each class
+        emb_dir=None,
     ):
         super().__init__()
         instances = utils.load_instances(instances_path)
+        self.emb_dir = emb_dir
+        self.load_embeddings = self.emb_dir is not None
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
+        assert not (self.load_from_dir and self.load_embeddings)
 
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
@@ -134,6 +140,11 @@ class LabelAnythingDataset(Dataset):
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
+    def __load_safe_embeddings(self, id):
+        with safe_open(f"{self.emb_dir}/{id}.safetensors", framework="pt") as f:
+            tensor = f.get_slice("embedding")
+        return tensor
+
     def _load_image(self, img_data: dict) -> Image:
         """Load an image from disk or from url.
 
@@ -147,6 +158,8 @@ class LabelAnythingDataset(Dataset):
             return Image.open(
                 f'{self.img_dir}/{img_data["file_name"]}'
             )  # probably needs to add zeroes
+        if self.load_embeddings:
+            return self.__load_safe_embeddings(img_data["id"])
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
 
     def _extract_examples(self, img_data: dict) -> (list, list):
@@ -218,6 +231,23 @@ class LabelAnythingDataset(Dataset):
                 points[img_id][cat_id] = np.array((points[img_id][cat_id]))
         return bboxes, masks, points, classes
 
+    def _get_images_or_embeddings(self, image_ids):
+        images = [
+            self._load_image(image_data)
+            for image_data in [self.images[image_id] for image_id in image_ids]
+        ]
+        if self.load_embeddings:
+            return torch.stack(images), "embeddings"
+
+        images = torch.stack(
+            [
+                image if not self.preprocess else self.preprocess(image)
+                for image in images
+            ],
+            dim=0,
+        )
+        return images, "embeddings"
+
     def __getitem__(self, item: int) -> dict:
         base_image_data = self.images[self.image_ids[item]]
 
@@ -231,17 +261,7 @@ class LabelAnythingDataset(Dataset):
 
         # load, stack and preprocess the images
         #start = timeit.default_timer()
-        images = [
-            self._load_image(image_data)
-            for image_data in [self.images[image_id] for image_id in image_ids]
-        ]
-        images = torch.stack(
-            [
-                image if not self.preprocess else self.preprocess(image)
-                for image in images
-            ],
-            dim=0,
-        )
+        images, image_key = self._get_images_or_embeddings(image_ids)
         #end = timeit.default_timer()
         #print(f"Time to load and preprocess images: {end - start}")
 
@@ -268,7 +288,7 @@ class LabelAnythingDataset(Dataset):
         #print(f"Time to obtain ground truths: {end - start}")
 
         return {
-            "images": images,
+            image_key: images,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
             "prompt_points": points,
@@ -483,10 +503,15 @@ class LabelAnythingDataset(Dataset):
         classes = [x["classes"] for x in batched_input]
 
         # images
-        images = torch.stack([x["images"] for x in batched_input])
+        if "embeddings" in batched_input[0].keys():
+            image_key = "embeddings"
+            images = torch.stack([x[image_key] for x in batched_input])
+        else:
+            image_key = "images"
+            images = torch.stack([x["images"] for x in batched_input])
 
         data_dict = {
-            "images": images,
+            image_key: images,
             "prompt_points": points,
             "flag_points": flag_points,
             "prompt_bboxes": bboxes,
@@ -544,7 +569,7 @@ if __name__ == "__main__":
     exit()"""
 
     dataloader = DataLoader(
-        dataset=dataset, batch_size=4, shuffle=False, collate_fn=dataset.collate_fn
+        dataset=dataset, batch_size=2, shuffle=False, collate_fn=dataset.collate_fn
     )
     data_dict, gt = next(iter(dataloader))
 
