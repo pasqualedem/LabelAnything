@@ -60,7 +60,20 @@ class Logger:
                     if flag_mask == 1:
                         polygons = extract_polygons_from_tensor(mask)
                         data.append({"points": polygons, "label": label, "score": None})
-                print(annotations)
+
+                    boxes_log = []
+                    for k in range(boxes.shape[0]):
+                        if flag_boxes[k] == 1:
+                            b = boxes[k].tolist()
+                            # from x1, y1, x2, y2 to x1, y1, w, h
+                            b[2] = b[2] - b[0]
+                            b[3] = b[3] - b[1]
+                            boxes_log.append(b)
+                    if len(boxes_log) > 0:
+                        data.append(
+                            {"boxes": boxes_log, "label": label, "score": None}
+                        )
+      
                 self.experiment.log_image(
                     image_data=image,
                     annotations=annotations,
