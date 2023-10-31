@@ -3,16 +3,16 @@ import numpy as np
 import torch
 
 
-from label_anything import scheduler as schedulers
 from label_anything.metrics import metrics_factory
 
 
 def parse_params(params_dict):
-    train_params = params_dict.get("parameters", {}).get("train_params", {})
-    dataset_params = params_dict.get("parameters", {}).get("dataset", {})
-    model_params = params_dict.get("parameters", {}).get("model", {})
+    train_params = params_dict.get("train_params", {})
+    dataset_params = params_dict.get("dataset", {})
+    model_params = params_dict.get("model", {})
+    dataloader_params = params_dict.get("dataloader", {})
 
-    return train_params, dataset_params, model_params
+    return train_params, dataset_params, dataloader_params, model_params
 
 
 # def parse_params(params: dict) -> Tuple[dict, dict, dict, Tuple, dict]:

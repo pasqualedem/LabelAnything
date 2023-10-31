@@ -9,7 +9,7 @@ from label_anything.logger.utils import (
     image_with_points,
     structure_annotations,
 )
-from label_anything.substitution import Substitutor
+from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import log_every_n
 from .save import save_model
 from accelerate import Accelerator
