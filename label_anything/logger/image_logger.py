@@ -1,5 +1,6 @@
 from label_anything.visualization.visualize import get_image
 from label_anything.logger.utils import extract_polygons_from_tensor
+import math
 
 
 class Logger:
@@ -37,17 +38,13 @@ class Logger:
                 annotations = [
                     {
                         "name": "Ground truth",
-                        "data": data,
-                        "metadata": {
-                            "batch_idx": batch_idx,
-                            "substitution_step": step,
-                        },
+                        "data": data
                     }
                 ]
 
                 # log masks, boxes and points
-                for c in range(input_dict["prompt_masks"].shape[2]):
-                    if c >= len(classes[i]):
+                for c in range(1, input_dict["prompt_masks"].shape[2]):
+                    if c > len(classes[i]):
                         break
                     mask = all_masks[i, j, c]
                     boxes = all_boxes[i, j, c]
@@ -55,10 +52,11 @@ class Logger:
                     flag_mask = flags_masks[i, j, c]
                     flag_boxes = flags_boxes[i, j, c]
                     flag_points = flags_points[i, j, c]
-                    label = categories[classes[i][c]]["name"]
+                    label = categories[classes[i][c-1]]["name"]
 
                     if flag_mask == 1:
                         polygons = extract_polygons_from_tensor(mask)
+                        print(polygons)
                         data.append({"points": polygons, "label": label, "score": None})
 
                     boxes_log = []
@@ -70,13 +68,37 @@ class Logger:
                             b[3] = b[3] - b[1]
                             boxes_log.append(b)
                     if len(boxes_log) > 0:
-                        data.append(
-                            {"boxes": boxes_log, "label": label, "score": None}
-                        )
-      
+                        data.append({"boxes": boxes_log, "label": label, "score": None})
+
+                    points_log = []
+                    for k in range(points.shape[0]):
+                        if flag_points[k] == 1:
+                            x, y = points[k].tolist()
+                            ps = []
+                            radius = 10
+
+                            # Number of points
+                            num_points = 20
+
+                            # Calculate and print the coordinates of the 10 points
+                            for z in range(num_points):
+                                theta = 2 * math.pi * z / num_points
+                                x_new = x + radius * math.cos(theta)
+                                y_new = y + radius * math.sin(theta)
+                                ps += [int(x_new), int(y_new)]
+                            points_log.append(ps)
+                    if len(points_log) > 0:
+                        print(points_log)
+                        data.append({"points": points_log, "label": label, "score": None})
+
                 self.experiment.log_image(
                     image_data=image,
                     annotations=annotations,
+                    metadata={
+                            "batch_idx": batch_idx,
+                            "sample_idx": i,
+                            "substitution_step": step,
+                    },
                 )
 
     def log_image(self, img_data, annotations=None):

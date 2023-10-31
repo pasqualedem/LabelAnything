@@ -132,7 +132,7 @@ def extract_polygons_from_tensor(tensor):
             coords.append(int(point[0][0]))
             coords.append(int(point[0][1]))
 
-    polygons.append(coords)
+        polygons.append(coords)
     return polygons
 
 
