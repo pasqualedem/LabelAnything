@@ -1,6 +1,6 @@
 import optuna
 
-from utils.grid import linearize, delinearize
+from label_anything.utils.grid import linearize, delinearize
 
 
 class Optunizer:

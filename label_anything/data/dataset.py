@@ -9,8 +9,9 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import requests
 import torch
-import utils
-from examples import ExampleGeneratorPowerLawUniform
+import torchvision.transforms
+import label_anything.data.utils as utils
+from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.transforms import (
@@ -37,9 +38,7 @@ class LabelAnythingDataset(Dataset):
         img_dir=None,  # directory (only if images have to be loaded from disk)
         max_num_examples=10,  # number of max examples to be given for the target image
         preprocess=ToTensor(),  # preprocess step
-        j_index_value=0.5,  # threshold for extracting examples
         seed=42,  # for reproducibility
-        max_mum_coords=10,  # max number of coords for each example for each class
         emb_dir=None,
     ):
         super().__init__()
@@ -54,56 +53,70 @@ class LabelAnythingDataset(Dataset):
         self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
         self.categories = {x["id"]: x for x in instances["categories"]}
-        # img id to cat id to annotations
-        # cat id to img id to annotations
+        # useful dicts
         (
             self.img2cat,
             self.img2cat_annotations,
             self.cat2img,
             self.cat2img_annotations,
         ) = self.__load_annotation_dicts()
-        # list of image ids
-        img2cat_keys = set(self.img2cat.keys())
-        self.image_ids = [x["id"] for x in instances["images"] if x["id"] in img2cat_keys]
-        # id to image
-        self.images = {x["id"]: x for x in instances["images"] if x["id"] in img2cat_keys}
 
+        # list of image ids for __getitem__
+        img2cat_keys = set(self.img2cat.keys())
+        self.image_ids = [
+            x["id"] for x in instances["images"] if x["id"] in img2cat_keys
+        ]
+
+        # id to image
+        self.images = {
+            x["id"]: x for x in instances["images"] if x["id"] in img2cat_keys
+        }
+
+        # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
             categories_to_imgs=self.cat2img
         )
 
+        # max number of examples for each image
         self.max_num_examples = max_num_examples
-        self.max_num_coords = max_mum_coords
 
         # assert that they are positive
         assert self.max_num_examples > 0
-        assert self.max_num_coords > 0
 
+        # image preprocessing
         self.preprocess = preprocess
+        # prompt preprocessing
         self.prompts_processor = PromptsProcessor(
             long_side_length=1024, masks_side_length=256
         )
 
-        self.j_index_value = j_index_value
         self.seed = seed
+        self.__set_all_seeds()
         self.reset_num_examples()
-        self.reset_num_coords()
+
+    def __set_all_seeds(self):
+        """Enable reproducibility.
+        """
+        random.seed(self.seed)
+        np.random.seed(self.seed)
+        torch.manual_seed(self.seed)
 
         self.log_images = False
 
     def reset_num_examples(self):
+        """Set the number of examples for the next query image.
+        """
         self.num_examples = random.randint(1, self.max_num_examples)
-
-    def reset_num_coords(self):
-        self.num_coords = random.randint(1, self.max_num_coords)
 
     def __load_annotation_dicts(self) -> (dict, dict):
         """Prepares dictionaries for fast access to annotations.
 
         Returns:
-            (dict, dict): Returns two dictionaries:
-                1. img2cat_annotations: image id to category id to annotations
-                2. cat2img_annotations: category id to image id to annotations
+            (dict, dict): Returns four dictionaries:
+                1. img2cat: A dictionary mapping image ids to the set of category ids of the annotations of that image.
+                2. img2cat_annotations: A dictionary mapping image ids to the annotations of that image.
+                3. cat2img: A dictionary mapping category ids to the set of image ids of the annotations of that category.
+                4. cat2img_annotations: A dictionary mapping category ids to the annotations of that category.
         """
         img2cat_annotations = {}
         cat2img_annotations = {}
@@ -131,7 +144,7 @@ class LabelAnythingDataset(Dataset):
             if ann["image_id"] not in cat2img_annotations[ann["category_id"]]:
                 cat2img_annotations[ann["category_id"]][ann["image_id"]] = []
                 cat2img[ann["category_id"]].add(ann["image_id"])
-                
+
             cat2img_annotations[ann["category_id"]][ann["image_id"]].append(ann)
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
@@ -153,8 +166,8 @@ class LabelAnythingDataset(Dataset):
         if self.load_from_dir:
             return Image.open(
                 f'{self.img_dir}/{img_data["file_name"]}'
-            )  # probably needs to add zeroes
-        return Image.open(BytesIO(requests.get(img_data["coco_url"]).content))
+            ).convert("RGB")
+        return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert("RGB")
 
     def _extract_examples(self, img_data: dict) -> (list, list):
         """Chooses examples (and categories) for the query image.
@@ -165,9 +178,8 @@ class LabelAnythingDataset(Dataset):
         Returns:
             (list, list): Returns two lists:
                 1. examples: A list of image ids of the examples.
-                2. cats: A list of category ids of the examples.
+                2. cats: A list of sets of category ids of the examples.
         """
-
         return self.example_generator.generate_examples(
             query_image_id=img_data["id"],
             image_classes=self.img2cat[img_data["id"]],
@@ -181,13 +193,15 @@ class LabelAnythingDataset(Dataset):
 
         # get prompts from annotations
         classes = {img_id: set() for img_id in image_ids}
+
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
-                # for each annotation of image img_id and category cat_id
+                # for each pair (image img_id and category cat_id)
                 if cat_id not in self.img2cat_annotations[img_id]:
-                    # this will also manage the background class
+                    # the chosen category is not in the iamge
                     continue
+                
                 classes[img_id].add(cat_id)
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
@@ -196,7 +210,10 @@ class LabelAnythingDataset(Dataset):
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[img_id][cat_id].append(
-                            self.prompts_processor.convert_bbox(ann["bbox"]),
+                            self.prompts_processor.convert_bbox(
+                                ann["bbox"],
+                                *img_size,
+                                noise=True,),
                         )
                     elif prompt_type == PromptType.MASK:
                         # take the mask
@@ -244,7 +261,6 @@ class LabelAnythingDataset(Dataset):
     def __getitem__(self, item: int) -> dict:
         base_image_data = self.images[self.image_ids[item]]
 
-        # load the examples and categories for the query image
         image_ids, aux_cat_ids = self._extract_examples(base_image_data)
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
         cat_ids.insert(0, -1)  # add the background class
@@ -310,7 +326,12 @@ class LabelAnythingDataset(Dataset):
                     )
             # make the ground truth tensor for image img_id
             ground_truth = torch.from_numpy(
-                np.array([ground_truths[img_id][cat_id].astype(np.uint8) for cat_id in cat_ids])
+                np.array(
+                    [
+                        ground_truths[img_id][cat_id].astype(np.uint8)
+                        for cat_id in cat_ids
+                    ]
+                )
             )
             # add a zeroes tensor to the first dimension
             ground_truth = torch.cat(
@@ -339,7 +360,6 @@ class LabelAnythingDataset(Dataset):
         n = len(annotations)
         c = len(next(iter(annotations.values())))
 
-        m = 10  # max number of annotations by type
         if prompt_type == PromptType.BBOX:
             max_annotations = utils.get_max_annotations(annotations)
             tensor_shape = (n, c, max_annotations, 4)
@@ -517,7 +537,6 @@ class LabelAnythingDataset(Dataset):
             data_dict["images"] = log_images
 
         # reset dataset parameters
-        self.reset_num_coords()
         self.reset_num_examples()
 
         return data_dict, ground_truths
@@ -553,9 +572,8 @@ if __name__ == "__main__":
     )
     dataset = LabelAnythingDataset(
         instances_path="lvis_v1_train.json",
-        preprocess=preprocess,
         max_num_examples=10,
-        j_index_value=0.1,
+        preprocess=preprocess,
     )
 
     """x = dataset[1]
@@ -567,5 +585,10 @@ if __name__ == "__main__":
     )
     data_dict, gt = next(iter(dataloader))
 
-    print([f"{k}: {v.size() if isinstance(v, torch.Tensor) else v}" for k, v in data_dict.items()])
+    print(
+        [
+            f"{k}: {v.size() if isinstance(v, torch.Tensor) else v}"
+            for k, v in data_dict.items()
+        ]
+    )
     print(f"gt: {gt.size()}")

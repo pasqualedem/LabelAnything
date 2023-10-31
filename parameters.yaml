@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
-  name: Classification # name of the logger platform experiment
-  group: FirstGroup # name of group of experiments for the logger platform
+  name: LabelAnything # name of the logger platform experiment
+  group: FirstTry # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -10,24 +10,29 @@ parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
   tags: [mytag1, mytag2] # list of tags to attach to the run in logger platform
-  dataset_interface: [examples/cifar10/Cifar10] # Path to the dataset interface class
 
   train_params:
     loss:
       name: [cross_entropy] # class loss name
       params:
     seed: [42] # random seed to set
-    substitution_threshold: 0.1 # threshold
-    num_points: 1 # number of points for class after the substitution
-    max_epochs: 10
-    logger: 8
-    initial_lr: 0.0001
+    substitution_threshold: [0.1] # threshold
+    num_points: [1] # number of points for class after the substitution
+    max_epochs: [2]
+    logger: [8]
+    initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
 
   model:
-    name: [lam_h] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [/path/to/your/model.pth] # model parameters
+    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
-    batch_size: [8]
+    instances_path: [data/raw/lvis_v1_train.json]
+    img_dir: [data/raw/train2017]
+  dataloader:
+    batch_size: [1]
     num_workers: [0]
+
+other_grids:
