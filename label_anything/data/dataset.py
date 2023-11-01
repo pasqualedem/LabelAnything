@@ -18,7 +18,7 @@ from torchvision.transforms import (
     PILToTensor,
     ToTensor,
 )
-from transforms import CustomNormalize, CustomResize, PromptsProcessor
+from label_anything.data.transforms import CustomNormalize, CustomResize, PromptsProcessor
 from safetensors import safe_open
 
 
