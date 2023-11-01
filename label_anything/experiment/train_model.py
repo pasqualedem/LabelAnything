@@ -3,12 +3,6 @@ import torch
 
 from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
-from label_anything.logger.utils import (
-    extract_boxes_from_tensor,
-    extract_vertices_from_tensor,
-    image_with_points,
-    structure_annotations,
-)
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import log_every_n
 from .save import save_model
