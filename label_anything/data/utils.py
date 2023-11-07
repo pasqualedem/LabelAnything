@@ -1,9 +1,11 @@
+import glob
 import pandas as pd
 import torchvision.transforms
 from PIL import Image, ImageDraw
 from itertools import combinations
 
 import torch
+import pickle
 import numpy as np
 import itertools
 import json
@@ -293,14 +295,38 @@ def get_gt(
     return gt
 
 
+def load_dict(path: str):
+    """
+    Loads a dictionary from file.
+    """
+    name, ext = path.split(".")
+    if ext == "json":
+        with open(path) as f:
+            print("Using json")
+            instances = json.load(f)
+    elif ext in {"pickle", "pkl"}:
+        print("Using pickle")
+        with open(path, "rb") as f:
+            instances = pickle.load(f)
+    else:
+        raise ValueError("Invalid file extension")
+    return instances
+
+
 def load_instances(
-        json_path: str
+        path: str
 ) -> Dict:
     """
     Loads the instances from file.
     """
-    with open(json_path) as f:
-        instances = json.load(f)
+    print("Loading gt")
+    if "*" in path:
+        files = glob.glob(path)
+        instances = {}
+        for file in files:
+            instances.update(load_dict(file))
+    else:
+        instances = load_dict(path)
     return instances
 
 

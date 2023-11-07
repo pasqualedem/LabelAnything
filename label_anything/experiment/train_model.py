@@ -5,6 +5,7 @@ from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import log_every_n
+from label_anything.utils.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
 from torchmetrics.functional.classification import multiclass_jaccard_index
@@ -32,7 +33,7 @@ def train_epoch(
     for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
         substitutor = Substitutor(
             batch_dict,
-            threshold=train_params["substitution_threshold"],
+            threshold=train_params.get("substitution_threshold", None),
             num_points=train_params.get("num_points", 1),
         )
         for i, (input_dict, gt) in enumerate(substitutor):
@@ -99,8 +100,7 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
     logger.info("Start training loop...")
     accelerator = Accelerator()
 
-    # Loss and Optimizer da overraidere
-    criterion = lambda x, y: torch.nn.functional.cross_entropy(x, y.long())
+    criterion = LabelAnythingLoss(**train_params["loss"])
     optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
 
     # Train the Model

@@ -59,14 +59,14 @@ class Lam(nn.Module):
               'prompt_points': (torch.Tensor) Batched point prompts for
                 this image, with shape BxMxCxNx2. Already transformed to the
                 input frame of the model.
-              'flags_points': (torch.Tensor) Batched labels for point prompts,
+              'flag_points': (torch.Tensor) Batched labels for point prompts,
                 with shape BxN.
               'prompt_bboxes': (torch.Tensor) Batched box inputs, with shape BxMxCx4.
                 Already transformed to the input frame of the model.
-              'box_flags': (torch.Tensor) Batched box flags, with shape BxMxC.
+              'box_flag': (torch.Tensor) Batched box flag, with shape BxMxC.
               'prompt_masks': (torch.Tensor) Batched mask inputs to the model,
                 in the form BxMxCxHxW.s
-              'flags_masks': (torch.Tensor) Batched mask flags to indicate which flag is valid, BxMxC
+              'flag_masks': (torch.Tensor) Batched mask flag to indicate which flag is valid, BxMxC
 
         Returns:
           torch.Tensor: Batched multiclass mask predictions,
@@ -89,17 +89,17 @@ class Lam(nn.Module):
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
         if "prompt_points" in batched_input:
-            points = (batched_input["prompt_points"], batched_input["flags_points"])
+            points = (batched_input["prompt_points"], batched_input["flag_points"])
         else:
             points = None
         if "prompt_bboxes" in batched_input:
             boxes = batched_input["prompt_bboxes"]
-            box_flags = batched_input["flags_bboxes"]
-            boxes = (boxes, box_flags)
+            box_flag = batched_input["flag_bboxes"]
+            boxes = (boxes, box_flag)
         else:
             boxes = None
         if "prompt_masks" in batched_input:
-            masks = (batched_input["prompt_masks"], batched_input["flags_masks"])
+            masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
         else:
             masks = None
         class_embeddings = self.prompt_encoder(
@@ -179,3 +179,34 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+
+    def postprocess_masks(
+        self,
+        masks: torch.Tensor,
+        input_size: Tuple[int, ...],
+        original_size: Tuple[int, ...],
+    ) -> torch.Tensor:
+        """
+        Remove padding and upscale masks to the original image size.
+
+        Arguments:
+          masks (torch.Tensor): Batched masks from the mask_decoder,
+            in BxCxHxW format.
+          input_size (tuple(int, int)): The size of the image input to the
+            model, in (H, W) format. Used to remove padding.
+          original_size (tuple(int, int)): The original size of the image
+            before resizing for input to the model, in (H, W) format.
+
+        Returns:
+          (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
+            is given by original_size.
+        """
+        masks = F.interpolate(
+            masks,
+            (self.image_encoder.img_size, self.image_encoder.img_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        masks = masks[..., : input_size[0], : input_size[1]]
+        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+        return masks

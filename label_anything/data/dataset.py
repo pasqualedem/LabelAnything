@@ -165,7 +165,7 @@ class LabelAnythingDataset(Dataset):
         """
         if self.load_from_dir:
             return Image.open(
-                f'{self.img_dir}/{img_data["file_name"]}'
+                f'{self.img_dir}/{img_data["coco_url"].split("/")[-1]}'
             ).convert("RGB")
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert("RGB")
 
@@ -246,6 +246,8 @@ class LabelAnythingDataset(Dataset):
         return image if not self.preprocess else self.preprocess(image)
 
     def _get_images_or_embeddings(self, image_ids):
+        # TODO: remove this
+        return torch.rand(len(image_ids), 256, 64, 64), "embeddings"
         if self.load_embeddings:
             images = [
                 self.__load_safe_embeddings(image_data)
@@ -256,7 +258,7 @@ class LabelAnythingDataset(Dataset):
             self._load_and_preprocess_image(image_data)
             for image_data in [self.images[image_id] for image_id in image_ids]
         ]
-        return torch.stack(images), "images"
+        return images, "images"
 
     def __getitem__(self, item: int) -> dict:
         base_image_data = self.images[self.image_ids[item]]
@@ -518,7 +520,7 @@ class LabelAnythingDataset(Dataset):
             images = torch.stack([x[image_key] for x in batched_input])
         else:
             image_key = "images"
-            images = torch.stack([x["images"] for x in batched_input])
+            images = torch.stack([torch.stack(x["images"]) for x in batched_input])
 
         data_dict = {
             image_key: images,

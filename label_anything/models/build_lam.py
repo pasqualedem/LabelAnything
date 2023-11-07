@@ -38,10 +38,7 @@ def build_lam_vit_b(checkpoint=None, use_sam_checkpoint=False):
 
 def build_lam_no_vit(checkpoint=None, use_sam_checkpoint=False):
     return _build_lam(
-        encoder_embed_dim=None,
-        encoder_depth=None,
-        encoder_num_heads=None,
-        encoder_global_attn_indexes=None,
+        build_vit=None,
         checkpoint=checkpoint,
         use_sam_checkpoint=use_sam_checkpoint,
         use_vit=False,

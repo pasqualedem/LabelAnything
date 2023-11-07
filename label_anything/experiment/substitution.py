@@ -16,15 +16,23 @@ def generate_points_from_errors(
         num_points (int): The number of points to generate for each class
     """
     device = prediction.device
-    ground_truth = rearrange(torch.nn.functional.one_hot(ground_truth, prediction.shape[1]), "b h w c -> b c h w")
+    ground_truth = rearrange(
+        torch.nn.functional.one_hot(ground_truth, prediction.shape[1]),
+        "b h w c -> b c h w",
+    )
     prediction = prediction.argmax(dim=1)
-    prediction = rearrange(torch.nn.functional.one_hot(prediction, ground_truth.shape[1]), "b h w c -> b c h w")
+    prediction = rearrange(
+        torch.nn.functional.one_hot(prediction, ground_truth.shape[1]),
+        "b h w c -> b c h w",
+    )
     errors = ground_truth - prediction
     coords = torch.nonzero(errors)
     _, counts = torch.unique(coords[:, 0:2], dim=0, return_counts=True, sorted=True)
     sampled_idxs = torch.cat(
         [torch.randint(0, x, (num_points,), device=device) for x in counts]
-    ) + torch.cat([torch.tensor([0], device=device), counts.cumsum(dim=0)])[:-1].repeat_interleave(
+    ) + torch.cat([torch.tensor([0], device=device), counts.cumsum(dim=0)])[
+        :-1
+    ].repeat_interleave(
         num_points
     )
     sampled_points = coords[sampled_idxs]
@@ -48,16 +56,17 @@ class Substitutor:
     """
     A class that cycle all the images in the examples as a query image.
     """
-    keys_to_exchange = [
-            "prompt_points",
-            "prompt_masks",
-            "prompt_bboxes",
-            "flags_masks",
-            "flags_bboxes",
-            "flags_points",
-        ]
 
-    def __init__(self, batch: dict, threshold: float, num_points: int) -> None:
+    keys_to_exchange = [
+        "prompt_points",
+        "prompt_masks",
+        "prompt_bboxes",
+        "flag_masks",
+        "flag_bboxes",
+        "flag_points",
+    ]
+
+    def __init__(self, batch: dict, threshold: float = None, num_points: int = 1) -> None:
         self.batch, self.ground_truths = batch
         self.example_classes = self.batch["classes"]
         self.threshold = threshold
@@ -66,7 +75,16 @@ class Substitutor:
         self.it = 0
 
     def calculate_if_substitute(self):
-        return mean_pairwise_j_index(self.example_classes) > self.threshold
+        if self.threshold is None:
+            return True
+        return (
+            torch.mean(
+                torch.tensor(
+                    [mean_pairwise_j_index(elem) for elem in self.example_classes]
+                )
+            )
+            > self.threshold
+        )
 
     def __iter__(self):
         return self
@@ -89,7 +107,7 @@ class Substitutor:
             labels = rearrange(labels, "b c n -> b 1 c n")
             padding_labels = torch.zeros(
                 labels.shape[0],
-                self.batch["flags_points"].shape[1] - 1,
+                self.batch["flag_points"].shape[1] - 1,
                 *labels.shape[2:],
                 device=labels.device,
             )
@@ -99,8 +117,8 @@ class Substitutor:
             self.batch["prompt_points"] = torch.cat(
                 [self.batch["prompt_points"], sampled_points], dim=3
             )
-            self.batch["flags_points"] = torch.cat(
-                [self.batch["flags_points"], labels], dim=3
+            self.batch["flag_points"] = torch.cat(
+                [self.batch["flag_points"], labels], dim=3
             )
 
     def divide_query_examples(self):
@@ -119,11 +137,11 @@ class Substitutor:
     def __next__(self):
         if "images" in self.batch:
             self.keys_to_exchange.append("images")
-            num_examples = self.batch['images'].shape[1]
+            num_examples = self.batch["images"].shape[1]
             device = self.batch["images"].device
         elif "embeddings" in self.batch:
             self.keys_to_exchange.append("embeddings")
-            num_examples = self.batch['embeddings'].shape[1]
+            num_examples = self.batch["embeddings"].shape[1]
             device = self.batch["embeddings"].device
         else:
             raise ValueError("Batch must contain either images or embeddings")

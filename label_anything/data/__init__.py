@@ -1,9 +1,10 @@
 import torch
 
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms import Compose, PILToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset
+from label_anything.data.transforms import CustomNormalize, CustomResize
 
 
 class RandomDataset(Dataset):
@@ -54,12 +55,10 @@ class RandomDataset(Dataset):
 
 
 def get_dataloader(dataset_args, dataloader_args):
+    SIZE = 1024
 
     preprocess = Compose(
-        [
-            ToTensor(),
-            # Resize((1000, 1000)),
-        ]
+        [CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)]
     )
 
     dataset = LabelAnythingDataset(
