@@ -57,7 +57,16 @@ class Substitutor:
     A class that cycle all the images in the examples as a query image.
     """
 
-    keys_to_exchange = [
+    torch_keys_to_exchange = [
+        "prompt_points",
+        "prompt_masks",
+        "prompt_bboxes",
+        "flag_masks",
+        "flag_bboxes",
+        "flag_points",
+        "dims",
+    ]
+    torch_keys_to_separate = [
         "prompt_points",
         "prompt_masks",
         "prompt_bboxes",
@@ -65,8 +74,11 @@ class Substitutor:
         "flag_bboxes",
         "flag_points",
     ]
+    list_keys_to_separate = ["classes"]
 
-    def __init__(self, batch: dict, threshold: float = None, num_points: int = 1) -> None:
+    def __init__(
+        self, batch: dict, threshold: float = None, num_points: int = 1
+    ) -> None:
         self.batch, self.ground_truths = batch
         self.example_classes = self.batch["classes"]
         self.threshold = threshold
@@ -123,9 +135,15 @@ class Substitutor:
 
     def divide_query_examples(self):
         batch_examples = {}
-        for key in self.keys_to_exchange:
+        for key in self.torch_keys_to_separate:
             batch_examples[key] = self.batch[key][:, 1:]
+        for key in self.list_keys_to_separate:
+            batch_examples[key] = [elem[1:] for elem in self.batch[key]]
         gt = self.ground_truths[:, 0]
+        for key in self.batch.keys() - set(
+            self.torch_keys_to_separate + self.list_keys_to_separate
+        ):
+            batch_examples[key] = self.batch[key]
         if "embeddings" in self.batch:
             batch_examples["embeddings"] = self.batch["embeddings"]
         elif "images" in self.batch:
@@ -136,11 +154,11 @@ class Substitutor:
 
     def __next__(self):
         if "images" in self.batch:
-            self.keys_to_exchange.append("images")
+            self.torch_keys_to_exchange.append("images")
             num_examples = self.batch["images"].shape[1]
             device = self.batch["images"].device
         elif "embeddings" in self.batch:
-            self.keys_to_exchange.append("embeddings")
+            self.torch_keys_to_exchange.append("embeddings")
             num_examples = self.batch["embeddings"].shape[1]
             device = self.batch["embeddings"].device
         else:
@@ -162,10 +180,13 @@ class Substitutor:
             ]
         ).long()
 
-        for key in self.keys_to_exchange:
+        for key in self.torch_keys_to_exchange:
             self.batch[key] = torch.index_select(
                 self.batch[key], dim=1, index=index_tensor
             )
+
+        for key in self.batch.keys() - self.torch_keys_to_exchange:
+            self.batch[key] = self.batch[key][index_tensor]
 
         self.ground_truths = torch.index_select(
             self.ground_truths, dim=1, index=index_tensor

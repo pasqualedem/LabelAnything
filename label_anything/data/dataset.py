@@ -315,7 +315,7 @@ class LabelAnythingDataset(Dataset):
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
             for cat_id in cat_ids:
-                ground_truths[img_id][cat_id] = np.zeros(img_size, dtype=np.uint8)
+                ground_truths[img_id][cat_id] = np.zeros(img_size, dtype=np.int64)
                 # zero mask for no segmentation
                 if cat_id not in self.img2cat_annotations[img_id]:
                     continue
@@ -330,7 +330,7 @@ class LabelAnythingDataset(Dataset):
             ground_truth = torch.from_numpy(
                 np.array(
                     [
-                        ground_truths[img_id][cat_id].astype(np.uint8)
+                        ground_truths[img_id][cat_id].astype(np.int64)
                         for cat_id in cat_ids
                     ]
                 )
@@ -338,7 +338,7 @@ class LabelAnythingDataset(Dataset):
             # add a zeroes tensor to the first dimension
             ground_truth = torch.cat(
                 [
-                    torch.zeros((1, *ground_truth.shape[1:])).type(torch.uint8),
+                    torch.zeros((1, *ground_truth.shape[1:])).type(torch.long),
                     ground_truth,
                 ]
             )

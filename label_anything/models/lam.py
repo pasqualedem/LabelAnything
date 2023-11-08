@@ -4,12 +4,14 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Any, Dict, List, Tuple
+
 import torch
+from einops import rearrange
 from torch import nn
 from torch.nn import functional as F
-from einops import rearrange
 
-from typing import Any, Dict, List, Tuple
+from label_anything.data.utils import get_preprocess_shape
 
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
@@ -25,6 +27,7 @@ class Lam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptImageEncoder,
         mask_decoder: MaskDecoder,
+        image_size: int = 1024,
     ) -> None:
         """
         LAM predicts object masks from an image and a list of examples images with prompts.
@@ -37,6 +40,7 @@ class Lam(nn.Module):
             and encoded prompts.
         """
         super().__init__()
+        self.image_size = image_size
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
@@ -82,7 +86,9 @@ class Lam(nn.Module):
         elif "images" in batched_input:
             B, N, C, H, W = batched_input["images"].shape
             images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
-            embeddings = rearrange(self.image_encoder(images), "(b n) c h w -> b n c h w", b=B)
+            embeddings = rearrange(
+                self.image_encoder(images), "(b n) c h w -> b n c h w", b=B
+            )
             query_embeddings = embeddings[:, 0]
             prompt_embeddings = embeddings[:, 1:]
         else:
@@ -115,7 +121,7 @@ class Lam(nn.Module):
             class_embeddings=class_embeddings,
         )
 
-        return seg
+        return self.postprocess_masks(seg, batched_input["dims"])
 
     def init_pretrained_weights(self, weights):
         """
@@ -183,8 +189,7 @@ class Lam(nn.Module):
     def postprocess_masks(
         self,
         masks: torch.Tensor,
-        input_size: Tuple[int, ...],
-        original_size: Tuple[int, ...],
+        original_sizes: torch.Tensor,
     ) -> torch.Tensor:
         """
         Remove padding and upscale masks to the original image size.
@@ -192,21 +197,52 @@ class Lam(nn.Module):
         Arguments:
           masks (torch.Tensor): Batched masks from the mask_decoder,
             in BxCxHxW format.
-          input_size (tuple(int, int)): The size of the image input to the
-            model, in (H, W) format. Used to remove padding.
-          original_size (tuple(int, int)): The original size of the image
+          original_size (torch.Tensor): The original size of the image
             before resizing for input to the model, in (H, W) format.
 
         Returns:
           (torch.Tensor): Batched masks in BxCxHxW format, where (H, W)
             is given by original_size.
         """
+        max_original_size = torch.max(original_sizes.view(-1, 2), 0).values.tolist()
+        original_sizes = original_sizes[:, 0, :]
+        input_sizes = [
+            get_preprocess_shape(h, w, self.image_size) for (h, w) in original_sizes
+        ]
         masks = F.interpolate(
             masks,
-            (self.image_encoder.img_size, self.image_encoder.img_size),
+            (self.image_size, self.image_size),
             mode="bilinear",
             align_corners=False,
         )
-        masks = masks[..., : input_size[0], : input_size[1]]
-        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+        masks = [
+            masks[i, :, : input_size[0], : input_size[1]]
+            for i, input_size in enumerate(input_sizes)
+        ]
+        masks = [
+            F.interpolate(
+                torch.unsqueeze(masks[i], 0),
+                original_size.tolist(),
+                mode="bilinear",
+                align_corners=False,
+            )
+            for i, original_size in enumerate(original_sizes)
+        ]
+
+        masks = torch.cat(
+            [
+                F.pad(
+                    mask,
+                    (
+                        0,
+                        max_original_size[1] - original_sizes[:, 1],
+                        0,
+                        max_original_size[0] - original_sizes[:, 0],
+                    ),
+                    mode="constant",
+                    value=0.0,
+                )
+                for mask in masks
+            ]
+        )
         return masks

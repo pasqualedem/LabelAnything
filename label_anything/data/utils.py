@@ -648,8 +648,19 @@ def collate_gts(gt, dims):
     return out.type(torch.uint8)
 
 
-def collate_batch_gts(gt, dims):
-    out = torch.zeros(size=(gt.size(0), *dims))
+def collate_batch_gts(gt, dims, fill_value=-100):
+    out = torch.full(size=(gt.size(0), *dims), fill_value=fill_value, dtype=torch.long)
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
-    return out.type(torch.uint8)
+    return out
+
+
+def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
+    """
+    Compute the output size given input size and target long side length.
+    """
+    scale = long_side_length * 1.0 / max(oldh, oldw)
+    newh, neww = oldh * scale, oldw * scale
+    neww = int(neww + 0.5)
+    newh = int(newh + 0.5)
+    return (newh, neww)
