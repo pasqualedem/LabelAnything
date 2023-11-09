@@ -7,18 +7,14 @@ from label_anything.data.utils import mean_pairwise_j_index
 
 def cartesian_product(a, b):
     # Create 1D tensors for indices along each dimension
-    indices_b = torch.arange(a)
-    indices_m = torch.arange(b)
+    indices_a = torch.arange(a)
+    indices_b = torch.arange(b)
 
-    # Use meshgrid to create 2D tensors for indices along each dimension
-    grid_b, grid_m = torch.meshgrid(indices_b, indices_m)
-
-    # Combine the 2D tensors to get the final tensor
-    return torch.cat((grid_b, grid_m), dim=0).T
+    return torch.cartesian_prod(indices_a, indices_b)
 
 
 def generate_points_from_errors(
-    prediction: torch.tensor, ground_truth: torch.tensor, num_points: int
+    prediction: torch.tensor, ground_truth: torch.tensor, num_points: int, ignore_index: int = -100
 ):
     """
     Generates a point for each class that can be positive or negative depending on the error being false positive or false negative.
@@ -29,6 +25,8 @@ def generate_points_from_errors(
     """
     B, C = prediction.shape[:2]
     device = prediction.device
+    ground_truth = ground_truth.clone()
+    ground_truth[ground_truth == ignore_index] = 0
     ground_truth = rearrange(
         torch.nn.functional.one_hot(ground_truth, C),
         "b h w c -> b c h w",

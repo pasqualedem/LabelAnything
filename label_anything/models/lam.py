@@ -235,14 +235,14 @@ class Lam(nn.Module):
                     mask,
                     (
                         0,
-                        max_original_size[1] - original_sizes[:, 1],
+                        max_original_size[1] - original_sizes[i, 1],
                         0,
-                        max_original_size[0] - original_sizes[:, 0],
+                        max_original_size[0] - original_sizes[i, 0],
                     ),
                     mode="constant",
                     value=0.0,
                 )
-                for mask in masks
+                for i, mask in enumerate(masks)
             ]
         )
         return masks
