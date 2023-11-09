@@ -335,13 +335,6 @@ class LabelAnythingDataset(Dataset):
                     ]
                 )
             )
-            # add a zeroes tensor to the first dimension
-            ground_truth = torch.cat(
-                [
-                    torch.zeros((1, *ground_truth.shape[1:])).type(torch.long),
-                    ground_truth,
-                ]
-            )
             ground_truths[img_id] = torch.argmax(ground_truth, 0)
 
         return list(ground_truths.values())

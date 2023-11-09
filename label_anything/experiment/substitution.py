@@ -5,6 +5,18 @@ from einops import rearrange
 from label_anything.data.utils import mean_pairwise_j_index
 
 
+def cartesian_product(a, b):
+    # Create 1D tensors for indices along each dimension
+    indices_b = torch.arange(a)
+    indices_m = torch.arange(b)
+
+    # Use meshgrid to create 2D tensors for indices along each dimension
+    grid_b, grid_m = torch.meshgrid(indices_b, indices_m)
+
+    # Combine the 2D tensors to get the final tensor
+    return torch.cat((grid_b, grid_m), dim=0).T
+
+
 def generate_points_from_errors(
     prediction: torch.tensor, ground_truth: torch.tensor, num_points: int
 ):
@@ -15,19 +27,22 @@ def generate_points_from_errors(
         ground_truth (torch.Tensor): The ground truth segmentation mask of shape (batch_size, num_classes, height, width)
         num_points (int): The number of points to generate for each class
     """
+    B, C = prediction.shape[:2]
     device = prediction.device
     ground_truth = rearrange(
-        torch.nn.functional.one_hot(ground_truth, prediction.shape[1]),
+        torch.nn.functional.one_hot(ground_truth, C),
         "b h w c -> b c h w",
     )
     prediction = prediction.argmax(dim=1)
     prediction = rearrange(
-        torch.nn.functional.one_hot(prediction, ground_truth.shape[1]),
+        torch.nn.functional.one_hot(prediction, C),
         "b h w c -> b c h w",
     )
     errors = ground_truth - prediction
     coords = torch.nonzero(errors)
-    _, counts = torch.unique(coords[:, 0:2], dim=0, return_counts=True, sorted=True)
+    classes, counts = torch.unique(
+        coords[:, 0:2], dim=0, return_counts=True, sorted=True
+    )
     sampled_idxs = torch.cat(
         [torch.randint(0, x, (num_points,), device=device) for x in counts]
     ) + torch.cat([torch.tensor([0], device=device), counts.cumsum(dim=0)])[
@@ -42,6 +57,22 @@ def generate_points_from_errors(
         sampled_points[:, 2],
         sampled_points[:, 3],
     ]
+    all_classes = cartesian_product(B, C)
+    missing = torch.tensor(
+        list(
+            set(tuple(elem) for elem in all_classes.tolist())
+            - set(tuple(elem) for elem in classes.tolist())
+        ),
+        device=device,
+    )
+    missing = torch.cat([missing, torch.zeros(missing.shape, device=device)], dim=1)
+    sampled_points = torch.cat([sampled_points, missing], dim=0)
+    _, indices = torch.sort(sampled_points[:, :2], dim=0)
+    sampled_points = torch.index_select(sampled_points, 0, indices[:, 1])
+    
+    labels = torch.cat([labels, torch.zeros(missing.shape[0], device=device)])
+    labels = torch.index_select(labels, 0, indices[:, 1])
+
     sampled_points = rearrange(
         sampled_points[:, 2:4],
         "(b c n) xy -> b c n xy",
@@ -186,7 +217,9 @@ class Substitutor:
             )
 
         for key in self.batch.keys() - self.torch_keys_to_exchange:
-            self.batch[key] = self.batch[key][index_tensor]
+            self.batch[key] = [
+                [elem[i] for i in index_tensor] for elem in self.batch[key]
+            ]
 
         self.ground_truths = torch.index_select(
             self.ground_truths, dim=1, index=index_tensor

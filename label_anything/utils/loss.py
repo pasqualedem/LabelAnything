@@ -127,7 +127,7 @@ class DiceLoss(nn.Module):
         target_one_hot = target.clone()
         target_one_hot[target_one_hot == self.ignore_index] = input.shape[1]
         target_one_hot = F.one_hot(target_one_hot, num_classes=input.shape[1] + 1).permute(
-            0, 3, 2, 1
+            0, 3, 1, 2
         )
         target_one_hot = target_one_hot[:, :-1, ::]
 

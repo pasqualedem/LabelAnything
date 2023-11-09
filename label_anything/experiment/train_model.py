@@ -55,13 +55,13 @@ def train_epoch(
             total_jaccard += jaccard.item()
             comet_logger.log_metric("batch_jaccard", jaccard.item())
 
-            if log_every_n(batch_idx, train_params["logger"]):
-                comet_logger.log_batch(
-                    batch_idx=batch_idx,
-                    step=i,
-                    input_dict=input_dict,
-                    categories=dataloader.dataset.categories,
-                )
+            # if log_every_n(batch_idx, train_params["logger"]):
+            #     comet_logger.log_batch(
+            #         batch_idx=batch_idx,
+            #         step=i,
+            #         input_dict=input_dict,
+            #         categories=dataloader.dataset.categories,
+            #     )
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
