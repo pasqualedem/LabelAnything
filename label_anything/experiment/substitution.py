@@ -3,6 +3,7 @@ import torch
 from einops import rearrange
 
 from label_anything.data.utils import mean_pairwise_j_index
+from label_anything.data.transforms import PromptsProcessor
 
 
 def cartesian_product(a, b):
@@ -14,7 +15,10 @@ def cartesian_product(a, b):
 
 
 def generate_points_from_errors(
-    prediction: torch.tensor, ground_truth: torch.tensor, num_points: int, ignore_index: int = -100
+    prediction: torch.tensor,
+    ground_truth: torch.tensor,
+    num_points: int,
+    ignore_index: int = -100,
 ):
     """
     Generates a point for each class that can be positive or negative depending on the error being false positive or false negative.
@@ -67,7 +71,7 @@ def generate_points_from_errors(
     sampled_points = torch.cat([sampled_points, missing], dim=0)
     _, indices = torch.sort(sampled_points[:, :2], dim=0)
     sampled_points = torch.index_select(sampled_points, 0, indices[:, 1])
-    
+
     labels = torch.cat([labels, torch.zeros(missing.shape[0], device=device)])
     labels = torch.index_select(labels, 0, indices[:, 1])
 
@@ -114,6 +118,7 @@ class Substitutor:
         self.num_points = num_points
         self.substitute = self.calculate_if_substitute()
         self.it = 0
+        self.prompt_processor = PromptsProcessor()
 
     def calculate_if_substitute(self):
         if self.threshold is None:
@@ -137,6 +142,12 @@ class Substitutor:
         if self.substitute:
             sampled_points, labels = generate_points_from_errors(
                 prediction, ground_truth, self.num_points
+            )
+            sampled_points = torch.stack(
+                [
+                    self.prompt_processor.torch_apply_coords(elem, dim[0])
+                    for dim, elem in zip(self.batch["dims"], sampled_points)
+                ]
             )
             sampled_points = rearrange(sampled_points, "b c n xy -> b 1 c n xy")
             padding_points = torch.zeros(
