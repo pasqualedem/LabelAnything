@@ -1,6 +1,12 @@
 from label_anything.visualization.visualize import get_image
-from label_anything.logger.utils import extract_polygons_from_tensor
+from label_anything.logger.utils import (
+    extract_polygons_from_tensor,
+    resize_padding,
+    take_image,
+    extract_masks_dynamic,
+)
 import math
+import torch.nn.functional as F
 
 
 class Logger:
@@ -19,6 +25,33 @@ class Logger:
             res_classes.append(list(c[max_idx]))
         return res_classes
 
+    def log_gt(self, batch_idx, step, input_dict, gt, categories):
+        images = input_dict["images"]
+        dims = input_dict["dims"]
+        data = []
+        annotations = [{"name": "Ground truth", "data": data}]
+        for i in range(images.shape[0]):
+            sample_images = images[i]
+            for j in range(sample_images.shape[0]):
+                img = take_image(sample_images[j], dims[i, j])
+                image = get_image(img)
+                ground = resize_padding(gt[i, j], dims[i, j])
+                masks = extract_masks_dynamic(ground)
+
+                for i, mask in enumerate(masks):
+                    polygons = extract_polygons_from_tensor(mask.int())
+                    data.append({"points": polygons, "score": None})
+
+                self.experiment.log_image(
+                    image_data=image,
+                    annotations=annotations,
+                    metadata={
+                        "batch_idx": batch_idx,
+                        "gt_idx": i,
+                        "substitution_step": step,
+                    },
+                )
+
     def log_batch(self, batch_idx, step, input_dict, categories):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
@@ -35,12 +68,7 @@ class Logger:
             for j in range(sample_images.shape[0]):
                 image = get_image(sample_images[j])
                 data = []
-                annotations = [
-                    {
-                        "name": "Ground truth",
-                        "data": data
-                    }
-                ]
+                annotations = [{"name": "Ground truth", "data": data}]
 
                 # log masks, boxes and points
                 for c in range(1, input_dict["prompt_masks"].shape[2]):
@@ -52,11 +80,11 @@ class Logger:
                     flag_mask = flags_masks[i, j, c]
                     flag_boxes = flags_boxes[i, j, c]
                     flag_points = flags_points[i, j, c]
-                    label = categories[classes[i][c-1]]["name"]
+                    label = categories[classes[i][c - 1]]["name"]
 
                     if flag_mask == 1:
                         polygons = extract_polygons_from_tensor(mask)
-                        print(polygons)
+                        # print(polygons)
                         data.append({"points": polygons, "label": label, "score": None})
 
                     boxes_log = []
@@ -88,16 +116,18 @@ class Logger:
                                 ps += [int(x_new), int(y_new)]
                             points_log.append(ps)
                     if len(points_log) > 0:
-                        print(points_log)
-                        data.append({"points": points_log, "label": label, "score": None})
-
+                        # print(points_log)
+                        data.append(
+                            {"points": points_log, "label": label, "score": None}
+                        )
+                print("log image")
                 self.experiment.log_image(
                     image_data=image,
                     annotations=annotations,
                     metadata={
-                            "batch_idx": batch_idx,
-                            "sample_idx": i,
-                            "substitution_step": step,
+                        "batch_idx": batch_idx,
+                        "sample_idx": i,
+                        "substitution_step": step,
                     },
                 )
 

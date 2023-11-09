@@ -29,9 +29,9 @@ def train_epoch(
     total_jaccard = 0
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
-    
+
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
-    
+
     for batch_idx, batch_dict in bar:
         substitutor = Substitutor(
             batch_dict,
@@ -62,6 +62,13 @@ def train_epoch(
             #         batch_idx=batch_idx,
             #         step=i,
             #         input_dict=input_dict,
+            #         categories=dataloader.dataset.categories,
+            #     )
+            # comet_logger.log_gt(
+            #         batch_idx,
+            #         i,
+            #         input_dict,
+            #         gt,
             #         categories=dataloader.dataset.categories,
             #     )
             bar.set_postfix({"loss": loss.item()})
