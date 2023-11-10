@@ -29,6 +29,12 @@ class PromptType(Enum):
     BBOX = 0
     MASK = 1
     POINT = 2
+    
+
+class Label(Enum):
+    POSITIVE = 1
+    NULL = 0
+    NEGATIVE = -1
 
 
 class LabelAnythingDataset(Dataset):

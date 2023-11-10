@@ -127,17 +127,17 @@ class Lam(nn.Module):
         return embeddings
 
     def prepare_prompts(self, batched_input):
-        if "prompt_points" in batched_input:
+        if "prompt_points" in batched_input and batched_input["flag_points"].sum() > 0:
             points = (batched_input["prompt_points"], batched_input["flag_points"])
         else:
             points = None
-        if "prompt_bboxes" in batched_input:
+        if "prompt_bboxes" in batched_input and batched_input["flag_bboxes"].sum() > 0:
             boxes = batched_input["prompt_bboxes"]
             box_flag = batched_input["flag_bboxes"]
             boxes = (boxes, box_flag)
         else:
             boxes = None
-        if "prompt_masks" in batched_input:
+        if "prompt_masks" in batched_input and batched_input["flag_masks"].sum() > 0:
             masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
         else:
             masks = None

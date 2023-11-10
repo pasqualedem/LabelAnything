@@ -14,6 +14,8 @@ from typing import Any, Optional, Tuple, Type
 from .common import LayerNorm2d, MLPBlock
 from .transformer import TwoWayTransformer, Attention
 
+from label_anything.data.dataset import Label
+
 
 class PromptEncoder(nn.Module):
     def __init__(
@@ -86,10 +88,10 @@ class PromptEncoder(nn.Module):
             points = torch.cat([points, padding_point], dim=1)
             labels = torch.cat([labels, padding_label], dim=1)
         point_embedding = self.pe_layer.forward_with_coords(points, self.input_image_size)
-        point_embedding[labels == -1] = 0.0
-        point_embedding[labels == -1] += self.not_a_point_embed.weight
-        point_embedding[labels == 0] += self.point_embeddings[0].weight
-        point_embedding[labels == 1] += self.point_embeddings[1].weight
+        point_embedding[labels == Label.NULL] = 0.0
+        point_embedding[labels == Label.NULL] += self.not_a_point_embed.weight
+        point_embedding[labels == Label.NEGATIVE] += self.point_embeddings[0].weight
+        point_embedding[labels == Label.POSITIVE] += self.point_embeddings[1].weight
         return point_embedding
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
@@ -269,8 +271,8 @@ class PromptImageEncoder(PromptEncoder):
         mask_embedding = self.mask_downscaling(masks)
         mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
         H, W = mask_embedding.shape[-2:]
-        mask_embedding[masks_flags == 0] = 0.0
-        mask_embedding[masks_flags == 0] += self.not_a_mask_embed.weight
+        mask_embedding[masks_flags == Label.NULL] = 0.0
+        mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
         return mask_embedding
     
     def _get_batch_examples_class_size(
@@ -330,6 +332,9 @@ class PromptImageEncoder(PromptEncoder):
             boxes, flags = boxes
             box_embeddings = self._embed_boxes(boxes, flags)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
+        if boxes is None and points is None:
+            sparse_embeddings = torch.zeros((bs, 1, self.embed_dim), device=self._get_device())
+            sparse_embeddings += self.not_a_point_embed.weight
 
         # Attention over sparse embeddings
         sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
