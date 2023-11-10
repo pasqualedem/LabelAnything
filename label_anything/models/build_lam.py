@@ -59,6 +59,7 @@ def _build_lam(
 
     vit = build_vit() if use_vit else None
     lam = Lam(
+        image_size=image_size,
         image_encoder=vit,
         prompt_encoder=PromptImageEncoder(
             embed_dim=prompt_embed_dim,

@@ -4,39 +4,12 @@ from torchmetrics import JaccardIndex, AUROC, F1Score, ConfusionMatrix
 from torchmetrics import Precision as TPrecision
 from torchmetrics import Recall as TRecall
 from torchmetrics import JaccardIndex as TJaccardIndex
-from torchmetrics.functional.classification.roc import _roc_compute
+from torchmetrics.functional.classification import multiclass_jaccard_index
 from ..models import ComposedOutput
 
 from copy import deepcopy
-from typing import Mapping
+from typing import Any, Mapping
 from functools import reduce
-
-
-class AUC(AUROC):
-    def update(self, preds: Tensor, target: Tensor) -> None:
-        AUROC.update(self, preds.cpu(), target.cpu())
-
-    def get_roc(self):
-        preds = torch.cat(self.preds, dim=0)
-        target = torch.cat(self.target, dim=0)
-        if not self.num_classes:
-            raise ValueError(
-                f"`num_classes` bas to be positive number, but got {self.num_classes}")
-        return _roc_compute(preds, target, self.num_classes, self.pos_label)
-
-
-def PerClassAUC(name, code):
-    def __init__(self, name, code, *args, **kwargs):
-        AUC.__init__(self, **kwargs)
-        self.code = code
-
-    def update(self, preds: Tensor, target: Tensor) -> None:
-        preds = preds[:, self.code, ::].flatten()
-        target = (target == code).flatten()
-        AUC.update(self, preds, target)
-
-    metric = type(name, (AUC,), {"update": update, "__init__": __init__})
-    return metric(name, code)
 
 
 def get_multiclass(names, values):
@@ -180,11 +153,15 @@ def get_metric_titles_components_mapping(metrics):
             new_dict[value] = key
     return new_dict
 
+        
+def jaccard(preds: Tensor, target: Tensor, ignore_index=-100, **kwargs) -> None:
+    target = target.clone()
+    target[target == ignore_index] = 0
+    return multiclass_jaccard_index(preds, target, **kwargs)
+
 
 METRICS = {
     'jaccard': JaccardIndex,
-    'auc': AUC,
-    'perclassauc': PerClassAUC,
     'f1': F1,
     'f1score': F1Score,
     'precision': Precision,

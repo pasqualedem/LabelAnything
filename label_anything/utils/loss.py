@@ -84,11 +84,12 @@ class DiceLoss(nn.Module):
     """
 
     def __init__(
-        self, weight=None, reduction: str = "mean", average: str = "micro"
+        self, weight=None, reduction: str = "mean", average: str = "micro", ignore_index=-100,
     ) -> None:
         super(DiceLoss, self).__init__()
         self.weight = None
         self.average = average
+        self.ignore_index = ignore_index
         if weight:
             self.weight = torch.tensor(weight)
             if self.average == "micro":
@@ -122,10 +123,13 @@ class DiceLoss(nn.Module):
         # compute softmax over the classes axis
         input_soft = F.softmax(input, dim=1)
 
-        # create the labels one hot tensor
-        target_one_hot = F.one_hot(target, num_classes=input.shape[1]).permute(
-            0, 3, 2, 1
+        # create the labels one hot tensort
+        target_one_hot = target.clone()
+        target_one_hot[target_one_hot == self.ignore_index] = input.shape[1]
+        target_one_hot = F.one_hot(target_one_hot, num_classes=input.shape[1] + 1).permute(
+            0, 3, 1, 2
         )
+        target_one_hot = target_one_hot[:, :-1, ::]
 
         if self.average == "macro":
             return self._macro_forward(input_soft, target_one_hot)

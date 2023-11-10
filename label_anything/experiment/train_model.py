@@ -8,7 +8,7 @@ from label_anything.utils.utils import log_every_n
 from label_anything.utils.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
-from torchmetrics.functional.classification import multiclass_jaccard_index
+from label_anything.utils.metrics import jaccard
 
 logger = get_logger(__name__)
 
@@ -30,7 +30,9 @@ def train_epoch(
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
-    for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+    bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
+
+    for batch_idx, batch_dict in bar:
         substitutor = Substitutor(
             batch_dict,
             threshold=train_params.get("substitution_threshold", None),
@@ -41,19 +43,19 @@ def train_epoch(
 
             outputs = model(input_dict)
             loss = criterion(outputs, gt)
-            substitutor.generate_new_points(outputs, gt)
 
             pred = outputs.argmax(dim=1)
-            jaccard = multiclass_jaccard_index(pred, gt, num_classes=outputs.shape[1])
 
             accelerator.backward(loss)
             optimizer.step()
 
+            substitutor.generate_new_points(outputs, gt)
+            jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
             batch_total = gt.size(0)
 
             total_loss += loss.item()
-            total_jaccard += jaccard.item()
-            comet_logger.log_metric("batch_jaccard", jaccard.item())
+            total_jaccard += jaccard_value.item()
+            comet_logger.log_metric("batch_jaccard", jaccard_value.item())
 
             if log_every_n(batch_idx, train_params["logger"]):
                 comet_logger.log_batch(
@@ -62,6 +64,14 @@ def train_epoch(
                     input_dict=input_dict,
                     categories=dataloader.dataset.categories,
                 )
+            comet_logger.log_gt(
+                    batch_idx,
+                    i,
+                    input_dict,
+                    gt,
+                    categories=dataloader.dataset.categories,
+                )
+            bar.set_postfix({"loss": loss.item()})
 
     total_loss /= len(dataloader.dataset)
     correct /= len(dataloader.dataset)
