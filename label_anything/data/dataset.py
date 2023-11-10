@@ -192,7 +192,7 @@ class LabelAnythingDataset(Dataset):
         points = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
 
         # get prompts from annotations
-        classes = {img_id: set() for img_id in image_ids}
+        classes = {img_id: list() for img_id in image_ids}
 
         for img_id in image_ids:
             img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
@@ -202,7 +202,7 @@ class LabelAnythingDataset(Dataset):
                     # the chosen category is not in the iamge
                     continue
                 
-                classes[img_id].add(cat_id)
+                classes[img_id].append(cat_id)
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
                     prompt_type = random.choice(list(PromptType))
@@ -295,7 +295,7 @@ class LabelAnythingDataset(Dataset):
             "prompt_bboxes": bboxes,
             "flag_bboxes": flag_bboxes,
             "dims": dims,
-            "classes": list(map(list, classes.values())),
+            "classes": list(classes.values()),
             "ground_truths": ground_truths,
         }
 
