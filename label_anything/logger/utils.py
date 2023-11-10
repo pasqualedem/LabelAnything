@@ -24,11 +24,21 @@ def take_image(image, dims):
     return resize_anything(crop, dims)
 
 
-def resize_padding(gt, dims):
+def resize_gt(gt, dims):
+    gt = F.interpolate(
+        gt.unsqueeze(0).unsqueeze(0),
+        size=(int(dims[0]), int(dims[1])),
+        mode="bilinear",
+        align_corners=False,
+    )
+    return gt.squeeze(0).squeeze(0)
+
+
+def crop_padding(gt):
     # Trova gli indici delle righe e delle colonne da eliminare
     rows_to_keep = torch.any(gt != -100, dim=1)
     cols_to_keep = torch.any(gt != -100, dim=0)
-    return resize_anything(gt[rows_to_keep][:, cols_to_keep], dims)
+    return gt[rows_to_keep][:, cols_to_keep]
 
 
 def generate_class_colors(num_classes):
