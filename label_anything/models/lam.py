@@ -118,10 +118,8 @@ class Lam(nn.Module):
     def prepare_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
-            B, N, C, H, W = embeddings.shape
         elif "images" in batched_input:
-            B, N, C, H, W = batched_input["images"].shape
-            images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
+            images = batched_input["images"]
             embeddings = self.image_encoder(images)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
