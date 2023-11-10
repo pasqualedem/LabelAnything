@@ -364,6 +364,31 @@ class PromptImageEncoder(PromptEncoder):
         box_embeddings = rearrange(box_embeddings, 'b m c n d-> (b m c) n d')
         return box_embeddings
 
+    def get_unattended_prompts(        
+        self,
+        image_embeddings: torch.Tensor,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning unattended prompts
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
+            and labels to embed (B, M, C, 2)
+          boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
+          masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+
+        Returns:
+          torch.Tensor: sparse embeddings for the points and boxes, with shape
+            BxNx(embed_dim), where N is determined by the number of input points
+            and boxes.
+          torch.Tensor: dense embeddings for the masks, in the shape
+            Bx(embed_dim)x(embed_H)x(embed_W)
+        """
+
     def forward(
         self,
         image_embeddings: torch.Tensor,
@@ -372,8 +397,7 @@ class PromptImageEncoder(PromptEncoder):
         masks: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Embeds different types of prompts, returning both sparse and dense
-        embeddings.
+        Embeds different types of prompts, returning class embeddings
 
         Arguments:
           image_embeddings (torch.Tensor): the embeddings from the image encoder
