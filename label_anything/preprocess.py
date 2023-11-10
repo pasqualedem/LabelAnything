@@ -1,11 +1,13 @@
+import logging
+import os
+
 import numpy as np
 import torch
-import os
 import torch.nn.functional as F
-
-from tqdm import tqdm
 from safetensors.torch import save_file
 from torchvision.transforms import Compose, PILToTensor
+from tqdm import tqdm
+
 from label_anything.data.dataset import LabelAnyThingOnlyImageDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.models import model_registry
@@ -16,8 +18,14 @@ def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
     """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%Y-%m-%d %H-%M-%S",
+    )
+    n_steps = len(dataloader)
 
-    for batch in tqdm(dataloader):
+    for idx, batch in enumerate(dataloader):
         img, image_id = batch
         img = img.to(device)
         out = model(img).cpu()
@@ -26,6 +34,8 @@ def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
                 {"embedding": out[i]},
                 os.path.join(outfolder, f"{image_id[i]}.safetensors"),
             )
+        if idx % 10 == 0:
+            logging.info(f"Step {idx}/{n_steps}")
 
 
 def preprocess_images_to_embeddings(
@@ -61,7 +71,9 @@ def preprocess_images_to_embeddings(
     if compile:
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
-    preprocess_image = Compose([CustomResize(1024), PILToTensor(), CustomNormalize(1024)])
+    preprocess_image = Compose(
+        [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
+    )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
     )

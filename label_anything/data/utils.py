@@ -1,9 +1,11 @@
+import glob
 import pandas as pd
 import torchvision.transforms
 from PIL import Image, ImageDraw
 from itertools import combinations
 
 import torch
+import pickle
 import numpy as np
 import itertools
 import json
@@ -293,14 +295,38 @@ def get_gt(
     return gt
 
 
+def load_dict(path: str):
+    """
+    Loads a dictionary from file.
+    """
+    name, ext = path.split(".")
+    if ext == "json":
+        with open(path) as f:
+            print("Using json")
+            instances = json.load(f)
+    elif ext in {"pickle", "pkl"}:
+        print("Using pickle")
+        with open(path, "rb") as f:
+            instances = pickle.load(f)
+    else:
+        raise ValueError("Invalid file extension")
+    return instances
+
+
 def load_instances(
-        json_path: str
+        path: str
 ) -> Dict:
     """
     Loads the instances from file.
     """
-    with open(json_path) as f:
-        instances = json.load(f)
+    print("Loading gt")
+    if "*" in path:
+        files = glob.glob(path)
+        instances = {}
+        for file in files:
+            instances.update(load_dict(file))
+    else:
+        instances = load_dict(path)
     return instances
 
 
@@ -622,8 +648,19 @@ def collate_gts(gt, dims):
     return out.type(torch.uint8)
 
 
-def collate_batch_gts(gt, dims):
-    out = torch.zeros(size=(gt.size(0), *dims))
+def collate_batch_gts(gt, dims, fill_value=-100):
+    out = torch.full(size=(gt.size(0), *dims), fill_value=fill_value, dtype=torch.long)
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
-    return out.type(torch.uint8)
+    return out
+
+
+def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
+    """
+    Compute the output size given input size and target long side length.
+    """
+    scale = long_side_length * 1.0 / max(oldh, oldw)
+    newh, neww = oldh * scale, oldw * scale
+    neww = int(neww + 0.5)
+    newh = int(newh + 0.5)
+    return (newh, neww)

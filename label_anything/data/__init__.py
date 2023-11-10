@@ -1,9 +1,10 @@
 import torch
 
 from torch.utils.data import DataLoader, Dataset
-from torchvision.transforms import Compose, ToTensor
+from torchvision.transforms import Compose, PILToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset
+from label_anything.data.transforms import CustomNormalize, CustomResize
 
 
 class RandomDataset(Dataset):
@@ -53,23 +54,18 @@ class RandomDataset(Dataset):
         return {k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()}, torch.stack(gt_list)
 
 
-def get_dataloader(**kwargs):
+def get_dataloader(dataset_args, dataloader_args):
+    SIZE = 1024
 
     preprocess = Compose(
-        [
-            ToTensor(),
-            # Resize((1000, 1000)),
-        ]
+        [CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)]
     )
 
-    # dataset = LabelAnythingDataset(
-    #     instances_path="label_anything/data/lvis_v1_train.json",
-    #     preprocess=preprocess,
-    #     max_num_examples=10,
-    #     j_index_value=0.1,
-    # )
-    dataset = RandomDataset()
+    dataset = LabelAnythingDataset(
+        **dataset_args,
+        preprocess=preprocess,
+    )
     dataloader = DataLoader(
-        dataset=dataset, batch_size=kwargs.get("batch_size"), shuffle=False, collate_fn=dataset.collate_fn
+        dataset=dataset, **dataloader_args, collate_fn=dataset.collate_fn
     )
     return dataloader

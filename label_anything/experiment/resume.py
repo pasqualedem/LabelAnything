@@ -6,7 +6,6 @@ from comet_ml.integration.pytorch import load_model as load
 
 from label_anything.experiment.run import Run
 from label_anything.logger.text_logger import get_logger
-from label_anything.logger.logger import logger
 
 
 logger = get_logger(__name__)

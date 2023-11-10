@@ -2,6 +2,33 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 import colorsys
+from torchvision.transforms.functional import resize
+from label_anything.data.utils import get_preprocess_shape
+import torch.nn.functional as F
+import torch
+
+
+def resize_anything(image, dims):
+    img = F.interpolate(
+        image.unsqueeze(0),
+        size=(int(dims[0]), int(dims[1])),
+        mode="bilinear",
+        align_corners=False,
+    ).squeeze(0)
+    return img
+
+
+def take_image(image, dims):
+    h, w = get_preprocess_shape(int(dims[0]), int(dims[1]), 1024)
+    crop = image[:, :h, :w]
+    return resize_anything(crop, dims)
+
+
+def resize_padding(gt, dims):
+    # Trova gli indici delle righe e delle colonne da eliminare
+    rows_to_keep = torch.any(gt != -100, dim=1)
+    cols_to_keep = torch.any(gt != -100, dim=0)
+    return resize_anything(gt[rows_to_keep][:, cols_to_keep], dims)
 
 
 def generate_class_colors(num_classes):
@@ -55,9 +82,9 @@ def structure_annotations(annotations):
             "name": "Predictions",
             "data": [
                 {
-                    "points": [annotations],
+                    "points": annotations,
                     "label": "1",
-                    "score": 0.9,
+                    "score": 1.0,
                 }
             ],
         }
@@ -111,7 +138,11 @@ def extract_labels_and_points_from_tensor(tensor):
     return annotations
 
 
-def extract_vertices_from_tensor(tensor):
+def extract_masks_dynamic(gt):
+    return [gt == value for value in torch.unique(gt)]
+
+
+def extract_polygons_from_tensor(tensor):
     """
     Args:
         binary_tensor (torch.Tensor()): tensor to extract vertices
@@ -119,25 +150,20 @@ def extract_vertices_from_tensor(tensor):
     Returns:
         list[int]: list of indices of vertices
     """
-    binary_array = (tensor.cpu().numpy() * 255).astype(np.uint8)
+    tensor = resize(tensor.unsqueeze(0), (1024, 1024), interpolation=Image.NEAREST)
+    tensor = np.array(tensor).astype(np.uint8).squeeze()
+    contours, _ = cv2.findContours(tensor, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    polygons = []
 
-    # Trova i contorni nella figura
-    contours, _ = cv2.findContours(
-        binary_array,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_SIMPLE,
-    )
+    for obj in contours:
+        coords = []
 
-    # Estrai i vertici dalla lista dei contorni e convertili in un formato desiderato
-    vertices_list = []
-    for contour in contours:
-        epsilon = 0.04 * cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, epsilon, True)
-        vertices = approx.squeeze().tolist()
-        flattened_vertices = [coord for point in vertices for coord in point]
-        vertices_list.extend(flattened_vertices)
+        for point in obj:
+            coords.append(int(point[0][0]))
+            coords.append(int(point[0][1]))
 
-    return vertices_list
+        polygons.append(coords)
+    return polygons
 
 
 def data_to_single(data: dict):

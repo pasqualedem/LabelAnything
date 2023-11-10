@@ -9,14 +9,12 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-  tags: [mytag1, mytag2] # list of tags to attach to the run in logger platform
+  tags: [[mytag1, mytag2]] # list of tags to attach to the run in logger platform
 
   train_params:
     loss:
-      name: [cross_entropy] # class loss name
-      params:
     seed: [42] # random seed to set
-    substitution_threshold: [0.1] # threshold
+    # substitution_threshold: [0.1] # threshold 
     num_points: [1] # number of points for class after the substitution
     max_epochs: [2]
     logger: [8]
@@ -24,12 +22,16 @@ parameters:
     optimizer: [AdamW]
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
     use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
-    batch_size: [1]
+    instances_path: [data/raw/annotations/lvis_v1_train.json]
+    img_dir: [data/raw/train2017]
+    max_num_examples: [2]
+  dataloader:
+    batch_size: [2]
     num_workers: [0]
 
 other_grids:
