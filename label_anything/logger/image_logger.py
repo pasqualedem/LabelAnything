@@ -1,7 +1,8 @@
 from label_anything.visualization.visualize import get_image
 from label_anything.logger.utils import (
     extract_polygons_from_tensor,
-    resize_padding,
+    crop_padding,
+    resize_gt,
     take_image,
     extract_masks_dynamic,
 )
@@ -25,22 +26,37 @@ class Logger:
             res_classes.append(list(c[max_idx]))
         return res_classes
 
+    def log_pred(self, batch_idx, input_dict, pred):
+        images = input_dict["images"]
+        data = []
+        annotations = [{"name": "Prediction", "data": data}]
+        for b in pred.shape[0]:
+            sample_images = images[b]
+            image = get_image(sample_images)
+            mask = pred[b]
+            polygons = extract_polygons_from_tensor(mask)
+            data.append({"points": polygons, "score": None})
+
+        self.experiment.log_image(
+            image_data=image,
+            annotations=annotations,
+            metadata={"batch_idx": batch_idx},
+        )
+
     def log_gt(self, batch_idx, step, input_dict, gt, categories):
         images = input_dict["images"]
         dims = input_dict["dims"]
         data = []
         annotations = [{"name": "Ground truth", "data": data}]
-        for i in range(images.shape[0]):
-            sample_images = images[i]
-            for j in range(sample_images.shape[0]):
-                img = take_image(sample_images[j], dims[i, j])
-                image = get_image(img)
-                ground = resize_padding(gt[i, j], dims[i, j])
-                masks = extract_masks_dynamic(ground)
 
-                for i, mask in enumerate(masks):
-                    polygons = extract_polygons_from_tensor(mask.int())
-                    data.append({"points": polygons, "score": None})
+        for b in range(gt.shape[0]):
+            n_gt = resize_gt(crop_padding(gt[b, 0]).float(), dims[b, 0])
+            masks = extract_masks_dynamic(n_gt)
+            sample_images = images[b]
+            image = get_image(sample_images)
+            for i, mask in enumerate(masks):
+                polygons = extract_polygons_from_tensor(mask)
+                data.append({"points": polygons, "score": None})
 
                 self.experiment.log_image(
                     image_data=image,
