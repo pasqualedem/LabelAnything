@@ -254,6 +254,7 @@ class PromptImageEncoder(PromptEncoder):
         self.sparse_embedding_attention = Attention(
                     embed_dim, num_heads, downsample_rate=attention_downsample_rate
                 )
+        self.no_sparse_embedding = nn.Embedding(1, embed_dim) # For when no sparse embeddings in input
         self.norm_sparse_embedding_attention = nn.LayerNorm(embed_dim)
         self.example_attention = Attention(
             embed_dim, num_heads, downsample_rate=attention_downsample_rate
@@ -334,7 +335,7 @@ class PromptImageEncoder(PromptEncoder):
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
         if boxes is None and points is None:
             sparse_embeddings = torch.zeros((bs, 1, self.embed_dim), device=self._get_device())
-            sparse_embeddings += self.not_a_point_embed.weight
+            sparse_embeddings += self.no_sparse_embedding.weight
 
         # Attention over sparse embeddings
         sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
@@ -364,8 +365,8 @@ class PromptImageEncoder(PromptEncoder):
         box_embeddings = super()._embed_boxes(boxes)
         box_embeddings = rearrange(box_embeddings, '(b m c n) xy d -> b m c (n xy) d', b=b, c=c, m=m, n=n)
         two_points_padding = padding.repeat(1, 1, 1, 2)
-        box_embeddings[two_points_padding == 0] = 0.0
-        box_embeddings[two_points_padding == 0] += self.not_a_point_embed.weight
+        box_embeddings[two_points_padding == Label.NULL] = 0.0
+        box_embeddings[two_points_padding == Label.NULL] += self.not_a_point_embed.weight
         box_embeddings = rearrange(box_embeddings, 'b m c n d-> (b m c) n d')
         return box_embeddings
 
