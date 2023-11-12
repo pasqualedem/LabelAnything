@@ -297,8 +297,8 @@ class PromptImageEncoder(PromptEncoder):
     def embed_points_masks(
         self,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
-        boxes: Optional[torch.Tensor],
-        masks: Optional[torch.Tensor],
+        boxes: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        masks: Optional[Tuple[torch.Tensor, torch.Tensor]],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense

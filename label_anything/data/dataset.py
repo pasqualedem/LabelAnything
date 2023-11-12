@@ -40,6 +40,8 @@ class LabelAnythingDataset(Dataset):
         preprocess=ToTensor(),  # preprocess step
         seed=42,  # for reproducibility
         emb_dir=None,
+        n_folds=-1,
+        val_fold=-1,
     ):
         super().__init__()
         instances = utils.load_instances(instances_path)
@@ -48,6 +50,13 @@ class LabelAnythingDataset(Dataset):
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
         assert not (self.load_from_dir and self.load_embeddings)
+
+        # to use with FSS benchmarks
+        self.n_folds = n_folds
+        self.val_fold = val_fold
+        if self.val_fold != -1:
+            assert self.n_folds > 0
+            self.__prepare_benchmark_train()
 
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
@@ -102,6 +111,14 @@ class LabelAnythingDataset(Dataset):
         torch.manual_seed(self.seed)
 
         self.log_images = False
+
+    def __prepare_benchmark_train(self):
+        """Prepare the dataset for benchmark training.
+        """
+        n_val_categories = len(self.categories) // self.splits
+        val_categories_idxs = set(self.val_fold + self.n_folds * v for v in range(n_val_categories))
+        self.categories = {k: v for k, v in self.categories.items() if k not in val_categories_idxs}
+        self.annotations = {k: v for k, v in self.annotations.items() if v["category_id"] not in val_categories_idxs}
 
     def reset_num_examples(self):
         """Set the number of examples for the next query image.
