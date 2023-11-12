@@ -293,7 +293,8 @@ class PromptImageEncoder(PromptEncoder):
             boxes = boxes[0]
             return boxes.shape[0], boxes.shape[1], boxes.shape[2]
         elif masks is not None:
-            return masks.shape[0], masks.shape[1], boxes.shape[2]
+            masks = masks[0]
+            return masks.shape[0], masks.shape[1], masks.shape[2]
         else:
             return 1
     

@@ -107,6 +107,7 @@ class Substitutor:
         "flag_bboxes",
         "flag_points",
     ]
+    list_keys_to_exchange = ["classes"]
     list_keys_to_separate = ["classes"]
 
     def __init__(
@@ -225,10 +226,14 @@ class Substitutor:
                 self.batch[key], dim=1, index=index_tensor
             )
 
-        for key in self.batch.keys() - self.torch_keys_to_exchange:
+        for key in self.list_keys_to_exchange:
             self.batch[key] = [
                 [elem[i] for i in index_tensor] for elem in self.batch[key]
             ]
+        for key in self.batch.keys() - set(
+            self.torch_keys_to_exchange + self.list_keys_to_exchange
+        ):
+            self.batch[key] = self.batch[key]
 
         self.ground_truths = torch.index_select(
             self.ground_truths, dim=1, index=index_tensor

@@ -94,7 +94,10 @@ class Lam(nn.Module):
             class_embeddings=class_embeddings,
         )
 
-        return self.postprocess_masks(seg, batched_input["dims"])
+        seg = self.postprocess_masks(seg, batched_input["dims"])
+        if "flag_gts" in batched_input:
+            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
+        return seg
 
     def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
