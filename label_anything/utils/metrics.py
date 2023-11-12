@@ -4,7 +4,7 @@ from torchmetrics import JaccardIndex, AUROC, F1Score, ConfusionMatrix
 from torchmetrics import Precision as TPrecision
 from torchmetrics import Recall as TRecall
 from torchmetrics import JaccardIndex as TJaccardIndex
-from torchmetrics.functional.classification import multiclass_jaccard_index
+from torchmetrics.functional.classification import multiclass_jaccard_index, binary_jaccard_index
 from ..models import ComposedOutput
 
 from copy import deepcopy
@@ -158,6 +158,16 @@ def jaccard(preds: Tensor, target: Tensor, ignore_index=-100, **kwargs) -> None:
     target = target.clone()
     target[target == ignore_index] = 0
     return multiclass_jaccard_index(preds, target, **kwargs)
+
+
+def fbiou(preds: Tensor, target: Tensor, ignore_index=-100) -> None:
+    # target is (B, H, W) while preds is (B, C, H, W)
+    target = target.clone()
+    target[target == ignore_index] = 0
+    # collapse pred to (B, H, W) (foreground/background)
+    preds = preds.argmax(dim=1)
+    preds[preds != 0] = 1
+    return binary_jaccard_index(preds, target)
 
 
 METRICS = {

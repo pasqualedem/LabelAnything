@@ -42,6 +42,7 @@ class LabelAnythingDataset(Dataset):
         emb_dir=None,
         n_folds=-1,
         val_fold=-1,
+        split="train"
     ):
         super().__init__()
         instances = utils.load_instances(instances_path)
@@ -51,17 +52,19 @@ class LabelAnythingDataset(Dataset):
         self.img_dir = img_dir
         assert not (self.load_from_dir and self.load_embeddings)
 
-        # to use with FSS benchmarks
-        self.n_folds = n_folds
-        self.val_fold = val_fold
-        if self.val_fold != -1:
-            assert self.n_folds > 0
-            self.__prepare_benchmark_train()
-
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
         self.categories = {x["id"]: x for x in instances["categories"]}
+
+        # to use with FSS benchmarks
+        self.n_folds = n_folds
+        self.val_fold = val_fold
+        self.split = split
+        if self.val_fold != -1:
+            assert self.n_folds > 0
+            self.__prepare_benchmark()
+
         # useful dicts
         (
             self.img2cat,
@@ -75,8 +78,6 @@ class LabelAnythingDataset(Dataset):
         self.image_ids = [
             x["id"] for x in instances["images"] if x["id"] in img2cat_keys
         ]
-
-        # id to image
         self.images = {
             x["id"]: x for x in instances["images"] if x["id"] in img2cat_keys
         }
@@ -112,13 +113,17 @@ class LabelAnythingDataset(Dataset):
 
         self.log_images = False
 
-    def __prepare_benchmark_train(self):
+    def __prepare_benchmark(self):
         """Prepare the dataset for benchmark training.
         """
-        n_val_categories = len(self.categories) // self.splits
+        n_categories = len(self.categories)
+        n_val_categories = n_categories // self.n_folds
         val_categories_idxs = set(self.val_fold + self.n_folds * v for v in range(n_val_categories))
-        self.categories = {k: v for k, v in self.categories.items() if k not in val_categories_idxs}
-        self.annotations = {k: v for k, v in self.annotations.items() if v["category_id"] not in val_categories_idxs}
+        train_categories_idxs = set(x for x in range(n_categories)) - val_categories_idxs
+        categories_idxs = val_categories_idxs if self.split == "val" else train_categories_idxs
+        self.categories = {k: v for i, (k, v) in enumerate(self.categories.items()) if i in categories_idxs}
+        category_ids = set(self.categories.keys())
+        self.annotations = {k: v for k, v in self.annotations.items() if v["category_id"] in category_ids}
 
     def reset_num_examples(self):
         """Set the number of examples for the next query image.
@@ -263,8 +268,6 @@ class LabelAnythingDataset(Dataset):
         return image if not self.preprocess else self.preprocess(image)
 
     def _get_images_or_embeddings(self, image_ids):
-        # TODO: remove this
-        return torch.rand(len(image_ids), 256, 64, 64), "embeddings"
         if self.load_embeddings:
             images = [
                 self.__load_safe_embeddings(image_data)
@@ -278,11 +281,19 @@ class LabelAnythingDataset(Dataset):
         return images, "images"
 
     def __getitem__(self, item: int) -> dict:
-        base_image_data = self.images[self.image_ids[item]]
-
-        image_ids, aux_cat_ids = self._extract_examples(base_image_data)
-        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-        cat_ids.insert(0, -1)  # add the background class
+        if self.split == "train":
+            base_image_data = self.images[self.image_ids[item]]
+            image_ids, aux_cat_ids = self._extract_examples(base_image_data)
+            cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+            cat_ids.insert(0, -1)  # add the background class
+        else:
+            # take a random category (use numpy)
+            cat_id = np.random.choice(list(self.categories.keys()))
+            # take two random images from that category
+            image_ids = np.random.choice(
+                list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
+            )
+            cat_ids = [-1, cat_id]
 
         # load, stack and preprocess the images
         images, image_key = self._get_images_or_embeddings(image_ids)
@@ -357,7 +368,7 @@ class LabelAnythingDataset(Dataset):
         return list(ground_truths.values())
 
     def __len__(self):
-        return len(self.images)
+        return len(self.images) if self.split == "train" else 1000
 
     def annotations_to_tensor(self, annotations, prompt_type) -> torch.Tensor:
         """Transform a dict of annotations of prompt_type to a padded tensor.

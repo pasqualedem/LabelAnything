@@ -8,7 +8,7 @@ from label_anything.utils.utils import log_every_n
 from label_anything.utils.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
-from label_anything.utils.metrics import jaccard
+from label_anything.utils.metrics import jaccard, fbiou
 
 logger = get_logger(__name__)
 
@@ -25,8 +25,8 @@ def train_epoch(
 ):
     model.train()
     total_loss = 0
-    correct = 0
     total_jaccard = 0
+    total_fbiou = 0
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
@@ -51,10 +51,12 @@ def train_epoch(
 
             substitutor.generate_new_points(outputs, gt)
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
+            fbiou_value = fbiou(pred, gt)
             batch_total = gt.size(0)
 
             total_loss += loss.item()
             total_jaccard += jaccard_value.item()
+            total_fbiou += fbiou_value.item()
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
 
             if log_every_n(batch_idx, train_params["logger"]):
@@ -64,7 +66,7 @@ def train_epoch(
                     input_dict=input_dict,
                     categories=dataloader.dataset.categories,
                 )
-            comet_logger.log_gt(
+                comet_logger.log_gt(
                     batch_idx,
                     i,
                     input_dict,
@@ -74,11 +76,10 @@ def train_epoch(
             bar.set_postfix({"loss": loss.item()})
 
     total_loss /= len(dataloader.dataset)
-    correct /= len(dataloader.dataset)
     total_jaccard /= len(dataloader.dataset)
 
     comet_logger.log_metrics(
-        {"accuracy": correct, "loss": total_loss, "jaccard": total_jaccard},
+        {"loss": total_loss, "jaccard/mIoU": total_jaccard, "FB-IoU": total_fbiou},
         epoch=epoch,
     )
 
