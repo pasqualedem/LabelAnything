@@ -164,8 +164,8 @@ class Substitutor:
                 *labels.shape[2:],
                 device=labels.device,
             )
-            sampled_points = torch.cat([padding_points, sampled_points], dim=1)
-            labels = torch.cat([padding_labels, labels], dim=1)
+            sampled_points = torch.cat([sampled_points, padding_points], dim=1)
+            labels = torch.cat([labels, padding_labels], dim=1)
 
             self.batch["prompt_points"] = torch.cat(
                 [self.batch["prompt_points"], sampled_points], dim=3
@@ -185,12 +185,7 @@ class Substitutor:
             self.torch_keys_to_separate + self.list_keys_to_separate
         ):
             batch_examples[key] = self.batch[key]
-        if "embeddings" in self.batch:
-            batch_examples["embeddings"] = self.batch["embeddings"]
-        elif "images" in self.batch:
-            batch_examples["images"] = self.batch["images"]
-        else:
-            raise ValueError("Batch must contain either images or embeddings")
+
         return batch_examples, gt
 
     def __next__(self):
