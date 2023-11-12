@@ -25,12 +25,15 @@ def train_epoch(
 ):
     model.train()
     total_loss = 0
+    first_step_loss = 0
     correct = 0
     total_jaccard = 0
+    first_step_jaccard = 0
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
+    tot_steps = 0
 
     for batch_idx, batch_dict in bar:
         substitutor = Substitutor(
@@ -55,30 +58,43 @@ def train_epoch(
 
             total_loss += loss.item()
             total_jaccard += jaccard_value.item()
+            if i == 0:
+                first_step_loss += loss.item()
+                first_step_jaccard += jaccard_value.item()
+
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
 
             # if log_every_n(batch_idx, train_params["logger"]):
-                # comet_logger.log_batch(
-                    # batch_idx=batch_idx,
-                    # step=i,
-                    # input_dict=input_dict,
-                    # categories=dataloader.dataset.categories,
-                # )
+            # comet_logger.log_batch(
+            # batch_idx=batch_idx,
+            # step=i,
+            # input_dict=input_dict,
+            # categories=dataloader.dataset.categories,
+            # )
             # comet_logger.log_gt(
-                    # batch_idx,
-                    # i,
-                    # input_dict,
-                    # gt,
-                    # categories=dataloader.dataset.categories,
-                # )
-            bar.set_postfix({"loss": loss.item()})
+            # batch_idx,
+            # i,
+            # input_dict,
+            # gt,
+            # categories=dataloader.dataset.categories,
+            # )
+            bar.set_postfix({"loss": loss.item(), "jac": jaccard_value.item()})
+            tot_steps += 1
 
-    total_loss /= len(dataloader.dataset)
-    correct /= len(dataloader.dataset)
-    total_jaccard /= len(dataloader.dataset)
+    total_loss /= tot_steps
+    correct /= tot_steps
+    total_jaccard /= tot_steps
+    first_step_loss /= len(dataloader.dataset)
+    first_step_jaccard /= len(dataloader.dataset)
 
     comet_logger.log_metrics(
-        {"accuracy": correct, "loss": total_loss, "jaccard": total_jaccard},
+        {
+            "accuracy": correct,
+            "loss": total_loss,
+            "jaccard": total_jaccard,
+            "first_step_loss": first_step_loss,
+            "first_step_jaccard": first_step_jaccard,
+        },
         epoch=epoch,
     )
 
