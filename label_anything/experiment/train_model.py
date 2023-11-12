@@ -112,6 +112,8 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
 
     criterion = LabelAnythingLoss(**train_params["loss"])
     optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
+    if train_params.get("compile", False):
+        model = model.compile()
 
     # Train the Model
     with experiment.train():
