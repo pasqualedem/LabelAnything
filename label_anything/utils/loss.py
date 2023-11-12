@@ -166,7 +166,7 @@ class LabelAnythingLoss(nn.Module):
         super().__init__()
         self.focal_loss = FocalLoss(gamma=2)
         self.focal_weight = focal_weight
-        self.dice_loss = DiceLoss()
+        self.dice_loss = DiceLoss(average="macro")
         self.dice_weight = dice_weight
 
     def forward(self, logits, target):
