@@ -1,5 +1,5 @@
 import os
-from label_anything.data import get_dataloader
+from label_anything.data import get_dataloaders
 from label_anything.logger.text_logger import get_logger
 from label_anything.experiment.parameters import parse_params
 import sys
@@ -7,7 +7,7 @@ import comet_ml
 from copy import deepcopy
 
 from label_anything.logger.image_logger import Logger
-from label_anything.experiment.train_model import train
+from label_anything.experiment.train_model import train_and_test
 from label_anything.models import model_registry
 
 logger = get_logger(__name__)
@@ -66,15 +66,19 @@ class Run:
         self.url = self.experiment.url
         self.name = self.experiment.name
 
-        self.dataloader = get_dataloader(self.dataset_params, self.dataloader_params)
+        self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
+            self.dataset_params, self.dataloader_params
+        )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
 
     def launch(self):
-        train(
+        train_and_test(
             self.params,
             self.model,
-            self.dataloader,
+            self.train_loader,
+            self.val_loader,
+            self.test_loader,
             self.comet_logger,
             self.experiment,
             self.train_params,

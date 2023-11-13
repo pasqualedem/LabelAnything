@@ -54,7 +54,7 @@ class RandomDataset(Dataset):
         return {k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()}, torch.stack(gt_list)
 
 
-def get_dataloader(dataset_args, dataloader_args):
+def get_dataloaders(dataset_args, dataloader_args):
     SIZE = 1024
 
     preprocess = Compose(
@@ -64,8 +64,8 @@ def get_dataloader(dataset_args, dataloader_args):
     dataset = LabelAnythingDataset(
         **dataset_args,
         preprocess=preprocess,
-    )
+    )    
     dataloader = DataLoader(
         dataset=dataset, **dataloader_args, collate_fn=dataset.collate_fn
     )
-    return dataloader
+    return dataloader, None, None # placeholder for val and test loaders until Raffaele implements them

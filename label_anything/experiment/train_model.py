@@ -65,11 +65,15 @@ def train_epoch(
                 first_step_jaccard += jaccard_value.item()
 
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
-            
+
             image_idx = batch_idx * dataloader.batch_size
-            if log_every_n(image_idx - 1, train_params["logger"].get("log_frequency", None)):
+            if log_every_n(
+                image_idx - 1, train_params["logger"].get("log_frequency", None)
+            ):
                 dataloader.dataset.log_images = True
-            if log_every_n(image_idx, train_params["logger"].get("log_frequency", None)):
+            if log_every_n(
+                image_idx, train_params["logger"].get("log_frequency", None)
+            ):
                 comet_logger.log_batch(
                     batch_idx=batch_idx,
                     step=i,
@@ -84,7 +88,13 @@ def train_epoch(
                     categories=dataloader.dataset.categories,
                 )
                 dataloader.dataset.log_images = False
-            bar.set_postfix({"loss": loss.item(), "jac/miou": jaccard_value.item(), "fbiou": fbiou_value.item()})
+            bar.set_postfix(
+                {
+                    "loss": loss.item(),
+                    "jac/miou": jaccard_value.item(),
+                    "fbiou": fbiou_value.item(),
+                }
+            )
             tot_steps += 1
 
     total_loss /= tot_steps
@@ -105,30 +115,66 @@ def train_epoch(
     )
 
 
-def test(model, criterion, dataloader, epoch, comet_logger):
+def validate(model, criterion, dataloader, epoch, comet_logger):
     model.eval()
     total_loss = 0
-    correct = 0
+    jaccard_value = 0
+    fbiou_value = 0
 
     with torch.no_grad():
         for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
             image_dict, gt = batch_dict
 
             output = model(image_dict)
+            jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
+            fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
             total_loss += criterion(output, gt).item()  # sum up batch loss
-            pred = output.argmax(
-                dim=1,
-                keepdim=True,
-            )  # get the index of the max log-probability
-            correct += pred.eq(image_dict["example"].view_as(pred)).sum().item()
 
         total_loss /= len(dataloader.dataset)
-        correct /= len(dataloader.dataset)
 
-        comet_logger.log_metrics({"accuracy": correct, "loss": total_loss}, epoch=epoch)
+        comet_logger.log_metrics(
+            {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
+            epoch=epoch,
+        )
 
 
-def train(args, model, dataloader, comet_logger, experiment, train_params):
+def test(model, criterion, dataloader, comet_logger):
+    model.eval()
+    total_loss = 0
+    jaccard_value = 0
+    fbiou_value = 0
+
+    examples = dataloader.dataset.get_examples()
+    class_embeddings = model.get_class_embeddings(examples)
+
+    with torch.no_grad():
+        for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+            image_dict, gt = batch_dict
+
+            output = model.predict(image_dict, class_embeddings)
+            jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
+            fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
+            total_loss += criterion(output, gt).item()  # sum up batch loss
+
+        total_loss /= len(dataloader)
+        jaccard_value /= len(dataloader)
+        fbiou_value /= len(dataloader)
+
+        comet_logger.log_metrics(
+            {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
+        )
+
+
+def train_and_test(
+    args,
+    model,
+    train_loader,
+    val_loader,
+    test_loader,
+    comet_logger,
+    experiment,
+    train_params,
+):
     logger.info("Start training loop...")
     accelerator = Accelerator()
 
@@ -146,20 +192,23 @@ def train(args, model, dataloader, comet_logger, experiment, train_params):
                 model,
                 optimizer,
                 criterion,
-                dataloader,
+                train_loader,
                 epoch,
                 comet_logger,
                 accelerator,
                 train_params,
             )
+            logger.info(f"Finished Epoch {epoch}")
 
-    # save_model(experiment, model, model._get_name)
-    logger.info(f"Finished Training {args.get('experiment').get('name')}")
+            save_model(experiment, model, model._get_name)
+            if val_loader:
+                with experiment.validate():
+                    logger.info(f"Running Model Testing {args.name}")
+                    validate(model, criterion, val_loader, epoch, comet_logger)
+                    
+    if test_loader:
+        with experiment.test():
+            logger.info(f"Running Model Testing {args.name}")
+            test(model, criterion, test_loader, comet_logger)
 
-    # with experiment.test():
-    #     logger.info(f"Running Model Testing {args.name}")
-    #     for epoch in range(hyper_params["num_epochs"]):
-    #         test(args, model, criterion, dataloader, comet_logger)
-
-    # logger.info(f"Finished Testing {args.name}")
     experiment.end()
