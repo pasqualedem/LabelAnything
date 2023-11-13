@@ -107,6 +107,7 @@ class Substitutor:
         "flag_bboxes",
         "flag_points",
     ]
+    list_keys_to_exchange = ["classes"]
     list_keys_to_separate = ["classes"]
 
     def __init__(
@@ -163,8 +164,8 @@ class Substitutor:
                 *labels.shape[2:],
                 device=labels.device,
             )
-            sampled_points = torch.cat([padding_points, sampled_points], dim=1)
-            labels = torch.cat([padding_labels, labels], dim=1)
+            sampled_points = torch.cat([sampled_points, padding_points], dim=1)
+            labels = torch.cat([labels, padding_labels], dim=1)
 
             self.batch["prompt_points"] = torch.cat(
                 [self.batch["prompt_points"], sampled_points], dim=3
@@ -184,12 +185,7 @@ class Substitutor:
             self.torch_keys_to_separate + self.list_keys_to_separate
         ):
             batch_examples[key] = self.batch[key]
-        if "embeddings" in self.batch:
-            batch_examples["embeddings"] = self.batch["embeddings"]
-        elif "images" in self.batch:
-            batch_examples["images"] = self.batch["images"]
-        else:
-            raise ValueError("Batch must contain either images or embeddings")
+
         return batch_examples, gt
 
     def __next__(self):
@@ -225,10 +221,14 @@ class Substitutor:
                 self.batch[key], dim=1, index=index_tensor
             )
 
-        for key in self.batch.keys() - self.torch_keys_to_exchange:
+        for key in self.list_keys_to_exchange:
             self.batch[key] = [
                 [elem[i] for i in index_tensor] for elem in self.batch[key]
             ]
+        for key in self.batch.keys() - set(
+            self.torch_keys_to_exchange + self.list_keys_to_exchange
+        ):
+            self.batch[key] = self.batch[key]
 
         self.ground_truths = torch.index_select(
             self.ground_truths, dim=1, index=index_tensor

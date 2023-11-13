@@ -29,6 +29,12 @@ class PromptType(Enum):
     BBOX = 0
     MASK = 1
     POINT = 2
+    
+
+class Label(Enum):
+    POSITIVE = 1
+    NULL = 0
+    NEGATIVE = -1
 
 
 class LabelAnythingDataset(Dataset):
@@ -534,6 +540,11 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
+        
+        # flag_gts
+        flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
+        for i, x in enumerate(classes):
+            flag_gts[i, : len(x[0]) + 1] = 1
 
         # images
         if "embeddings" in batched_input[0].keys():
@@ -553,6 +564,7 @@ class LabelAnythingDataset(Dataset):
             "flag_masks": flag_masks,
             "dims": dims,
             "classes": classes,
+            "flag_gts": flag_gts,
         }
 
         if self.log_images and not self.load_embeddings:

@@ -78,6 +78,28 @@ class Lam(nn.Module):
                 C is the number of classes, (H, W) is the
                 original size of the image.
         """
+        query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(batched_input)
+        points, boxes, masks = self.prepare_prompts(batched_input)
+
+        class_embeddings = self.prompt_encoder(
+            image_embeddings=prompt_embeddings,
+            points=points,
+            boxes=boxes,
+            masks=masks,
+        )
+
+        seg = self.mask_decoder(
+            image_embeddings=query_embeddings,
+            image_pe=self.prompt_encoder.get_dense_pe(),
+            class_embeddings=class_embeddings,
+        )
+
+        seg = self.postprocess_masks(seg, batched_input["dims"])
+        if "flag_gts" in batched_input:
+            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
+        return seg
+
+    def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
             B, N, C, H, W = embeddings.shape
@@ -94,34 +116,36 @@ class Lam(nn.Module):
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
-        if "prompt_points" in batched_input:
+        return query_embeddings, prompt_embeddings
+    
+    def prepare_embeddings(self, batched_input):
+        if "embeddings" in batched_input:
+            embeddings = batched_input["embeddings"]
+        elif "images" in batched_input:
+            images = batched_input["images"]
+            embeddings = self.image_encoder(images)
+        else:
+            raise ValueError("Either 'images' or 'embeddings' must be provided.")
+
+        return embeddings
+
+    def prepare_prompts(self, batched_input):
+        if "prompt_points" in batched_input and batched_input["flag_points"].sum() > 0:
             points = (batched_input["prompt_points"], batched_input["flag_points"])
         else:
             points = None
-        if "prompt_bboxes" in batched_input:
+        if "prompt_bboxes" in batched_input and batched_input["flag_bboxes"].sum() > 0:
             boxes = batched_input["prompt_bboxes"]
             box_flag = batched_input["flag_bboxes"]
             boxes = (boxes, box_flag)
         else:
             boxes = None
-        if "prompt_masks" in batched_input:
+        if "prompt_masks" in batched_input and batched_input["flag_masks"].sum() > 0:
             masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
         else:
             masks = None
-        class_embeddings = self.prompt_encoder(
-            image_embeddings=prompt_embeddings,
-            points=points,
-            boxes=boxes,
-            masks=masks,
-        )
 
-        seg = self.mask_decoder(
-            image_embeddings=query_embeddings,
-            image_pe=self.prompt_encoder.get_dense_pe(),
-            class_embeddings=class_embeddings,
-        )
-
-        return self.postprocess_masks(seg, batched_input["dims"])
+        return points, boxes, masks
 
     def init_pretrained_weights(self, weights):
         """
@@ -185,6 +209,30 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+
+    def generate_class_embeddings(self, example_dict):
+        prompt_embeddings = self.prepare_embeddings(example_dict)
+        points, boxes, masks = self.prepare_prompts(example_dict)
+        class_embeddings = self.prompt_encoder(
+            image_embeddings=prompt_embeddings,
+            points=points,
+            boxes=boxes,
+            masks=masks,
+        )
+        return class_embeddings
+    
+    def predict(self, batched_input, class_embeddings=None):
+        if class_embeddings is None:
+            return self.forward(batched_input)
+        query_embeddings = self.prepare_embeddings(batched_input)
+        
+        seg = self.mask_decoder(
+            image_embeddings=query_embeddings,
+            image_pe=self.prompt_encoder.get_dense_pe(),
+            class_embeddings=class_embeddings,
+        )
+
+        return self.postprocess_masks(seg, batched_input["dims"])
 
     def postprocess_masks(
         self,
