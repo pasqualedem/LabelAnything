@@ -8,7 +8,7 @@ from label_anything.utils.utils import log_every_n
 from label_anything.utils.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
-from label_anything.utils.metrics import jaccard
+from label_anything.utils.metrics import jaccard, fbiou
 
 logger = get_logger(__name__)
 
@@ -25,10 +25,11 @@ def train_epoch(
 ):
     model.train()
     total_loss = 0
-    first_step_loss = 0
-    correct = 0
     total_jaccard = 0
+    total_fbiou = 0
+    first_step_loss = 0
     first_step_jaccard = 0
+    first_step_fbiou = 0
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
@@ -54,10 +55,12 @@ def train_epoch(
 
             substitutor.generate_new_points(outputs, gt)
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
+            fbiou_value = fbiou(pred, gt)
             batch_total = gt.size(0)
 
             total_loss += loss.item()
             total_jaccard += jaccard_value.item()
+            total_fbiou = fbiou_value.item()
             if i == 0:
                 first_step_loss += loss.item()
                 first_step_jaccard += jaccard_value.item()
@@ -78,14 +81,15 @@ def train_epoch(
             # gt,
             # categories=dataloader.dataset.categories,
             # )
-            bar.set_postfix({"loss": loss.item(), "jac": jaccard_value.item()})
+            bar.set_postfix({"loss": loss.item(), "jac/miou": jaccard_value.item(), "fbiou": fbiou_value.item()})
             tot_steps += 1
 
     total_loss /= tot_steps
-    correct /= tot_steps
     total_jaccard /= tot_steps
+    total_fbiou /= tot_steps
     first_step_loss /= len(dataloader.dataset)
     first_step_jaccard /= len(dataloader.dataset)
+    first_step_fbiou /= len(dataloader.dataset)
 
     comet_logger.log_metrics(
         {

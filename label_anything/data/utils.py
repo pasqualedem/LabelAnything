@@ -299,7 +299,7 @@ def load_dict(path: str):
     """
     Loads a dictionary from file.
     """
-    name, ext = path.split(".")
+    name, ext = str(path).split(".")
     if ext == "json":
         with open(path) as f:
             print("Using json")
@@ -320,7 +320,7 @@ def load_instances(
     Loads the instances from file.
     """
     print("Loading gt")
-    if "*" in path:
+    if "*" in str(path):
         files = glob.glob(path)
         instances = {}
         for file in files:
@@ -642,6 +642,8 @@ def collate_coords(
 
 
 def collate_gts(gt, dims):
+    """Collate ground truths for a single sample (query + support).
+    """
     out = torch.zeros(dims)
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
@@ -649,6 +651,8 @@ def collate_gts(gt, dims):
 
 
 def collate_batch_gts(gt, dims, fill_value=-100):
+    """Collate ground truths for a batch of samples, here the fill_value must be -100.
+    """
     out = torch.full(size=(gt.size(0), *dims), fill_value=fill_value, dtype=torch.long)
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
