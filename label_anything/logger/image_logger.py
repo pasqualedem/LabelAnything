@@ -116,7 +116,7 @@ class Logger:
 
                     points_log = []
                     for k in range(points.shape[0]):
-                        if flag_points[k] == 1:
+                        if flag_points[k] != 0:
                             x, y = points[k].tolist()
                             ps = []
                             radius = 10
@@ -133,8 +133,9 @@ class Logger:
                             points_log.append(ps)
                     if len(points_log) > 0:
                         # print(points_log)
+                        point_label = label if flag_points[k] == 1 else "Neg-" + label
                         data.append(
-                            {"points": points_log, "label": label, "score": None}
+                            {"points": points_log, "label": point_label, "score": None}
                         )
                 print("log image")
                 self.experiment.log_image(

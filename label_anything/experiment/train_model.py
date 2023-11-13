@@ -56,7 +56,6 @@ def train_epoch(
             substitutor.generate_new_points(outputs, gt)
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
             fbiou_value = fbiou(pred, gt)
-            batch_total = gt.size(0)
 
             total_loss += loss.item()
             total_jaccard += jaccard_value.item()
@@ -66,34 +65,37 @@ def train_epoch(
                 first_step_jaccard += jaccard_value.item()
 
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
-
-            # if log_every_n(batch_idx, train_params["logger"]):
-            # comet_logger.log_batch(
-            # batch_idx=batch_idx,
-            # step=i,
-            # input_dict=input_dict,
-            # categories=dataloader.dataset.categories,
-            # )
-            # comet_logger.log_gt(
-            # batch_idx,
-            # i,
-            # input_dict,
-            # gt,
-            # categories=dataloader.dataset.categories,
-            # )
+            
+            image_idx = batch_idx * dataloader.batch_size
+            if log_every_n(image_idx - 1, train_params["logger"].get("log_frequency", None)):
+                dataloader.dataset.log_images = True
+            if log_every_n(image_idx, train_params["logger"].get("log_frequency", None)):
+                comet_logger.log_batch(
+                    batch_idx=batch_idx,
+                    step=i,
+                    input_dict=input_dict,
+                    categories=dataloader.dataset.categories,
+                )
+                comet_logger.log_gt(
+                    batch_idx,
+                    i,
+                    input_dict,
+                    gt,
+                    categories=dataloader.dataset.categories,
+                )
+                dataloader.dataset.log_images = False
             bar.set_postfix({"loss": loss.item(), "jac/miou": jaccard_value.item(), "fbiou": fbiou_value.item()})
             tot_steps += 1
 
     total_loss /= tot_steps
     total_jaccard /= tot_steps
     total_fbiou /= tot_steps
-    first_step_loss /= len(dataloader.dataset)
-    first_step_jaccard /= len(dataloader.dataset)
-    first_step_fbiou /= len(dataloader.dataset)
+    first_step_loss /= len(dataloader)
+    first_step_jaccard /= len(dataloader)
+    first_step_fbiou /= len(dataloader)
 
     comet_logger.log_metrics(
         {
-            "accuracy": correct,
             "loss": total_loss,
             "jaccard": total_jaccard,
             "first_step_loss": first_step_loss,

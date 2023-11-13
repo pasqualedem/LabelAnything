@@ -135,6 +135,8 @@ def convert_commentedmap_to_dict(data):
 
 
 def log_every_n(batch_idx: int, n: int):
+    if n is None:
+        return False
     if batch_idx % n == 0:
         return True
     else:
