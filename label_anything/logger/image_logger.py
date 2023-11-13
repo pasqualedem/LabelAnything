@@ -46,27 +46,29 @@ class Logger:
     def log_gt(self, batch_idx, step, input_dict, gt, categories):
         images = input_dict["images"]
         dims = input_dict["dims"]
+        classes = self.__get_class_ids(input_dict["classes"])
         data = []
-        annotations = [{"name": "Ground truth", "data": data}]
 
-        for b in range(gt.shape[0]):
+        for b in range(gt.size(0)):
+            img = take_image(images[b, 0], dims[b, 0])
+            image = get_image(img)
             n_gt = resize_gt(crop_padding(gt[b, 0]).float(), dims[b, 0])
             masks = extract_masks_dynamic(n_gt)
-            sample_images = images[b]
-            image = get_image(sample_images)
+            label = categories[classes[b][0]]["name"]
             for i, mask in enumerate(masks):
                 polygons = extract_polygons_from_tensor(mask)
-                data.append({"points": polygons, "score": None})
+                data.append({"points": polygons, "label": label, "score": None})
 
-                self.experiment.log_image(
-                    image_data=image,
-                    annotations=annotations,
-                    metadata={
-                        "batch_idx": batch_idx,
-                        "gt_idx": i,
-                        "substitution_step": step,
-                    },
-                )
+            annotations = [{"name": "Ground truth", "data": data}]
+            self.experiment.log_image(
+                image_data=image,
+                annotations=annotations,
+                metadata={
+                    "batch_idx": batch_idx,
+                    "sample_idx": i,
+                    "substitution_step": step,
+                },
+            )
 
     def log_batch(self, batch_idx, step, input_dict, categories):
         images = input_dict["images"]
