@@ -288,7 +288,7 @@ class Lam(nn.Module):
                         max_original_size[0] - original_sizes[i, 0],
                     ),
                     mode="constant",
-                    value=0.0,
+                    value=(0.0 if i == 0 else float("-inf")),
                 )
                 for i, mask in enumerate(masks)
             ]
