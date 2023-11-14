@@ -152,7 +152,7 @@ def extract_masks_dynamic(gt):
     return [gt == value for value in torch.unique(gt)]
 
 
-def extract_polygons_from_tensor(tensor):
+def extract_polygons_from_tensor(tensor, resize=True):
     """
     Args:
         binary_tensor (torch.Tensor()): tensor to extract vertices
@@ -160,7 +160,8 @@ def extract_polygons_from_tensor(tensor):
     Returns:
         list[int]: list of indices of vertices
     """
-    tensor = resize(tensor.unsqueeze(0), (1024, 1024), interpolation=Image.NEAREST)
+    if resize:
+        tensor = resize(tensor.unsqueeze(0), (1024, 1024), interpolation=Image.NEAREST)
     tensor = np.array(tensor).astype(np.uint8).squeeze()
     contours, _ = cv2.findContours(tensor, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
     polygons = []
