@@ -11,6 +11,10 @@ import torch
 import torch.nn.functional as F
 
 
+def validate_polygon(polygon):
+    return len(polygon) > 5 
+
+
 class Logger:
     def __init__(self, experiment):
         self.experiment = experiment
@@ -41,7 +45,7 @@ class Logger:
             sample_pred = F.one_hot(sample_pred, num_classes=len(classes[b])+1).permute(2, 0, 1)
             for c in range(1, sample_pred.shape[0]):
                 label = categories[classes[b][c - 1]]["name"]
-                polygons = extract_polygons_from_tensor(sample_pred[c], resize=False)
+                polygons = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
                 data.append({"points": polygons, "label": label, "score": None})
 
             annotations = [{"name": "Prediction", "data": data}]
@@ -66,7 +70,7 @@ class Logger:
             img = take_image(images[b, 0], dims[b, 0])
             image = get_image(img)
 
-            sample_gt = gt[b, 0][:dims[b, 0, 0], :dims[b, 0, 1]]
+            sample_gt = gt[b, :dims[b, 0, 0], :dims[b, 0, 1]]
             sample_gt = F.one_hot(sample_gt, num_classes=len(classes[b])+1).permute(2, 0, 1)
 
             sample_pred = pred[b, :, :dims[b, 0, 0], :dims[b, 0, 1]]
@@ -75,16 +79,18 @@ class Logger:
 
             for c in range(1, sample_gt.shape[0]):
                 label = categories[classes[b][c - 1]]["name"]
-                polygons_gt = extract_polygons_from_tensor(sample_gt[c], resize=False)
-                polygons_pred = extract_polygons_from_tensor(sample_pred[c], resize=False)
-                data_gt.append({"points": polygons_gt, "label": label, "score": None})
-                data_pred.append({"points": polygons_pred, "label": label, "score": None})
+                polygons_gt = extract_polygons_from_tensor(sample_gt[c], should_resize=False)
+                polygons_pred = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
+                polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)]
+                data_gt.append({"points": polygons_gt, "label": f"pred-{label}", "score": None})
+                data_pred.append({"points": polygons_pred, "label": f"gt-{label}", "score": None})
 
             annotations = [
-                {"name": "Ground truth", "data": data_gt},
+                {"name": "Ground truth", "data": data_gt}, 
                 {"name": "Prediction", "data": data_pred},
             ]
             self.experiment.log_image(
+                name=f"batch_{batch_idx}_substep_{step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
                 metadata={
@@ -107,8 +113,8 @@ class Logger:
 
         for i in range(images.shape[0]):
             sample_images = images[i]
-            for j in range(sample_images.shape[0]):
-                image = get_image(sample_images[j])
+            for j in range(all_masks.shape[1]):
+                image = get_image(sample_images[j + 1])
                 data = []
                 annotations = [{"name": "Ground truth", "data": data}]
 
@@ -170,8 +176,8 @@ class Logger:
                         data.append(
                             {"points": negative_points_log, "label": f"Neg-{label}", "score": None}
                         )
-                print("log image")
                 self.experiment.log_image(
+                    name=f"batch_{batch_idx}_substep_{step}_prompt",
                     image_data=image,
                     annotations=annotations,
                     metadata={

@@ -189,16 +189,15 @@ class Substitutor:
         return batch_examples, gt
 
     def __next__(self):
+        torch_keys_to_exchange = self.torch_keys_to_exchange.copy()
         if "images" in self.batch:
-            self.torch_keys_to_exchange.append("images")
+            torch_keys_to_exchange.append("images")
             num_examples = self.batch["images"].shape[1]
             device = self.batch["images"].device
-        elif "embeddings" in self.batch:
-            self.torch_keys_to_exchange.append("embeddings")
+        if "embeddings" in self.batch:
+            torch_keys_to_exchange.append("embeddings")
             num_examples = self.batch["embeddings"].shape[1]
             device = self.batch["embeddings"].device
-        else:
-            raise ValueError("Batch must contain either images or embeddings")
 
         if self.it == 0:
             self.it = 1
@@ -216,7 +215,7 @@ class Substitutor:
             ]
         ).long()
 
-        for key in self.torch_keys_to_exchange:
+        for key in torch_keys_to_exchange:
             self.batch[key] = torch.index_select(
                 self.batch[key], dim=1, index=index_tensor
             )

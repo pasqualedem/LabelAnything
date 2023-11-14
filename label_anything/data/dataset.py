@@ -56,6 +56,7 @@ class LabelAnythingDataset(Dataset):
         self.load_embeddings = self.emb_dir is not None
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
+        self.log_images = False
         assert not (self.load_from_dir and self.load_embeddings)
 
         # id to annotation
@@ -117,7 +118,7 @@ class LabelAnythingDataset(Dataset):
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-        self.log_images = False
+        self.log_images = True
 
     def __prepare_benchmark(self):
         """Prepare the dataset for benchmark training.
@@ -274,6 +275,7 @@ class LabelAnythingDataset(Dataset):
         return image if not self.preprocess else self.preprocess(image)
 
     def _get_images_or_embeddings(self, image_ids):
+        return torch.rand(len(image_ids), 256, 64, 64), "embeddings"
         if self.load_embeddings:
             images = [
                 self.__load_safe_embeddings(image_data)
@@ -567,7 +569,7 @@ class LabelAnythingDataset(Dataset):
             "flag_gts": flag_gts,
         }
 
-        if self.log_images and not self.load_embeddings:
+        if self.log_images and self.load_embeddings:
             log_images = torch.stack([x["images"] for x in batched_input])
             data_dict["images"] = log_images
 

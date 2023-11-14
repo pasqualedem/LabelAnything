@@ -30,7 +30,7 @@ parameters:
 
   dataset: # parameters depending on the class you defined for the dataset
     instances_path: [data/raw/annotations/lvis_v1_train.json]
-    img_dir: [data/raw/train2017]
+    emb_dir: [data/emb]
     max_num_examples: [2]
   dataloader:
     batch_size: [2]
