@@ -1,11 +1,11 @@
 from torchvision.transforms import ToTensor
-from dataset import LabelAnythingDataset, PromptType
+from dataset import CocoLVISDataset, PromptType
 import utils
 from typing import Any, Dict, List, Tuple
 import torch
 
 
-class LabelAnythingTestDataset(LabelAnythingDataset):
+class LabelAnythingTestDataset(CocoLVISDataset):
     def __init__(
             self,
             instances_path,  # Path

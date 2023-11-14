@@ -29,9 +29,12 @@ parameters:
     use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
-    instances_path: [data/raw/annotations/lvis_v1_train.json]
-    img_dir: [data/raw/train2017]
-    max_num_examples: [2]
+    datasets:
+      lvis:
+        instances_path: [data/raw/annotations/lvis_v1_train.json]
+        img_dir: [data/raw/train2017]
+    common:
+      max_num_examples: [2]
   dataloader:
     batch_size: [2]
     num_workers: [0]

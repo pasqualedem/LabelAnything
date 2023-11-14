@@ -60,10 +60,12 @@ def get_dataloaders(dataset_args, dataloader_args):
     preprocess = Compose(
         [CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)]
     )
+    datasets_params = dataset_args.get("datasets")
+    common_params = dataset_args.get("common")
 
     dataset = LabelAnythingDataset(
-        **dataset_args,
-        preprocess=preprocess,
+        datasets_params=datasets_params,
+        common_params={**common_params, "preprocess": preprocess}
     )    
     dataloader = DataLoader(
         dataset=dataset, **dataloader_args, collate_fn=dataset.collate_fn
