@@ -8,7 +8,7 @@ from safetensors.torch import save_file
 from torchvision.transforms import Compose, PILToTensor
 from tqdm import tqdm
 
-from label_anything.data.dataset import LabelAnyThingOnlyImageDataset
+from label_anything.data.coco import LabelAnyThingOnlyImageDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.models import model_registry
 
