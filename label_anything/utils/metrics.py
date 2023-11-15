@@ -167,6 +167,7 @@ def fbiou(preds: Tensor, target: Tensor, ignore_index=-100) -> None:
     # collapse pred to (B, H, W) (foreground/background)
     preds = preds.argmax(dim=1)
     preds[preds != 0] = 1
+    target[target != 0] = 1
     return binary_jaccard_index(preds, target)
 
 

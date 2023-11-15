@@ -190,7 +190,7 @@ class LabelAnythingDataset(Dataset):
             "flag_gts": flag_gts,
         }
 
-        if self.log_images and not self.load_embeddings:
+        if self.log_images and self.load_embeddings:
             log_images = torch.stack([x["images"] for x in batched_input])
             data_dict["images"] = log_images
 

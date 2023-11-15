@@ -59,6 +59,9 @@ def generate_points_from_errors(
         sampled_points[:, 2],
         sampled_points[:, 3],
     ]
+    sampled_points = torch.index_select(
+        sampled_points, 1, torch.tensor([0, 1, 3, 2], device=sampled_points.device)
+    )  # Swap x and y
     all_classes = cartesian_product(B, C)
     missing = torch.tensor(
         list(
@@ -69,11 +72,11 @@ def generate_points_from_errors(
     )
     missing = torch.cat([missing, torch.zeros(missing.shape, device=device)], dim=1)
     sampled_points = torch.cat([sampled_points, missing], dim=0)
-    _, indices = torch.sort(sampled_points[:, :2], dim=0)
-    sampled_points = torch.index_select(sampled_points, 0, indices[:, 1])
+    indices = (sampled_points[:, 0] * B + sampled_points[:, 1]).argsort()
+    sampled_points = torch.index_select(sampled_points, 0, indices)
 
     labels = torch.cat([labels, torch.zeros(missing.shape[0], device=device)])
-    labels = torch.index_select(labels, 0, indices[:, 1])
+    labels = torch.index_select(labels, 0, indices)
 
     sampled_points = rearrange(
         sampled_points[:, 2:4],
@@ -82,6 +85,8 @@ def generate_points_from_errors(
         c=errors.shape[1],
     )
     labels = rearrange(labels, "(b c n) -> b c n", n=num_points, c=errors.shape[1])
+    # ignore background
+    labels[:, 0] = 0
     return sampled_points, labels
 
 
@@ -189,34 +194,41 @@ class Substitutor:
         return batch_examples, gt
 
     def __next__(self):
+        torch_keys_to_exchange = self.torch_keys_to_exchange.copy()
         if "images" in self.batch:
-            self.torch_keys_to_exchange.append("images")
+            torch_keys_to_exchange.append("images")
             num_examples = self.batch["images"].shape[1]
             device = self.batch["images"].device
-        elif "embeddings" in self.batch:
-            self.torch_keys_to_exchange.append("embeddings")
+        if "embeddings" in self.batch:
+            torch_keys_to_exchange.append("embeddings")
             num_examples = self.batch["embeddings"].shape[1]
             device = self.batch["embeddings"].device
-        else:
-            raise ValueError("Batch must contain either images or embeddings")
 
         if self.it == 0:
             self.it = 1
             return self.divide_query_examples()
         if not self.substitute:
             raise StopIteration
-        if self.it == num_examples:
+        if self.it == num_examples + 1:
             raise StopIteration
+        if self.it == num_examples:  # Original query image becomes again query
+            index_tensor = torch.cat(
+                [
+                    torch.tensor([num_examples - 1], device=device),
+                    torch.arange(1, num_examples - 1, device=device),
+                    torch.tensor([0], device=device),
+                ]
+            ).long()
+        else:
+            index_tensor = torch.cat(
+                [
+                    torch.tensor([self.it], device=device),
+                    torch.arange(0, self.it, device=device),
+                    torch.arange(self.it + 1, num_examples, device=device),
+                ]
+            ).long()
 
-        index_tensor = torch.cat(
-            [
-                torch.tensor([self.it], device=device),
-                torch.arange(0, self.it, device=device),
-                torch.arange(self.it + 1, num_examples, device=device),
-            ]
-        ).long()
-
-        for key in self.torch_keys_to_exchange:
+        for key in torch_keys_to_exchange:
             self.batch[key] = torch.index_select(
                 self.batch[key], dim=1, index=index_tensor
             )

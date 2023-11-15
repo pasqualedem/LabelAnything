@@ -30,6 +30,7 @@ def train_epoch(
     first_step_loss = 0
     first_step_jaccard = 0
     first_step_fbiou = 0
+    batch_size = dataloader.batch_size
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
@@ -53,9 +54,9 @@ def train_epoch(
             accelerator.backward(loss)
             optimizer.step()
 
-            substitutor.generate_new_points(outputs, gt)
+
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
-            fbiou_value = fbiou(pred, gt)
+            fbiou_value = fbiou(outputs, gt)
 
             total_loss += loss.item()
             total_jaccard += jaccard_value.item()
@@ -66,28 +67,32 @@ def train_epoch(
 
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
 
-            image_idx = batch_idx * dataloader.batch_size
-            # if log_every_n(
-            #     image_idx - 1, train_params["logger"].get("log_frequency", None)
-            # ):
-            #     dataloader.dataset.log_images = True
-            # if log_every_n(
-            #     image_idx, train_params["logger"].get("log_frequency", None)
-            # ):
-            #     comet_logger.log_batch(
-            #         batch_idx=batch_idx,
-            #         step=i,
-            #         input_dict=input_dict,
-            #         categories=dataloader.dataset.categories,
-            #     )
-            #     comet_logger.log_gt(
-            #         batch_idx,
-            #         i,
-            #         input_dict,
-            #         gt,
-            #         categories=dataloader.dataset.categories,
-            #     )
-            #     dataloader.dataset.log_images = False
+            image_idx = batch_idx * batch_size
+            if log_every_n(
+                image_idx - batch_size, train_params["logger"].get("log_frequency", None)
+            ):
+                dataloader.dataset.log_images = True
+            if log_every_n(
+                image_idx, train_params["logger"].get("log_frequency", None)
+            ):
+                comet_logger.log_batch(
+                    batch_idx=batch_idx,
+                    step=tot_steps,
+                    substitution_step=i,
+                    input_dict=input_dict,
+                    categories=dataloader.dataset.categories,
+                )
+                comet_logger.log_gt_pred(
+                    batch_idx=batch_idx,
+                    step=tot_steps,
+                    substitution_step=i,
+                    input_dict=input_dict,
+                    gt=gt,
+                    pred=outputs,
+                    categories=dataloader.dataset.categories,
+                )
+                dataloader.dataset.log_images = False
+            substitutor.generate_new_points(outputs, gt)
             bar.set_postfix(
                 {
                     "loss": loss.item(),

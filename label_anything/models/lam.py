@@ -78,7 +78,9 @@ class Lam(nn.Module):
                 C is the number of classes, (H, W) is the
                 original size of the image.
         """
-        query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(batched_input)
+        query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(
+            batched_input
+        )
         points, boxes, masks = self.prepare_prompts(batched_input)
 
         class_embeddings = self.prompt_encoder(
@@ -117,7 +119,7 @@ class Lam(nn.Module):
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
         return query_embeddings, prompt_embeddings
-    
+
     def prepare_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
@@ -130,17 +132,26 @@ class Lam(nn.Module):
         return embeddings
 
     def prepare_prompts(self, batched_input):
-        if "prompt_points" in batched_input and batched_input["flag_points"].sum() > 0:
+        if (
+            "prompt_points" in batched_input
+            and (batched_input["flag_points"] == 0).all().logical_not()
+        ):
             points = (batched_input["prompt_points"], batched_input["flag_points"])
         else:
             points = None
-        if "prompt_bboxes" in batched_input and batched_input["flag_bboxes"].sum() > 0:
+        if (
+            "prompt_bboxes" in batched_input
+            and (batched_input["flag_bboxes"] == 0).all().logical_not()
+        ):
             boxes = batched_input["prompt_bboxes"]
             box_flag = batched_input["flag_bboxes"]
             boxes = (boxes, box_flag)
         else:
             boxes = None
-        if "prompt_masks" in batched_input and batched_input["flag_masks"].sum() > 0:
+        if (
+            "prompt_masks" in batched_input
+            and (batched_input["flag_masks"] == 0).all().logical_not()
+        ):
             masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
         else:
             masks = None
@@ -220,12 +231,12 @@ class Lam(nn.Module):
             masks=masks,
         )
         return class_embeddings
-    
+
     def predict(self, batched_input, class_embeddings=None):
         if class_embeddings is None:
             return self.forward(batched_input)
         query_embeddings = self.prepare_embeddings(batched_input)
-        
+
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
@@ -288,9 +299,10 @@ class Lam(nn.Module):
                         max_original_size[0] - original_sizes[i, 0],
                     ),
                     mode="constant",
-                    value=(0.0 if i == 0 else float("-inf")),
+                    value=float("-inf"),
                 )
                 for i, mask in enumerate(masks)
             ]
         )
+        masks[:, 0, :, :][masks[:, 0, :, :] == float("-inf")] = 0 # background class for padding
         return masks

@@ -7,7 +7,12 @@ from label_anything.logger.utils import (
     extract_masks_dynamic,
 )
 import math
+import torch
 import torch.nn.functional as F
+
+
+def validate_polygon(polygon):
+    return len(polygon) >= 6 # 3 points at least 
 
 
 class Logger:
@@ -26,51 +31,79 @@ class Logger:
             res_classes.append(list(c[max_idx]))
         return res_classes
 
-    def log_pred(self, batch_idx, input_dict, pred):
-        images = input_dict["images"]
-        data = []
-        annotations = [{"name": "Prediction", "data": data}]
-        for b in pred.shape[0]:
-            sample_images = images[b]
-            image = get_image(sample_images)
-            mask = pred[b]
-            polygons = extract_polygons_from_tensor(mask)
-            data.append({"points": polygons, "score": None})
-
-        self.experiment.log_image(
-            image_data=image,
-            annotations=annotations,
-            metadata={"batch_idx": batch_idx},
-        )
-
-    def log_gt(self, batch_idx, step, input_dict, gt, categories):
+    def log_pred(self, batch_idx, step, input_dict, pred, categories):
         images = input_dict["images"]
         dims = input_dict["dims"]
         classes = self.__get_class_ids(input_dict["classes"])
-        data = []
 
-        for b in range(gt.size(0)):
+        for b in range(pred.shape[0]):
+            data = []
             img = take_image(images[b, 0], dims[b, 0])
             image = get_image(img)
-            n_gt = resize_gt(crop_padding(gt[b, 0]).float(), dims[b, 0])
-            masks = extract_masks_dynamic(n_gt)
-            label = categories[classes[b][0]]["name"]
-            for i, mask in enumerate(masks):
-                polygons = extract_polygons_from_tensor(mask)
+            sample_pred = pred[b, :, :dims[b, 0, 0], :dims[b, 0, 1]]
+            sample_pred = torch.argmax(sample_pred, dim=0)
+            sample_pred = F.one_hot(sample_pred, num_classes=len(classes[b])+1).permute(2, 0, 1)
+            for c in range(1, sample_pred.shape[0]):
+                label = categories[classes[b][c - 1]]["name"]
+                polygons = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
                 data.append({"points": polygons, "label": label, "score": None})
 
-            annotations = [{"name": "Ground truth", "data": data}]
+            annotations = [{"name": "Prediction", "data": data}]
             self.experiment.log_image(
                 image_data=image,
                 annotations=annotations,
                 metadata={
                     "batch_idx": batch_idx,
-                    "sample_idx": i,
+                    "sample_idx": b,
                     "substitution_step": step,
                 },
             )
 
-    def log_batch(self, batch_idx, step, input_dict, categories):
+    def log_gt_pred(self, batch_idx, step, substitution_step, input_dict, gt, pred, categories):
+        images = input_dict["images"]
+        dims = input_dict["dims"]
+        classes = self.__get_class_ids(input_dict["classes"])
+
+        for b in range(gt.shape[0]):
+            data_gt = []
+            data_pred = []
+            img = take_image(images[b, 0], dims[b, 0])
+            image = get_image(img)
+
+            sample_gt = gt[b, :dims[b, 0, 0], :dims[b, 0, 1]]
+            sample_gt = F.one_hot(sample_gt, num_classes=len(classes[b])+1).permute(2, 0, 1)
+
+            sample_pred = pred[b, :, :dims[b, 0, 0], :dims[b, 0, 1]]
+            sample_pred = torch.argmax(sample_pred, dim=0)
+            sample_pred = F.one_hot(sample_pred, num_classes=len(classes[b])+1).permute(2, 0, 1)
+
+            for c in range(1, sample_gt.shape[0]):
+                label = categories[classes[b][c - 1]]["name"]
+                polygons_gt = extract_polygons_from_tensor(sample_gt[c], should_resize=False)
+                polygons_pred = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
+                # polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)] 
+                polygons_pred = [[10+i, 10+i, 10+i, 100+i, 100+i, 10+i, 100+i, 100+i] for i in range(10)]
+                data_gt.append({"points": polygons_gt, "label": f"gt-{label}", "score": None})
+                data_pred.append({"points": polygons_pred, "label": f"pred-{label}", "score": None})
+
+            annotations = [
+                {"name": "Ground truth", "data": data_gt}, 
+                # {"name": "Prediction", "data": data_pred}, 
+            ]
+            self.experiment.log_image(
+                name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
+                image_data=image,
+                annotations=annotations,
+                metadata={
+                    "batch_idx": batch_idx,
+                    "sample_idx": b,
+                    "substitution_step": substitution_step,
+                    "type": "gt_pred",
+                },
+                step=step
+            )
+
+    def log_batch(self, batch_idx, step, substitution_step, input_dict, categories):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
         all_boxes = input_dict["prompt_bboxes"]
@@ -83,8 +116,8 @@ class Logger:
 
         for i in range(images.shape[0]):
             sample_images = images[i]
-            for j in range(sample_images.shape[0]):
-                image = get_image(sample_images[j])
+            for j in range(all_masks.shape[1]):
+                image = get_image(sample_images[j + 1])
                 data = []
                 annotations = [{"name": "Ground truth", "data": data}]
 
@@ -116,7 +149,8 @@ class Logger:
                     if len(boxes_log) > 0:
                         data.append({"boxes": boxes_log, "label": label, "score": None})
 
-                    points_log = []
+                    positive_points_log = []
+                    negative_points_log = []
                     for k in range(points.shape[0]):
                         if flag_points[k] != 0:
                             x, y = points[k].tolist()
@@ -132,22 +166,30 @@ class Logger:
                                 x_new = x + radius * math.cos(theta)
                                 y_new = y + radius * math.sin(theta)
                                 ps += [int(x_new), int(y_new)]
-                            points_log.append(ps)
-                    if len(points_log) > 0:
-                        # print(points_log)
-                        point_label = label if flag_points[k] == 1 else "Neg-" + label
+                            
+                            if flag_points[k] == 1:
+                                positive_points_log.append(ps)
+                            else:
+                                negative_points_log.append(ps)
+                    if positive_points_log:
                         data.append(
-                            {"points": points_log, "label": point_label, "score": None}
+                            {"points": positive_points_log, "label": label, "score": None}
                         )
-                print("log image")
+                    if negative_points_log:
+                        data.append(
+                            {"points": negative_points_log, "label": f"Neg-{label}", "score": None}
+                        )
                 self.experiment.log_image(
+                    name=f"batch_{batch_idx}_substep_{substitution_step}_prompt",
                     image_data=image,
                     annotations=annotations,
                     metadata={
                         "batch_idx": batch_idx,
                         "sample_idx": i,
-                        "substitution_step": step,
+                        "substitution_step": substitution_step,
+                        "type": "prompt",
                     },
+                    step=step
                 )
 
     def log_image(self, img_data, annotations=None):
