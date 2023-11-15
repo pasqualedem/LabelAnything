@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 
 def validate_polygon(polygon):
-    return len(polygon) > 5 
+    return len(polygon) >= 6 # 3 points at least 
 
 
 class Logger:
@@ -59,7 +59,7 @@ class Logger:
                 },
             )
 
-    def log_gt_pred(self, batch_idx, step, input_dict, gt, pred, categories):
+    def log_gt_pred(self, batch_idx, step, substitution_step, input_dict, gt, pred, categories):
         images = input_dict["images"]
         dims = input_dict["dims"]
         classes = self.__get_class_ids(input_dict["classes"])
@@ -81,26 +81,29 @@ class Logger:
                 label = categories[classes[b][c - 1]]["name"]
                 polygons_gt = extract_polygons_from_tensor(sample_gt[c], should_resize=False)
                 polygons_pred = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
-                polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)]
-                data_gt.append({"points": polygons_gt, "label": f"pred-{label}", "score": None})
-                data_pred.append({"points": polygons_pred, "label": f"gt-{label}", "score": None})
+                # polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)] 
+                polygons_pred = [[10+i, 10+i, 10+i, 100+i, 100+i, 10+i, 100+i, 100+i] for i in range(10)]
+                data_gt.append({"points": polygons_gt, "label": f"gt-{label}", "score": None})
+                data_pred.append({"points": polygons_pred, "label": f"pred-{label}", "score": None})
 
             annotations = [
                 {"name": "Ground truth", "data": data_gt}, 
-                {"name": "Prediction", "data": data_pred},
+                # {"name": "Prediction", "data": data_pred}, 
             ]
             self.experiment.log_image(
-                name=f"batch_{batch_idx}_substep_{step}_gt_pred",
+                name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
                 metadata={
                     "batch_idx": batch_idx,
                     "sample_idx": b,
-                    "substitution_step": step,
+                    "substitution_step": substitution_step,
+                    "type": "gt_pred",
                 },
+                step=step
             )
 
-    def log_batch(self, batch_idx, step, input_dict, categories):
+    def log_batch(self, batch_idx, step, substitution_step, input_dict, categories):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
         all_boxes = input_dict["prompt_bboxes"]
@@ -177,14 +180,16 @@ class Logger:
                             {"points": negative_points_log, "label": f"Neg-{label}", "score": None}
                         )
                 self.experiment.log_image(
-                    name=f"batch_{batch_idx}_substep_{step}_prompt",
+                    name=f"batch_{batch_idx}_substep_{substitution_step}_prompt",
                     image_data=image,
                     annotations=annotations,
                     metadata={
                         "batch_idx": batch_idx,
                         "sample_idx": i,
-                        "substitution_step": step,
+                        "substitution_step": substitution_step,
+                        "type": "prompt",
                     },
+                    step=step
                 )
 
     def log_image(self, img_data, annotations=None):

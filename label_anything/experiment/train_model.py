@@ -54,7 +54,7 @@ def train_epoch(
             accelerator.backward(loss)
             optimizer.step()
 
-            substitutor.generate_new_points(outputs, gt)
+
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
             fbiou_value = fbiou(outputs, gt)
 
@@ -77,19 +77,22 @@ def train_epoch(
             ):
                 comet_logger.log_batch(
                     batch_idx=batch_idx,
-                    step=i,
+                    step=tot_steps,
+                    substitution_step=i,
                     input_dict=input_dict,
                     categories=dataloader.dataset.categories,
                 )
                 comet_logger.log_gt_pred(
-                    batch_idx,
-                    i,
-                    input_dict,
-                    gt,
-                    outputs,
+                    batch_idx=batch_idx,
+                    step=tot_steps,
+                    substitution_step=i,
+                    input_dict=input_dict,
+                    gt=gt,
+                    pred=outputs,
                     categories=dataloader.dataset.categories,
                 )
                 dataloader.dataset.log_images = False
+            substitutor.generate_new_points(outputs, gt)
             bar.set_postfix(
                 {
                     "loss": loss.item(),
