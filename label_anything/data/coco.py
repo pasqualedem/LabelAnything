@@ -107,6 +107,7 @@ class CocoLVISDataset(Dataset):
         )
 
         self.seed = seed
+        self.num_examples = None
         self.__set_all_seeds()
 
     def __set_all_seeds(self):

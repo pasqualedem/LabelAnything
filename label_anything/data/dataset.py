@@ -57,8 +57,9 @@ class LabelAnythingDataset(Dataset):
     def reset_num_examples(self):
         """Set the number of examples for the next query image.
         """
+        self.num_examples = random.randint(1, self.max_num_examples)
         for dataset in self.datasets.values():
-            dataset.reset_num_examples()
+            dataset.num_examples = self.num_examples
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
