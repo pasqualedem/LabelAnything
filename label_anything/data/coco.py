@@ -48,14 +48,16 @@ class CocoLVISDataset(Dataset):
         emb_dir=None,
         n_folds=-1,
         val_fold=-1,
+        load_embeddings=False,
         split="train"
     ):
         super().__init__()
         instances = utils.load_instances(instances_path)
         self.emb_dir = emb_dir
-        self.load_embeddings = self.emb_dir is not None
+        self.load_embeddings = load_embeddings
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
+        self.log_images = False
         assert not (self.load_from_dir and self.load_embeddings)
 
         # id to annotation
@@ -117,7 +119,7 @@ class CocoLVISDataset(Dataset):
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
 
-        self.log_images = False
+        self.log_images = True
 
     def __prepare_benchmark(self):
         """Prepare the dataset for benchmark training.

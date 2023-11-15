@@ -30,9 +30,13 @@ datasets = {
 
 class LabelAnythingDataset(Dataset):
     def __init__(self, datasets_params, common_params) -> None:
-        self.log_images = False
+        self._log_images = True # Logs the first batch
         self.num_examples = 0
         self.max_num_examples = common_params["max_num_examples"]
+        self.load_embeddings = common_params["load_embeddings"]
+        
+        self._cur_dataset = None
+        self._categories = None
         
         self.datasets = {
             dataset_name: datasets[dataset_name](**params, **common_params)
@@ -48,10 +52,11 @@ class LabelAnythingDataset(Dataset):
         super().__init__()
 
     def __len__(self):
-        return sum([len(dataset) for dataset in self.datasets])
+        return sum([len(dataset) for dataset in self.datasets.values()])
     
     def __getitem__(self, index) -> Any:
         dataset_name, dataset_index = self.index[index]
+        self._cur_dataset = dataset_name
         return self.datasets[dataset_name][dataset_index]
     
     def reset_num_examples(self):
@@ -60,6 +65,20 @@ class LabelAnythingDataset(Dataset):
         self.num_examples = random.randint(1, self.max_num_examples)
         for dataset in self.datasets.values():
             dataset.num_examples = self.num_examples
+            
+    @property
+    def log_images(self):
+        return self._log_images
+    
+    @log_images.setter
+    def log_images(self, value):
+        self._log_images = value
+        for dataset in self.datasets.values():
+            dataset.log_images = value
+            
+    @property
+    def categories(self):
+        return self.datasets[self._cur_dataset].categories
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
@@ -190,7 +209,7 @@ class LabelAnythingDataset(Dataset):
             "flag_gts": flag_gts,
         }
 
-        if self.log_images and self.load_embeddings:
+        if self._log_images and self.load_embeddings:
             log_images = torch.stack([x["images"] for x in batched_input])
             data_dict["images"] = log_images
 
