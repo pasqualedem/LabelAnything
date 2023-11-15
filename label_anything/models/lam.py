@@ -299,9 +299,10 @@ class Lam(nn.Module):
                         max_original_size[0] - original_sizes[i, 0],
                     ),
                     mode="constant",
-                    value=(0.0 if i == 0 else float("-inf")),
+                    value=float("-inf"),
                 )
                 for i, mask in enumerate(masks)
             ]
         )
+        masks[:, 0, :, :][masks[:, 0, :, :] == float("-inf")] = 0 # background class for padding
         return masks
