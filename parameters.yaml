@@ -31,7 +31,9 @@ parameters:
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       lvis:
-        instances_path: [data/raw/annotations/lvis_v1_train.json]
+        instances_path: [data/raw/cocolvis/lvis_v1_train.json]
+      coco:
+        instances_path: [data/raw/cocolvis/instances_train2017.json]
     common:
       max_num_examples: [2]
       load_embeddings: [True]

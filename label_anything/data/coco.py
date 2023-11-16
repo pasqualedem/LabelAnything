@@ -52,6 +52,7 @@ class CocoLVISDataset(Dataset):
         split="train"
     ):
         super().__init__()
+        print(f"Loading dataset annotations from {instances_path}...")
         instances = utils.load_instances(instances_path)
         self.emb_dir = emb_dir
         self.load_embeddings = load_embeddings

@@ -302,7 +302,6 @@ def load_dict(path: str):
     name, ext = str(path).split(".")
     if ext == "json":
         with open(path) as f:
-            print("Using json")
             instances = json.load(f)
     elif ext in {"pickle", "pkl"}:
         print("Using pickle")
@@ -319,7 +318,6 @@ def load_instances(
     """
     Loads the instances from file.
     """
-    print("Loading gt")
     if "*" in str(path):
         files = glob.glob(path)
         instances = {}
