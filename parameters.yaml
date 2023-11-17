@@ -32,8 +32,22 @@ parameters:
     datasets:
       lvis:
         instances_path: [data/raw/cocolvis/lvis_v1_train.json]
+        emb_dir: [data/raw/embeddings]
       coco:
         instances_path: [data/raw/cocolvis/instances_train2017.json]
+        emb_dir: [data/raw/embeddings]
+      val_lvis:
+        instances_path: [data/raw/cocolvis/lvis_v1_val.json]
+        seed: [0]
+        do_subsample: [False]
+        add_box_noise: [False]
+        emb_dir: [data/raw/embeddings]
+      val_coco:
+        instances_path: [data/raw/cocolvis/instances_val2017.json]
+        seed: [0]
+        do_subsample: [False]
+        add_box_noise: [False]
+        emb_dir: [data/raw/embeddings]
     common:
       max_num_examples: [2]
       load_embeddings: [True]

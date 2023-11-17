@@ -123,7 +123,7 @@ class ExampleGenerator:
                 return [cls]
         raise SamplingFailureException("No image found")
 
-    def generate_examples(self, query_image_id, image_classes, num_examples):
+    def generate_examples(self, query_image_id, sampled_classes, num_examples):
         """
         Generates examples for a given query image and a set of classes.
         For each example it sample a subset of classes given the frequencies over the past sampled
@@ -132,7 +132,7 @@ class ExampleGenerator:
         again.
         Args:
             query_image_id (int): id of the query image
-            image_classes (list): list of classes to sample from
+            sampled_classes (list): list of sampled classes, to use to select the examples
             categories_to_imgs (dict): dictionary mapping category ids to image ids
             num_examples (int): number of examples to generate
 
@@ -140,9 +140,6 @@ class ExampleGenerator:
             image_ids (list): list of image ids of the sampled examples
             examples_sampled_classes (list): list of sets of classes sampled for each example
         """
-        sampled_classes = self.sample_classes_from_query(
-            torch.tensor(list(image_classes)), uniform_sampling
-        )
         examples_sampled_classes = []
         image_ids = [query_image_id]
         frequencies = {k: 0 for k in sampled_classes.tolist()}

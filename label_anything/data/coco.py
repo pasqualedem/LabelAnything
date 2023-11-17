@@ -10,17 +10,21 @@ import numpy as np
 import requests
 import torch
 import torchvision.transforms
-import label_anything.data.utils as utils
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
-from torch.utils.data import Dataset
-from torchvision.transforms import (
-    PILToTensor,
-    ToTensor,
-)
-from label_anything.data.transforms import CustomNormalize, CustomResize, PromptsProcessor
 from safetensors import safe_open
+from torch.utils.data import Dataset
+from torchvision.transforms import PILToTensor, ToTensor
 
+import label_anything.data.utils as utils
+from label_anything.data.examples import (
+    ExampleGeneratorPowerLawUniform,
+    uniform_sampling,
+)
+from label_anything.data.transforms import (
+    CustomNormalize,
+    CustomResize,
+    PromptsProcessor,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -29,7 +33,7 @@ class PromptType(Enum):
     BBOX = 0
     MASK = 1
     POINT = 2
-    
+
 
 class Label(Enum):
     POSITIVE = 1
@@ -49,7 +53,9 @@ class CocoLVISDataset(Dataset):
         n_folds=-1,
         val_fold=-1,
         load_embeddings=False,
-        split="train"
+        split="train",
+        do_subsample=True,
+        add_box_noise=True
     ):
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -110,12 +116,13 @@ class CocoLVISDataset(Dataset):
         )
 
         self.seed = seed
+        self.do_subsample = do_subsample
+        self.add_box_noise = add_box_noise
         self.num_examples = None
         self.__set_all_seeds()
 
     def __set_all_seeds(self):
-        """Enable reproducibility.
-        """
+        """Enable reproducibility."""
         random.seed(self.seed)
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
@@ -123,16 +130,29 @@ class CocoLVISDataset(Dataset):
         self.log_images = True
 
     def __prepare_benchmark(self):
-        """Prepare the dataset for benchmark training.
-        """
+        """Prepare the dataset for benchmark training."""
         n_categories = len(self.categories)
         n_val_categories = n_categories // self.n_folds
-        val_categories_idxs = set(self.val_fold + self.n_folds * v for v in range(n_val_categories))
-        train_categories_idxs = set(x for x in range(n_categories)) - val_categories_idxs
-        categories_idxs = val_categories_idxs if self.split == "val" else train_categories_idxs
-        self.categories = {k: v for i, (k, v) in enumerate(self.categories.items()) if i in categories_idxs}
+        val_categories_idxs = set(
+            self.val_fold + self.n_folds * v for v in range(n_val_categories)
+        )
+        train_categories_idxs = (
+            set(x for x in range(n_categories)) - val_categories_idxs
+        )
+        categories_idxs = (
+            val_categories_idxs if self.split == "val" else train_categories_idxs
+        )
+        self.categories = {
+            k: v
+            for i, (k, v) in enumerate(self.categories.items())
+            if i in categories_idxs
+        }
         category_ids = set(self.categories.keys())
-        self.annotations = {k: v for k, v in self.annotations.items() if v["category_id"] in category_ids}
+        self.annotations = {
+            k: v
+            for k, v in self.annotations.items()
+            if v["category_id"] in category_ids
+        }
 
     def __load_annotation_dicts(self) -> (dict, dict):
         """Prepares dictionaries for fast access to annotations.
@@ -176,7 +196,9 @@ class CocoLVISDataset(Dataset):
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def __load_safe_embeddings(self, img_data):
-        with safe_open(f"{self.emb_dir}/{img_data['id']}.safetensors", framework="pt") as f:
+        with safe_open(
+            f"{self.emb_dir}/{img_data['id']}.safetensors", framework="pt"
+        ) as f:
             tensor = f.get_slice("embedding")
         return tensor
 
@@ -193,7 +215,9 @@ class CocoLVISDataset(Dataset):
             return Image.open(
                 f'{self.img_dir}/{img_data["coco_url"].split("/")[-1]}'
             ).convert("RGB")
-        return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert("RGB")
+        return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert(
+            "RGB"
+        )
 
     def _extract_examples(self, img_data: dict) -> (list, list):
         """Chooses examples (and categories) for the query image.
@@ -206,9 +230,17 @@ class CocoLVISDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of sets of category ids of the examples.
         """
+        img_cats = list(self.img2cat[img_data["id"]])
+        sampled_classes = (
+            self.example_generator.sample_classes_from_query(
+                torch.tensor(img_cats), self.example_generator.uniform_sampling
+            )
+            if self.do_subsample
+            else img_cats
+        )
         return self.example_generator.generate_examples(
             query_image_id=img_data["id"],
-            image_classes=self.img2cat[img_data["id"]],
+            sampled_classes=sampled_classes,
             num_examples=self.num_examples,
         )
 
@@ -227,7 +259,7 @@ class CocoLVISDataset(Dataset):
                 if cat_id not in self.img2cat_annotations[img_id]:
                     # the chosen category is not in the iamge
                     continue
-                
+
                 classes[img_id].append(cat_id)
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
@@ -239,7 +271,8 @@ class CocoLVISDataset(Dataset):
                             self.prompts_processor.convert_bbox(
                                 ann["bbox"],
                                 *img_size,
-                                noise=True,),
+                                noise=self.add_box_noise,
+                            ),
                         )
                     elif prompt_type == PromptType.MASK:
                         # take the mask
@@ -319,7 +352,7 @@ class CocoLVISDataset(Dataset):
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
 
-        data_dict =  {
+        data_dict = {
             image_key: images,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
@@ -333,7 +366,7 @@ class CocoLVISDataset(Dataset):
         }
 
         if self.log_images and self.load_embeddings:
-            log_images =[
+            log_images = [
                 self._load_and_preprocess_image(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
             ]

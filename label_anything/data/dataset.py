@@ -10,72 +10,75 @@ import numpy as np
 import requests
 import torch
 import torchvision.transforms
-import label_anything.data.utils as utils
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.transforms import (
-    PILToTensor,
-    ToTensor,
-)
-from label_anything.data.coco import CocoLVISDataset
+from torchvision.transforms import PILToTensor, ToTensor
 
+import label_anything.data.utils as utils
+from label_anything.data.coco import CocoLVISDataset
+from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 
 datasets = {
     "coco": CocoLVISDataset,
     "lvis": CocoLVISDataset,
+    "val_coco": CocoLVISDataset,
+    "val_lvis": CocoLVISDataset,
     "ade20k": None,
 }
 
 
 class LabelAnythingDataset(Dataset):
-    def __init__(self, datasets_params, common_params) -> None:
-        self._log_images = True # Logs the first batch
+    def __init__(self, datasets_params: Dict, common_params: Dict) -> None:
+        self._log_images = True  # logs the first batch
         self.num_examples = 0
         self.max_num_examples = common_params["max_num_examples"]
         self.load_embeddings = common_params["load_embeddings"]
-        
+        self.do_subsample = common_params["do_subsample"]
+        self.add_box_noise = common_params["add_box_noise"]
+
         self._cur_dataset = None
         self._categories = None
-        
+
         self.datasets = {
             dataset_name: datasets[dataset_name](**params, **common_params)
             for dataset_name, params in datasets_params.items()
         }
-        index = sum([
-            [(dataset_name, i) for i in range(len(dataset))]
-            for dataset_name, dataset in self.datasets.items()
-        ], [])
+        index = sum(
+            [
+                [(dataset_name, i) for i in range(len(dataset))]
+                for dataset_name, dataset in self.datasets.items()
+            ],
+            [],
+        )
         self.index = {i: index for i, index in enumerate(index)}
-        
+
         self.reset_num_examples()
         super().__init__()
 
     def __len__(self):
         return sum([len(dataset) for dataset in self.datasets.values()])
-    
+
     def __getitem__(self, index) -> Any:
         dataset_name, dataset_index = self.index[index]
         self._cur_dataset = dataset_name
         return self.datasets[dataset_name][dataset_index]
-    
+
     def reset_num_examples(self):
-        """Set the number of examples for the next query image.
-        """
+        """Set the number of examples for the next query image."""
         self.num_examples = random.randint(1, self.max_num_examples)
         for dataset in self.datasets.values():
             dataset.num_examples = self.num_examples
-            
+
     @property
     def log_images(self):
         return self._log_images
-    
+
     @log_images.setter
     def log_images(self, value):
         self._log_images = value
         for dataset in self.datasets.values():
             dataset.log_images = value
-            
+
     @property
     def categories(self):
         return self.datasets[self._cur_dataset].categories
@@ -182,7 +185,7 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
-        
+
         # flag_gts
         flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
         for i, x in enumerate(classes):

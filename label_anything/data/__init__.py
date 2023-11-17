@@ -63,11 +63,25 @@ def get_dataloaders(dataset_args, dataloader_args):
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
 
-    dataset = LabelAnythingDataset(
-        datasets_params=datasets_params,
+    val_datasets_params = {k: v for k, v in datasets_params.items() if not k.startswith("val_")}
+    test_datasets_params = {k: v for k, v in datasets_params.items() if k.startswith("test_")}
+    train_datasets_params = {
+        k: v for k, v in datasets_params.items() if k not in list(val_datasets_params.keys()) + list(test_datasets_params.keys())
+    }
+
+    train_dataset = LabelAnythingDataset(
+        datasets_params=train_datasets_params,
         common_params={**common_params, "preprocess": preprocess}
     )    
-    dataloader = DataLoader(
-        dataset=dataset, **dataloader_args, collate_fn=dataset.collate_fn
+    train_dataloader = DataLoader(
+        dataset=train_dataset, **dataloader_args, collate_fn=train_dataset.collate_fn
     )
-    return dataloader, None, None # placeholder for val and test loaders until Raffaele implements them
+
+    val_dataset = LabelAnythingDataset(
+        datasets_params=val_datasets_params
+        common_params={**common_params, "preprocess": preprocess}
+    )
+    val_dataloader = DataLoader(
+        dataset=val_dataset, **dataloader_args, collate_fn=val_dataset.collate_fn
+    )
+    return train_dataloader, val_dataloader, None # placeholder for val and test loaders until Raffaele implements them

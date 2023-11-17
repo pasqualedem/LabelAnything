@@ -81,14 +81,14 @@ class Logger:
                 label = categories[classes[b][c - 1]]["name"]
                 polygons_gt = extract_polygons_from_tensor(sample_gt[c], should_resize=False)
                 polygons_pred = extract_polygons_from_tensor(sample_pred[c], should_resize=False)
-                # polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)] 
-                polygons_pred = [[10+i, 10+i, 10+i, 100+i, 100+i, 10+i, 100+i, 100+i] for i in range(10)]
+                polygons_pred = [polygon for polygon in polygons_pred if validate_polygon(polygon)]
                 data_gt.append({"points": polygons_gt, "label": f"gt-{label}", "score": None})
-                data_pred.append({"points": polygons_pred, "label": f"pred-{label}", "score": None})
+                if polygons_pred:
+                    data_pred.append({"points": polygons_pred, "label": f"pred-{label}", "score": None})
 
             annotations = [
                 {"name": "Ground truth", "data": data_gt}, 
-                # {"name": "Prediction", "data": data_pred}, 
+                {"name": "Prediction", "data": data_pred}, 
             ]
             self.experiment.log_image(
                 name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
