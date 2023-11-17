@@ -78,7 +78,7 @@ def get_dataloaders(dataset_args, dataloader_args):
     )
 
     val_dataset = LabelAnythingDataset(
-        datasets_params=val_datasets_params
+        datasets_params=val_datasets_params,
         common_params={**common_params, "preprocess": preprocess}
     )
     val_dataloader = DataLoader(
