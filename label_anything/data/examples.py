@@ -142,7 +142,9 @@ class ExampleGenerator:
         """
         examples_sampled_classes = []
         image_ids = [query_image_id]
-        frequencies = {k: 0 for k in sampled_classes.tolist()}
+        if isinstance(sampled_classes, torch.Tensor):
+            sampled_classes = sampled_classes.tolist()
+        frequencies = {k: 0 for k in sampled_classes}
         for _ in range(num_examples):
             found = False
             example_sampled_classes = self.sample_classes_from_query(
