@@ -132,7 +132,7 @@ class ExampleGenerator:
         again.
         Args:
             query_image_id (int): id of the query image
-            sampled_classes (list): list of sampled classes, to use to select the examples
+            sampled_classes (torch.Tensor): list of sampled classes, to use to select the examples
             categories_to_imgs (dict): dictionary mapping category ids to image ids
             num_examples (int): number of examples to generate
 
@@ -142,9 +142,7 @@ class ExampleGenerator:
         """
         examples_sampled_classes = []
         image_ids = [query_image_id]
-        if isinstance(sampled_classes, torch.Tensor):
-            sampled_classes = sampled_classes.tolist()
-        frequencies = {k: 0 for k in sampled_classes}
+        frequencies = {k: 0 for k in sampled_classes.tolist()}
         for _ in range(num_examples):
             found = False
             example_sampled_classes = self.sample_classes_from_query(
