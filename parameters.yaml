@@ -9,50 +9,50 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-  tags: [[mytag1, mytag2]] # list of tags to attach to the run in logger platform
+  tags: [[FirstTry]] # list of tags to attach to the run in logger platform
 
   train_params:
     loss:
-    seed: [42] # random seed to set
+    seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold 
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [2]
-    compile: [False]
+    max_epochs: [5, 10]
+    compile: [True]
     logger:
-      log_frequency: [20]
+      log_frequency: [500]
     initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
 
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
     use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       lvis:
-        instances_path: [data/raw/cocolvis/lvis_v1_train.json]
-        emb_dir: [data/raw/embeddings]
+        instances_path: [$CINECA_SCRATCH/annotations/lvis_v1_train.json]
+        emb_dir: [$CINECA_SCRATCH/embeddings]
       coco:
-        instances_path: [data/raw/cocolvis/instances_train2017.json]
-        emb_dir: [data/raw/embeddings]
+        instances_path: [$CINECA_SCRATCH/annotations/instances_train2017.json]
+        emb_dir: [$CINECA_SCRATCH/embeddings]
       val_lvis:
-        instances_path: [data/raw/cocolvis/lvis_v1_val.json]
-        seed: [0]
+        instances_path: [$CINECA_SCRATCH/annotations/lvis_v1_val.json]
+        seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
-        emb_dir: [data/raw/embeddings]
+        emb_dir: [$CINECA_SCRATCH/embeddings]
       val_coco:
-        instances_path: [data/raw/cocolvis/instances_val2017.json]
-        seed: [0]
+        instances_path: [$CINECA_SCRATCH/annotations/instances_val2017.json]
+        seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
-        emb_dir: [data/raw/embeddings]
+        emb_dir: [$CINECA_SCRATCH/embeddings]
     common:
-      max_num_examples: [2]
+      max_num_examples: [5, 10, 20]
       load_embeddings: [True]
   dataloader:
-    batch_size: [2]
-    num_workers: [0]
+    batch_size: [256]
+    num_workers: [4]
 
 other_grids:
