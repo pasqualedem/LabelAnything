@@ -230,10 +230,10 @@ class CocoLVISDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of sets of category ids of the examples.
         """
-        img_cats = list(self.img2cat[img_data["id"]])
+        img_cats = torch.tensor(list(self.img2cat[img_data["id"]]))
         sampled_classes = (
             self.example_generator.sample_classes_from_query(
-                torch.tensor(img_cats), self.example_generator.uniform_sampling
+                img_cats, self.example_generator.uniform_sampling
             )
             if self.do_subsample
             else img_cats
