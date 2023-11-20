@@ -13,11 +13,11 @@ from label_anything.models import model_registry
 logger = get_logger(__name__)
 
 
-def comet_experiment(comet_information, args, train_params):
+def comet_experiment(comet_information, args):
     comet_ml.init(comet_information)
     experiment = comet_ml.Experiment()
     experiment.add_tags(args["tags"])
-    experiment.log_parameters(train_params)
+    experiment.log_parameters(args)
     logger = Logger(experiment)
     return logger, experiment
 
@@ -58,10 +58,11 @@ class Run:
         comet_information = {
             "apykey": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
+            "offline_directory": self.params.get("offline_directory")
         }
 
         self.comet_logger, self.experiment = comet_experiment(
-            comet_information, self.params, self.train_params
+            comet_information, self.params
         )
         self.url = self.experiment.url
         self.name = self.experiment.name
