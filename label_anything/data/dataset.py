@@ -1,22 +1,10 @@
-import itertools
-import os
 import random
-import warnings
-from enum import Enum
-from io import BytesIO
 from typing import Any, Dict, List, Tuple
-
-import numpy as np
-import requests
 import torch
-import torchvision.transforms
-from PIL import Image
 from torch.utils.data import Dataset
-from torchvision.transforms import PILToTensor, ToTensor
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 
 datasets = {
     "coco": CocoLVISDataset,
