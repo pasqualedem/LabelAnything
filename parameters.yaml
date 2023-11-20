@@ -49,6 +49,8 @@ parameters:
         add_box_noise: [False]
         emb_dir: [$CINECA_SCRATCH/embeddings]
     common:
+      do_subsample: [True]
+      add_box_noise: [True]
       max_num_examples: [5, 10, 20]
       load_embeddings: [True]
   dataloader:

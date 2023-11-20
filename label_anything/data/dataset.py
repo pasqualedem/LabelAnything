@@ -31,16 +31,16 @@ class LabelAnythingDataset(Dataset):
     def __init__(self, datasets_params: Dict, common_params: Dict) -> None:
         self._log_images = True  # logs the first batch
         self.num_examples = 0
-        self.max_num_examples = common_params["max_num_examples"]
-        self.load_embeddings = common_params["load_embeddings"]
-        self.do_subsample = common_params["do_subsample"]
-        self.add_box_noise = common_params["add_box_noise"]
+        self.max_num_examples = common_params.get("max_num_examples")
+        self.load_embeddings = common_params.get("load_embeddings")
+        self.do_subsample = common_params.get("do_subsample")
+        self.add_box_noise = common_params.get("add_box_noise")
 
         self._cur_dataset = None
         self._categories = None
 
         self.datasets = {
-            dataset_name: datasets[dataset_name](**params, **common_params)
+            dataset_name: datasets[dataset_name](**{**common_params, **params})
             for dataset_name, params in datasets_params.items()
         }
         index = sum(
