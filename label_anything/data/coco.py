@@ -305,7 +305,6 @@ class CocoLVISDataset(Dataset):
         return image if not self.preprocess else self.preprocess(image)
 
     def _get_images_or_embeddings(self, image_ids):
-        return torch.rand(len(image_ids), 256, 64, 64), "embeddings"
         if self.load_embeddings:
             images = [
                 self.__load_safe_embeddings(image_data)
