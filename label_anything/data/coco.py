@@ -2,7 +2,7 @@ import itertools
 import os
 import random
 import warnings
-from enum import Enum
+from enum import IntEnum
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
@@ -35,7 +35,7 @@ class PromptType(Enum):
     POINT = 2
 
 
-class Label(Enum):
+class Label(IntEnum):
     POSITIVE = 1
     NULL = 0
     NEGATIVE = -1
