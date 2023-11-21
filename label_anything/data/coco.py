@@ -197,9 +197,9 @@ class CocoLVISDataset(Dataset):
 
     def __load_safe_embeddings(self, img_data):
         with safe_open(
-            f"{self.emb_dir}/{img_data['id']}.safetensors", framework="pt"
+            f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors", framework="pt"
         ) as f:
-            tensor = f.get_slice("embedding")
+            tensor = f.get_tensor("embedding")
         return tensor
 
     def _load_image(self, img_data: dict) -> Image:
