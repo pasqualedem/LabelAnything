@@ -65,7 +65,6 @@ class CocoLVISDataset(Dataset):
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
         self.log_images = False
-        assert not (self.load_from_dir and self.load_embeddings)
 
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
