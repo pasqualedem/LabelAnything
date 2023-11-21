@@ -2,7 +2,7 @@ import itertools
 import os
 import random
 import warnings
-from enum import IntEnum
+from enum import IntEnum, Enum
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
