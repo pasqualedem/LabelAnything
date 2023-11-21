@@ -301,7 +301,7 @@ def load_dict(path: str):
     """
     name, ext = str(path).split(".")
     if ext == "json":
-        with open(path) as f:
+        with open(path, "r") as f:
             instances = json.load(f)
     elif ext in {"pickle", "pkl"}:
         print("Using pickle")
