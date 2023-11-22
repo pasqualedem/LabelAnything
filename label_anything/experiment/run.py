@@ -15,7 +15,10 @@ logger = get_logger(__name__)
 
 def comet_experiment(comet_information, args):
     comet_ml.init(comet_information)
-    experiment = comet_ml.Experiment()
+    if args.get("offline"):
+        experiment = comet_ml.OfflineExperiment()
+    else:
+        experiment = comet_ml.Experiment()
     experiment.add_tags(args["tags"])
     experiment.log_parameters(args)
     logger = Logger(experiment)
