@@ -11,7 +11,7 @@ parameters:
   # Each value should be a dict or a list
   tags: [[FirstTry]] # list of tags to attach to the run in logger platform
   offline: [True]
-  offline_directory: []
+  offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
     loss:
