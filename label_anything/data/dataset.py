@@ -36,12 +36,12 @@ class LabelAnythingDataset(Dataset):
         self.do_subsample = common_params.get("do_subsample")
         self.add_box_noise = common_params.get("add_box_noise")
 
-        self._cur_dataset = None
-        self._categories = None
-
         self.datasets = {
             dataset_name: datasets[dataset_name](**{**common_params, **params})
             for dataset_name, params in datasets_params.items()
+        }
+        self.categories = {
+            dataset_name: dataset.categories for dataset_name, dataset in self.datasets.items()
         }
         index = sum(
             [
@@ -60,8 +60,7 @@ class LabelAnythingDataset(Dataset):
 
     def __getitem__(self, index) -> Any:
         dataset_name, dataset_index = self.index[index]
-        self._cur_dataset = dataset_name
-        return self.datasets[dataset_name][dataset_index]
+        return self.datasets[dataset_name][dataset_index], dataset_name
 
     def reset_num_examples(self):
         """Set the number of examples for the next query image."""
@@ -78,10 +77,6 @@ class LabelAnythingDataset(Dataset):
         self._log_images = value
         for dataset in self.datasets.values():
             dataset.log_images = value
-
-    @property
-    def categories(self):
-        return self.datasets[self._cur_dataset].categories
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
@@ -141,6 +136,7 @@ class LabelAnythingDataset(Dataset):
             torch.Tensor: batched output masks as a torch tensor of shape B x H x W.
 
         """
+        batched_input, dataset_names = zip(*batched_input)
         # classes
         max_classes = max([x["prompt_masks"].size(1) for x in batched_input])
 
@@ -219,4 +215,4 @@ class LabelAnythingDataset(Dataset):
         # reset dataset parameters
         self.reset_num_examples()
 
-        return data_dict, ground_truths
+        return (data_dict, ground_truths), dataset_names

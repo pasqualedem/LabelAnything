@@ -37,9 +37,10 @@ def train_epoch(
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
     tot_steps = 0
 
-    for batch_idx, batch_dict in bar:
+    for batch_idx, batch_tuple in bar:
+        batch_tuple, dataset_names = batch_tuple
         substitutor = Substitutor(
-            batch_dict,
+            batch_tuple,
             threshold=train_params.get("substitution_threshold", None),
             num_points=train_params.get("num_points", 1),
         )
@@ -81,6 +82,7 @@ def train_epoch(
                     substitution_step=i,
                     input_dict=input_dict,
                     categories=dataloader.dataset.categories,
+                    dataset_names=dataset_names
                 )
                 comet_logger.log_gt_pred(
                     batch_idx=batch_idx,
@@ -90,6 +92,7 @@ def train_epoch(
                     gt=gt,
                     pred=outputs,
                     categories=dataloader.dataset.categories,
+                    dataset_names=dataset_names
                 )
                 dataloader.dataset.log_images = False
             substitutor.generate_new_points(outputs, gt)
