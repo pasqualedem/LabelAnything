@@ -14,11 +14,13 @@ logger = get_logger(__name__)
 
 
 def comet_experiment(comet_information, args):
-    comet_ml.init(comet_information)
     if args.get("offline"):
-        experiment = comet_ml.OfflineExperiment()
+        experiment = comet_ml.OfflineExperiment(
+            workspace=args.get("offline_directory")
+        )
     else:
         experiment = comet_ml.Experiment()
+    comet_ml.init(comet_information)
     experiment.add_tags(args["tags"])
     experiment.log_parameters(args)
     logger = Logger(experiment)
@@ -61,7 +63,6 @@ class Run:
         comet_information = {
             "apykey": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
-            "offline_directory": self.params.get("offline_directory")
         }
 
         self.comet_logger, self.experiment = comet_experiment(
