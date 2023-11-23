@@ -76,3 +76,45 @@ def preprocess(
         outfolder=outfolder,
         compile=compile,
     )
+
+@main.command("benchmark")
+def benchmark():
+    import torch
+    import torch.nn as nn
+    import time
+
+    # Define a simple neural network
+    class SimpleNet(nn.Module):
+        def __init__(self):
+            super(SimpleNet, self).__init__()
+            self.fc1 = nn.Linear(1000, 500)
+            self.relu = nn.ReLU()
+            self.fc2 = nn.Linear(500, 10)
+
+        def forward(self, x):
+            x = self.fc1(x)
+            x = self.relu(x)
+            x = self.fc2(x)
+            return x
+
+    # Create an instance of the network
+    net = SimpleNet().cuda()
+
+    # Generate random input data
+    input_data = torch.randn(100, 1000).cuda()
+
+    # Warm-up GPU
+    for _ in range(10):
+        _ = net(input_data)
+
+    # Benchmark the forward pass on GPU
+    num_iterations = 100
+    start_time = time.time()
+    for _ in range(num_iterations):
+        _ = net(input_data)
+    end_time = time.time()
+
+    # Calculate average time per iteration
+    average_time = (end_time - start_time) / num_iterations
+
+    print(f"Average time per iteration: {average_time:.5f} seconds")
