@@ -147,7 +147,6 @@ class Logger:
         flags_boxes = input_dict["flag_bboxes"]
         flags_points = input_dict["flag_points"]
         classes = self.__get_class_ids(input_dict["classes"])
-        print(classes)
 
         for i in range(images.shape[0]):
             cur_dataset_categories = categories[dataset_names[i]]
