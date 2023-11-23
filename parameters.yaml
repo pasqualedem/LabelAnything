@@ -16,7 +16,7 @@ parameters:
   train_params:
     loss:
     seed: &seed [42] # random seed to set
-    # substitution_threshold: [0.1] # threshold 
+    # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
     max_epochs: [5, 10]
     compile: [False]
@@ -60,7 +60,7 @@ parameters:
       max_num_examples: [5, 10, 20]
       load_embeddings: [True]
   dataloader:
-    batch_size: [256]
-    num_workers: [4]
+    batch_size: [4]
+    num_workers: [0]
 
 other_grids:
