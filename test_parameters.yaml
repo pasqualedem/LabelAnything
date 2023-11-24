@@ -1,0 +1,56 @@
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: LabelAnything # name of the logger platform experiment
+  group: FirstTry # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  tags: [[Test]] # list of tags to attach to the run in logger platform
+
+  train_params:
+    loss:
+    seed: &seed [42] # random seed to set
+    # substitution_threshold: [0.1] # threshold
+    num_points: [1] # number of points for class after the substitution
+    max_epochs: [5, 10]
+    compile: [False]
+    logger:
+      log_frequency: [500]
+    initial_lr: [0.0001, 0.00005]
+    optimizer: [AdamW]
+
+  model:
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    use_sam_checkpoint: [True]
+
+  dataset: # parameters depending on the class you defined for the dataset
+    datasets:
+      lvis:
+        instances_path: [data/annotations/lvis_v1_train.json]
+      coco:
+        instances_path: [data/annotations/instances_train2017.json]
+      val_lvis:
+        instances_path: [data/annotations/lvis_v1_val.json]
+        seed: *seed
+        do_subsample: [False]
+        add_box_noise: [False]
+      val_coco:
+        instances_path: [data/annotations/instances_val2017.json]
+        seed: *seed
+        do_subsample: [False]
+        add_box_noise: [False]
+    common:
+      do_subsample: [True]
+      add_box_noise: [True]
+      max_num_examples: [5, 10, 20]
+      load_embeddings: [True]
+  dataloader:
+    batch_size: [4]
+    num_workers: [0]
+
+other_grids:
