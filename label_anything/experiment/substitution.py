@@ -113,7 +113,7 @@ class Substitutor:
         "flag_points",
     ]
     list_keys_to_exchange = ["classes"]
-    list_keys_to_separate = ["classes"]
+    list_keys_to_separate = []
 
     def __init__(
         self, batch: dict, threshold: float = None, num_points: int = 1

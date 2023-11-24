@@ -12,8 +12,8 @@ def main():
 
 @main.command("experiment")
 @click.option("--parameters", default="parameters.yaml", help="Path to the parameters file")
-def experiment(params):
-    run_experiment(param_path=params)
+def experiment(parameters):
+    run_experiment(param_path=parameters)
 
 
 @main.command("preprocess")

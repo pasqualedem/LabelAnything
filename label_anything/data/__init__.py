@@ -63,7 +63,7 @@ def get_dataloaders(dataset_args, dataloader_args):
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
 
-    val_datasets_params = {k: v for k, v in datasets_params.items() if not k.startswith("val_")}
+    val_datasets_params = {k: v for k, v in datasets_params.items() if k.startswith("val_")}
     test_datasets_params = {k: v for k, v in datasets_params.items() if k.startswith("test_")}
     train_datasets_params = {
         k: v for k, v in datasets_params.items() if k not in list(val_datasets_params.keys()) + list(test_datasets_params.keys())
