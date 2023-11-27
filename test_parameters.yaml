@@ -22,6 +22,7 @@ parameters:
       log_frequency: [500]
     initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
+    substitute: [False]
 
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
@@ -50,7 +51,7 @@ parameters:
       max_num_examples: [5, 10, 20]
       load_embeddings: [True]
   dataloader:
-    batch_size: [4]
+    batch_size: [1]
     num_workers: [0]
 
 other_grids:

@@ -43,6 +43,7 @@ def train_epoch(
             batch_tuple,
             threshold=train_params.get("substitution_threshold", None),
             num_points=train_params.get("num_points", 1),
+            substitute=train_params.get("substitute", True),
         )
         for i, (input_dict, gt) in enumerate(substitutor):
             optimizer.zero_grad()
