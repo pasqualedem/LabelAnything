@@ -119,10 +119,9 @@ class Logger:
                         }
                     )
 
-            annotations = [
-                {"name": "Ground truth", "data": data_gt},
-                {"name": "Prediction", "data": data_pred},
-            ]
+            annotations = [{"name": "Ground truth", "data": data_gt}]
+            if data_pred:
+                annotations.append({"name": "Prediction", "data": data_pred})
             self.experiment.log_image(
                 name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
                 image_data=image,
@@ -132,6 +131,7 @@ class Logger:
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
+                    "pred_bg_percent": torch.sum(sample_pred[0]).item() / (sample_pred.shape[1] * sample_pred.shape[2])
                 },
                 step=step,
             )
