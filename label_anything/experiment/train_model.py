@@ -82,14 +82,6 @@ def train_epoch(
                     step=tot_steps,
                     substitution_step=i,
                     input_dict=input_dict,
-                    categories=dataloader.dataset.categories,
-                    dataset_names=dataset_names
-                )
-                comet_logger.log_gt_pred(
-                    batch_idx=batch_idx,
-                    step=tot_steps,
-                    substitution_step=i,
-                    input_dict=input_dict,
                     gt=gt,
                     pred=outputs,
                     categories=dataloader.dataset.categories,
