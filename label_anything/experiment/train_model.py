@@ -188,7 +188,7 @@ def train_and_test(
     accelerator = Accelerator()
 
     criterion = LabelAnythingLoss(**train_params["loss"])
-    optimizer = AdamW(model.parameters(), lr=train_params["initial_lr"])
+    optimizer = AdamW(model.get_learnable_params(train_params), lr=train_params["initial_lr"])
     if train_params.get("compile", False):
         model = torch.compile(model)
 

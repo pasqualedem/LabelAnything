@@ -220,6 +220,22 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+        
+    def get_learnable_params(self, training_params: dict) -> list:
+        """
+
+        :return: list of dictionaries containing the key 'named_params' with a list of named params
+        """
+
+        def f(x):
+            return not "image_encoder" in x[0]
+
+        freeze_pretrained = training_params.get('freeze_backbone', False)
+        if freeze_pretrained:
+            for param in self.image_encoder.parameters():
+                param.requires_grad = False
+            return [x[1] for x in filter(f, list(self.named_parameters()))]
+        return self.parameters()
 
     def generate_class_embeddings(self, example_dict):
         prompt_embeddings = self.prepare_embeddings(example_dict)
