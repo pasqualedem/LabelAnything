@@ -31,38 +31,6 @@ class Logger:
             res_classes.append(list(c[max_idx]))
         return res_classes
 
-    def log_pred(self, batch_idx, step, input_dict, pred, categories):
-        images = input_dict["images"]
-        dims = input_dict["dims"]
-        classes = self.__get_class_ids(input_dict["classes"])
-
-        for b in range(pred.shape[0]):
-            data = []
-            img = take_image(images[b, 0], dims[b, 0])
-            image = get_image(img)
-            sample_pred = pred[b, :, : dims[b, 0, 0], : dims[b, 0, 1]]
-            sample_pred = torch.argmax(sample_pred, dim=0)
-            sample_pred = F.one_hot(
-                sample_pred, num_classes=len(classes[b]) + 1
-            ).permute(2, 0, 1)
-            for c in range(1, sample_pred.shape[0]):
-                label = categories[classes[b][c - 1]]["name"]
-                polygons = extract_polygons_from_tensor(
-                    sample_pred[c], should_resize=False
-                )
-                data.append({"points": polygons, "label": label, "score": None})
-
-            annotations = [{"name": "Prediction", "data": data}]
-            self.experiment.log_image(
-                image_data=image,
-                annotations=annotations,
-                metadata={
-                    "batch_idx": batch_idx,
-                    "sample_idx": b,
-                    "substitution_step": step,
-                },
-            )
-
     def log_gt_pred(
         self,
         batch_idx,
@@ -119,10 +87,9 @@ class Logger:
                         }
                     )
 
-            annotations = [
-                {"name": "Ground truth", "data": data_gt},
-                {"name": "Prediction", "data": data_pred},
-            ]
+            annotations = [{"name": "Ground truth", "data": data_gt}]
+            if data_pred:
+                annotations.append({"name": "Prediction", "data": data_pred})
             self.experiment.log_image(
                 name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
                 image_data=image,
@@ -132,12 +99,13 @@ class Logger:
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
+                    "pred_bg_percent": torch.sum(sample_pred[0]).item() / (sample_pred.shape[1] * sample_pred.shape[2])
                 },
                 step=step,
             )
 
     def log_batch(
-        self, batch_idx, step, substitution_step, input_dict, categories, dataset_names
+        self, batch_idx, step, substitution_step, input_dict, gt, pred, categories, dataset_names
     ):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
@@ -234,6 +202,16 @@ class Logger:
                     },
                     step=step,
                 )
+        self.log_gt_pred(
+            batch_idx=batch_idx,
+            step=step,
+            substitution_step=i,
+            input_dict=input_dict,
+            gt=gt,
+            pred=pred,
+            categories=categories,
+            dataset_names=dataset_names,
+        )
 
     def log_image(self, img_data, annotations=None):
         self.experiment.log_image(
