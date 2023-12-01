@@ -11,7 +11,7 @@ parameters:
   # Each value should be a dict or a list
   tags: [[FirstTry]] # list of tags to attach to the run in logger platform
   offline: [True]
-  offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+  offline_directory: [/leonardo_scratch/large/userexternal/pdemarin/offline]
 
   train_params:
     loss:
@@ -61,7 +61,7 @@ parameters:
       max_num_examples: [5, 10, 20]
       load_embeddings: [True]
   dataloader:
-    batch_size: [1]
-    num_workers: [0]
+    batch_size: [4]
+    num_workers: [4]
 
 other_grids:
