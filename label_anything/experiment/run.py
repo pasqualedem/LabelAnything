@@ -16,7 +16,7 @@ logger = get_logger(__name__)
 def comet_experiment(comet_information, args):
     if args.get("offline"):
         experiment = comet_ml.OfflineExperiment(
-            workspace=args.get("offline_directory")
+            offline_directory=args.get("offline_directory")
         )
     else:
         experiment = comet_ml.Experiment()
