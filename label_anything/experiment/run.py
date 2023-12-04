@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 
 def comet_experiment(comet_information: dict, params: dict):
+    global logger
     logger_params = deepcopy(params.get("logger", {}))
     logger_params.pop("comet", None)
     if os.environ.get("TMPDIR", None) or os.environ.get("TMP", None) or os.environ.get("TEMP", None):
