@@ -17,7 +17,12 @@ def comet_experiment(comet_information: dict, params: dict):
     logger_params = deepcopy(params.get("logger", {}))
     logger_params.pop("comet", None)
     if os.environ.get("TMPDIR", None) or os.environ.get("TMP", None) or os.environ.get("TEMP", None):
-        tmp_dir = os.environ.get("TMPDIR", tmp_dir)
+        if os.environ.get("TMPDIR", None):
+            tmp_dir = os.environ.get("TMPDIR")
+        elif os.environ.get("TMP", None):
+            tmp_dir = os.environ.get("TMP")
+        else:
+            tmp_dir = os.environ.get("TEMP")
         logger.info(f"Using {tmp_dir} as temporary directory from environment variables")
     else:
         tmp_dir = logger_params.get("tmp_dir", None)
