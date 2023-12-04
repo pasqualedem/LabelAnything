@@ -12,7 +12,6 @@ parameters:
   
   logger:
     log_frequency: [100]
-    tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
       offline: [True]

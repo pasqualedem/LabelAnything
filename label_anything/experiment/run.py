@@ -14,6 +14,16 @@ logger = get_logger(__name__)
 
 
 def comet_experiment(comet_information: dict, params: dict):
+    logger_params = deepcopy(params.get("logger", {}))
+    logger_params.pop("comet", None)
+    os.makedirs(tmp_dir, exist_ok=True)
+    if os.environ.get("TMPDIR", None) or os.environ.get("TMP", None) or os.environ.get("TEMP", None):
+        tmp_dir = os.environ.get("TMPDIR", tmp_dir)
+        logger.info(f"Using {tmp_dir} as temporary directory from environment variables")
+    else:
+        tmp_dir = logger_params.get("tmp_dir", None)
+        logger.info(f"No temporary directory found in environment variables, using {tmp_dir} for images")
+    
     if comet_information.get("offline"):
         offdir = comet_information.pop("offline_directory", None)
         experiment = comet_ml.OfflineExperiment(offline_directory=offdir)
@@ -22,9 +32,9 @@ def comet_experiment(comet_information: dict, params: dict):
     comet_ml.init(comet_information)
     experiment.add_tags(comet_information.get("tags"))
     experiment.log_parameters(params)
-    logger_params = deepcopy(params.get("logger", {}))
-    logger_params.pop("comet", None)
+    
     logger = Logger(experiment, **logger_params)
+    
     return logger
 
 

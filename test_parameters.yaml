@@ -11,10 +11,10 @@ parameters:
   # Each value should be a dict or a list
   logger:
     log_frequency: [100]
-    tmp_dir: [tmp_img]
+    tmp_dir: [tmp]
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
-      offline: [False]
+      offline: [True]
 
   train_params:
     loss:
