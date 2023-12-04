@@ -25,6 +25,7 @@ def comet_experiment(comet_information: dict, params: dict):
         else:
             tmp_dir = os.environ.get("TEMP")
         logger.info(f"Using {tmp_dir} as temporary directory from environment variables")
+        logger_params["tmp_dir"] = tmp_dir
     else:
         tmp_dir = logger_params.get("tmp_dir", None)
         logger.info(f"No temporary directory found in environment variables, using {tmp_dir} for images")
