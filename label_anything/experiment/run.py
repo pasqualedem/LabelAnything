@@ -13,18 +13,19 @@ from label_anything.models import model_registry
 logger = get_logger(__name__)
 
 
-def comet_experiment(comet_information, args):
-    if args.get("offline"):
-        experiment = comet_ml.OfflineExperiment(
-            offline_directory=args.get("offline_directory")
-        )
+def comet_experiment(comet_information: dict, params: dict):
+    if comet_information.get("offline"):
+        offdir = comet_information.pop("offline_directory", None)
+        experiment = comet_ml.OfflineExperiment(offline_directory=offdir)
     else:
         experiment = comet_ml.Experiment()
     comet_ml.init(comet_information)
-    experiment.add_tags(args["tags"])
-    experiment.log_parameters(args)
-    logger = Logger(experiment)
-    return logger, experiment
+    experiment.add_tags(comet_information.get("tags"))
+    experiment.log_parameters(params)
+    logger_params = deepcopy(params.get("logger", {}))
+    logger_params.pop("comet", None)
+    logger = Logger(experiment, **logger_params)
+    return logger
 
 
 class Run:
@@ -60,16 +61,16 @@ class Run:
             self.model_params,
         ) = parse_params(params)
 
+        comet_params = self.params.get("logger", {}).get("comet", {})
         comet_information = {
-            "apykey": os.getenv("COMET_API_KEY"),
+            "apikey": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
+            **comet_params,
         }
 
-        self.comet_logger, self.experiment = comet_experiment(
-            comet_information, self.params
-        )
-        self.url = self.experiment.url
-        self.name = self.experiment.name
+        self.comet_logger = comet_experiment(comet_information, self.params)
+        self.url = self.comet_logger.experiment.url
+        self.name = self.comet_logger.experiment.name
 
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
             self.dataset_params, self.dataloader_params
@@ -85,6 +86,5 @@ class Run:
             self.val_loader,
             self.test_loader,
             self.comet_logger,
-            self.experiment,
             self.train_params,
         )

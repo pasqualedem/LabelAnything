@@ -3,6 +3,7 @@ import torch
 
 from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
+from label_anything.logger.image_logger import Logger
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import log_every_n
 from label_anything.utils.loss import LabelAnythingLoss
@@ -19,7 +20,7 @@ def train_epoch(
     criterion,
     dataloader,
     epoch,
-    comet_logger,
+    comet_logger: Logger,
     accelerator,
     train_params,
 ):
@@ -56,7 +57,6 @@ def train_epoch(
             accelerator.backward(loss)
             optimizer.step()
 
-
             jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
             fbiou_value = fbiou(outputs, gt)
 
@@ -69,25 +69,17 @@ def train_epoch(
 
             comet_logger.log_metric("batch_jaccard", jaccard_value.item())
 
-            image_idx = batch_idx * batch_size
-            if log_every_n(
-                image_idx - batch_size, train_params["logger"].get("log_frequency", None)
-            ):
-                dataloader.dataset.log_images = True
-            if log_every_n(
-                image_idx, train_params["logger"].get("log_frequency", None)
-            ):
-                comet_logger.log_batch(
+            comet_logger.log_batch(
                     batch_idx=batch_idx,
+                    batch_size=batch_size,
                     step=tot_steps,
                     substitution_step=i,
                     input_dict=input_dict,
                     gt=gt,
                     pred=outputs,
-                    categories=dataloader.dataset.categories,
-                    dataset_names=dataset_names
+                    dataset=dataloader.dataset,
+                    dataset_names=dataset_names,
                 )
-                dataloader.dataset.log_images = False
             substitutor.generate_new_points(outputs, gt)
             bar.set_postfix(
                 {
@@ -173,7 +165,6 @@ def train_and_test(
     val_loader,
     test_loader,
     comet_logger,
-    experiment,
     train_params,
 ):
     logger.info("Start training loop...")
@@ -185,7 +176,7 @@ def train_and_test(
         model = torch.compile(model)
 
     # Train the Model
-    with experiment.train():
+    with comet_logger.experiment.train():
         logger.info(f"Running Model Training {args.get('experiment').get('name')}")
         for epoch in range(train_params["max_epochs"]):
             logger.info("Epoch: {}/{}".format(epoch, train_params["max_epochs"]))
@@ -201,15 +192,15 @@ def train_and_test(
             )
             logger.info(f"Finished Epoch {epoch}")
 
-            save_model(experiment, model, model._get_name)
+            save_model(comet_logger.experiment, model, model._get_name)
             if val_loader:
-                with experiment.validate():
+                with comet_logger.experiment.validate():
                     logger.info(f"Running Model Testing {args.name}")
                     validate(model, criterion, val_loader, epoch, comet_logger)
                     
     if test_loader:
-        with experiment.test():
+        with comet_logger.experiment.test():
             logger.info(f"Running Model Testing {args.name}")
             test(model, criterion, test_loader, comet_logger)
 
-    experiment.end()
+    comet_logger.experiment.end()

@@ -9,7 +9,12 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-  tags: [[Test]] # list of tags to attach to the run in logger platform
+  logger:
+    log_frequency: [100]
+    tmp_dir: [tmp_img]
+    comet:
+      tags: [[Test]] # list of tags to attach to the run in logger platform
+      offline: [False]
 
   train_params:
     loss:
@@ -18,11 +23,9 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [5, 10]
     compile: [False]
-    logger:
-      log_frequency: [500]
     initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
-    substitute: [False]
+    substitute: [True]
     freeze_backbone: [True]
 
   model:

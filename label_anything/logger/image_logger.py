@@ -6,9 +6,13 @@ from label_anything.logger.utils import (
     take_image,
     extract_masks_dynamic,
 )
+from label_anything.utils.utils import log_every_n
+import os
 import math
 import torch
 import torch.nn.functional as F
+
+from PIL import Image
 
 
 def validate_polygon(polygon):
@@ -16,8 +20,11 @@ def validate_polygon(polygon):
 
 
 class Logger:
-    def __init__(self, experiment):
+    def __init__(self, experiment, tmp_dir: str, log_frequency: int = 1000):
         self.experiment = experiment
+        self.tmp_dir = tmp_dir
+        os.makedirs(self.tmp_dir, exist_ok=True)
+        self.log_frequency = log_frequency
 
     def __get_class_ids(self, classes):
         res_classes = []
@@ -90,7 +97,7 @@ class Logger:
             annotations = [{"name": "Ground truth", "data": data_gt}]
             if data_pred:
                 annotations.append({"name": "Prediction", "data": data_pred})
-            self.experiment.log_image(
+            self.log_image(
                 name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
@@ -99,13 +106,57 @@ class Logger:
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
-                    "pred_bg_percent": torch.sum(sample_pred[0]).item() / (sample_pred.shape[1] * sample_pred.shape[2])
+                    "pred_bg_percent": torch.sum(sample_pred[0]).item()
+                    / (sample_pred.shape[1] * sample_pred.shape[2]),
                 },
                 step=step,
             )
 
     def log_batch(
-        self, batch_idx, step, substitution_step, input_dict, gt, pred, categories, dataset_names
+        self,
+        batch_idx,
+        batch_size,
+        step,
+        substitution_step,
+        input_dict,
+        gt,
+        pred,
+        dataset,
+        dataset_names,
+    ):
+        image_idx = batch_idx * batch_size
+        if log_every_n(image_idx - batch_size, self.log_frequency):
+            dataset.log_images = True
+        if log_every_n(image_idx, self.log_frequency):
+            categories = dataset.categories
+            self.log_prompts(
+                batch_idx=batch_idx,
+                step=step,
+                substitution_step=substitution_step,
+                input_dict=input_dict,
+                categories=categories,
+                dataset_names=dataset_names,
+            )
+            self.log_gt_pred(
+                batch_idx=batch_idx,
+                step=step,
+                substitution_step=substitution_step,
+                input_dict=input_dict,
+                gt=gt,
+                pred=pred,
+                categories=categories,
+                dataset_names=dataset_names,
+            )
+            dataset.log_images = False
+
+    def log_prompts(
+        self,
+        batch_idx,
+        step,
+        substitution_step,
+        input_dict,
+        categories,
+        dataset_names,
     ):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
@@ -190,7 +241,7 @@ class Logger:
                                 "score": None,
                             }
                         )
-                self.experiment.log_image(
+                self.log_image(
                     name=f"batch_{batch_idx}_substep_{substitution_step}_prompt",
                     image_data=image,
                     annotations=annotations,
@@ -202,22 +253,20 @@ class Logger:
                     },
                     step=step,
                 )
-        self.log_gt_pred(
-            batch_idx=batch_idx,
-            step=step,
-            substitution_step=i,
-            input_dict=input_dict,
-            gt=gt,
-            pred=pred,
-            categories=categories,
-            dataset_names=dataset_names,
-        )
 
-    def log_image(self, img_data, annotations=None):
+    def log_image(
+        self, name: str, image_data: Image, annotations=None, metadata=None, step=None
+    ):
+        tmp_path = os.path.join(self.tmp_dir, "tmp.png")
+        image_data.save(tmp_path)
         self.experiment.log_image(
-            image_data=img_data,
+            name=name,
+            image_data=tmp_path,
+            metadata=metadata,
             annotations=annotations,
+            step=step,
         )
+        os.remove(tmp_path)
 
     def log_metric(self, name, metric, epoch=None):
         self.experiment.log_metric(name, metric, epoch)
