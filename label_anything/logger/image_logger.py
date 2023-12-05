@@ -10,6 +10,7 @@ from label_anything.utils.utils import log_every_n
 import os
 import math
 import torch
+import tempfile
 import torch.nn.functional as F
 
 from PIL import Image
@@ -257,7 +258,7 @@ class Logger:
     def log_image(
         self, name: str, image_data: Image, annotations=None, metadata=None, step=None
     ):
-        tmp_path = os.path.join(self.tmp_dir, "tmp.png")
+        tmp_path = tempfile.mktemp(suffix=".png", dir=self.tmp_dir)
         image_data.save(tmp_path)
         self.experiment.log_image(
             name=name,
