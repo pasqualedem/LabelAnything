@@ -9,6 +9,7 @@ __pycache__/
 .Python
 venv/
 .venv/
+.cometml-runs
 env/
 build/
 develop-eggs/

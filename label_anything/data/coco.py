@@ -117,7 +117,6 @@ class CocoLVISDataset(Dataset):
         self.seed = seed
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
-        self.num_examples = None
         self.__set_all_seeds()
 
     def __set_all_seeds(self):
@@ -218,7 +217,7 @@ class CocoLVISDataset(Dataset):
             "RGB"
         )
 
-    def _extract_examples(self, img_data: dict) -> (list, list):
+    def _extract_examples(self, img_data: dict, num_examples: int) -> (list, list):
         """Chooses examples (and categories) for the query image.
 
         Args:
@@ -240,7 +239,7 @@ class CocoLVISDataset(Dataset):
         return self.example_generator.generate_examples(
             query_image_id=img_data["id"],
             sampled_classes=torch.tensor(sampled_classes),
-            num_examples=self.num_examples,
+            num_examples=num_examples,
         )
 
     def _get_annotations(self, image_ids, cat_ids):
@@ -316,10 +315,11 @@ class CocoLVISDataset(Dataset):
         ]
         return images, "images"
 
-    def __getitem__(self, item: int) -> dict:
+    def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
+        idx, num_examples = idx_num_examples
         if self.split == "train":
-            base_image_data = self.images[self.image_ids[item]]
-            image_ids, aux_cat_ids = self._extract_examples(base_image_data)
+            base_image_data = self.images[self.image_ids[idx]]
+            image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
             cat_ids = list(set(itertools.chain(*aux_cat_ids)))
             cat_ids.insert(0, -1)  # add the background class
         else:

@@ -14,6 +14,13 @@ from label_anything.utils.metrics import jaccard, fbiou
 logger = get_logger(__name__)
 
 
+def get_batch_size(batch_tuple):
+    if batch_tuple[0].get("images") is not None:
+        return batch_tuple[0]["images"].shape[0]
+    if batch_tuple[0].get("embeddings") is not None:
+        return batch_tuple[0]["embeddings"].shape[0]
+
+
 def train_epoch(
     model,
     optimizer,
@@ -31,15 +38,16 @@ def train_epoch(
     first_step_loss = 0
     first_step_jaccard = 0
     first_step_fbiou = 0
-    batch_size = dataloader.batch_size
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
 
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
     tot_steps = 0
+    tot_images = 0
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
+        cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
             batch_tuple,
             threshold=train_params.get("substitution_threshold", None),
@@ -71,7 +79,8 @@ def train_epoch(
 
             comet_logger.log_batch(
                     batch_idx=batch_idx,
-                    batch_size=batch_size,
+                    image_idx=tot_images,
+                    batch_size=cur_batch_size,
                     step=tot_steps,
                     substitution_step=i,
                     input_dict=input_dict,
@@ -89,6 +98,7 @@ def train_epoch(
                 }
             )
             tot_steps += 1
+        tot_images += cur_batch_size
 
     total_loss /= tot_steps
     total_jaccard /= tot_steps

@@ -39,9 +39,50 @@ class Logger:
             res_classes.append(list(c[max_idx]))
         return res_classes
 
+    def log_batch(
+        self,
+        batch_idx,
+        image_idx,
+        batch_size,
+        step,
+        substitution_step,
+        input_dict,
+        gt,
+        pred,
+        dataset,
+        dataset_names,
+    ):
+        if log_every_n(image_idx, batch_size, self.log_frequency):
+            dataset.log_images = True
+            return
+        if dataset.log_images:
+            categories = dataset.categories
+            self.log_prompts(
+                batch_idx=batch_idx,
+                step=step,
+                image_idx=image_idx,
+                substitution_step=substitution_step,
+                input_dict=input_dict,
+                categories=categories,
+                dataset_names=dataset_names,
+            )
+            self.log_gt_pred(
+                batch_idx=batch_idx,
+                image_idx=image_idx,
+                step=step,
+                substitution_step=substitution_step,
+                input_dict=input_dict,
+                gt=gt,
+                pred=pred,
+                categories=categories,
+                dataset_names=dataset_names,
+            )
+            dataset.log_images = False
+
     def log_gt_pred(
         self,
         batch_idx,
+        image_idx,
         step,
         substitution_step,
         input_dict,
@@ -99,11 +140,12 @@ class Logger:
             if data_pred:
                 annotations.append({"name": "Prediction", "data": data_pred})
             self.log_image(
-                name=f"batch_{batch_idx}_substep_{substitution_step}_gt_pred",
+                name=f"image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
                 metadata={
                     "batch_idx": batch_idx,
+                    "image_idx": image_idx,
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
@@ -113,46 +155,10 @@ class Logger:
                 step=step,
             )
 
-    def log_batch(
-        self,
-        batch_idx,
-        batch_size,
-        step,
-        substitution_step,
-        input_dict,
-        gt,
-        pred,
-        dataset,
-        dataset_names,
-    ):
-        image_idx = batch_idx * batch_size
-        if log_every_n(image_idx - batch_size, self.log_frequency):
-            dataset.log_images = True
-        if log_every_n(image_idx, self.log_frequency):
-            categories = dataset.categories
-            self.log_prompts(
-                batch_idx=batch_idx,
-                step=step,
-                substitution_step=substitution_step,
-                input_dict=input_dict,
-                categories=categories,
-                dataset_names=dataset_names,
-            )
-            self.log_gt_pred(
-                batch_idx=batch_idx,
-                step=step,
-                substitution_step=substitution_step,
-                input_dict=input_dict,
-                gt=gt,
-                pred=pred,
-                categories=categories,
-                dataset_names=dataset_names,
-            )
-            dataset.log_images = False
-
     def log_prompts(
         self,
         batch_idx,
+        image_idx,
         step,
         substitution_step,
         input_dict,
@@ -243,11 +249,12 @@ class Logger:
                             }
                         )
                 self.log_image(
-                    name=f"batch_{batch_idx}_substep_{substitution_step}_prompt",
+                    name=f"image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
                     image_data=image,
                     annotations=annotations,
                     metadata={
                         "batch_idx": batch_idx,
+                        "image_idx": image_idx,
                         "sample_idx": i,
                         "substitution_step": substitution_step,
                         "type": "prompt",
