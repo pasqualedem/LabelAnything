@@ -106,6 +106,7 @@ def get_dataloaders(dataset_args, dataloader_args):
         for k, v in datasets_params.items()
         if k not in list(val_datasets_params.keys()) + list(test_datasets_params.keys())
     }
+    batch_size = dataloader_args.pop("batch_size")
 
     train_dataset = LabelAnythingDataset(
         datasets_params=train_datasets_params,
@@ -113,7 +114,7 @@ def get_dataloaders(dataset_args, dataloader_args):
     )
     train_batch_sizes, train_examples_nums = get_example_num_list(
         len(train_dataset),
-        dataloader_args["batch_size"],
+        batch_size,
         common_params["max_num_examples"],
     )
     train_batch_sampler = VariableBatchSampler(
@@ -134,7 +135,7 @@ def get_dataloaders(dataset_args, dataloader_args):
         )
         val_batch_sizes, val_examples_nums = get_example_num_list(
             len(val_dataset),
-            dataloader_args["batch_size"],
+            batch_size,
             common_params["max_num_examples"],
         )
         val_batch_sampler = VariableBatchSampler(
