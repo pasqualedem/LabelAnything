@@ -118,9 +118,9 @@ class ExampleGenerator:
     
     def backup_sampling(self, class_set, image_ids):
         for cls in class_set:
-            images_containing = self.get_image_ids_intersection([cls], image_ids)
+            images_containing = self.get_image_ids_intersection([cls.item()], image_ids)
             if len(images_containing) > 0:
-                return [cls]
+                return images_containing, [cls.item()]
         raise SamplingFailureException("No image found")
 
     def generate_examples(self, query_image_id, sampled_classes, num_examples):
@@ -168,7 +168,8 @@ class ExampleGenerator:
                     )
                     example_sampled_classes.remove(max_frequency_class)
                 if not example_sampled_classes: # If no image found, sample a single class and try again
-                    images_containing = self.backup_sampling(sampled_classes, image_ids)
+                    images_containing, example_sampled_classes = self.backup_sampling(sampled_classes, image_ids)
+                    found = True
             example_id = self.image_sample_function(
                 images_containing, image_ids
             )
