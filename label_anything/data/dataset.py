@@ -11,7 +11,7 @@ import requests
 import torch
 import torchvision.transforms
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, BatchSampler
 from torchvision.transforms import PILToTensor, ToTensor
 
 import label_anything.data.utils as utils
@@ -30,8 +30,6 @@ datasets = {
 class LabelAnythingDataset(Dataset):
     def __init__(self, datasets_params: Dict, common_params: Dict) -> None:
         self._log_images = True  # logs the first batch
-        self.num_examples = 0
-        self.max_num_examples = common_params.get("max_num_examples")
         self.load_embeddings = common_params.get("load_embeddings")
         self.do_subsample = common_params.get("do_subsample")
         self.add_box_noise = common_params.get("add_box_noise")
@@ -51,22 +49,16 @@ class LabelAnythingDataset(Dataset):
             [],
         )
         self.index = {i: index for i, index in enumerate(index)}
-
-        self.reset_num_examples()
+        
         super().__init__()
 
     def __len__(self):
         return sum([len(dataset) for dataset in self.datasets.values()])
 
-    def __getitem__(self, index) -> Any:
-        dataset_name, dataset_index = self.index[index]
-        return self.datasets[dataset_name][dataset_index], dataset_name
-
-    def reset_num_examples(self):
-        """Set the number of examples for the next query image."""
-        self.num_examples = random.randint(1, self.max_num_examples)
-        for dataset in self.datasets.values():
-            dataset.num_examples = self.num_examples
+    def __getitem__(self, idx_num_examples) -> Any:
+        idx, num_examples = idx_num_examples
+        dataset_name, dataset_index = self.index[idx]
+        return self.datasets[dataset_name][(dataset_index, num_examples)], dataset_name
 
     @property
     def log_images(self):
@@ -212,7 +204,31 @@ class LabelAnythingDataset(Dataset):
             log_images = torch.stack([x["images"] for x in batched_input])
             data_dict["images"] = log_images
 
-        # reset dataset parameters
-        self.reset_num_examples()
-
         return (data_dict, ground_truths), dataset_names
+
+
+class VariableBatchSampler(BatchSampler):
+    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False):
+        self.data_source = data_source
+        self.batch_sizes = batch_sizes
+        self.num_examples = num_examples
+        self.drop_last = drop_last
+        self.sampler = torch.utils.data.sampler.RandomSampler(data_source)
+
+        if len(batch_sizes) == 0:
+            raise ValueError("At least one batch size should be provided.")
+        
+    def __len__(self):
+        return len(self.batch_sizes)
+
+    def __iter__(self):
+        indices = self.sampler.__iter__()
+
+        for batch_size, num_examples in zip(self.batch_sizes, self.num_examples):
+            batch = []
+            while len(batch) < batch_size and indices:
+                batch.append((next(indices), num_examples))
+            yield batch
+            
+    def get_max_num_images(self):
+        return self.batch_sizes[0] * self.num_examples[0]

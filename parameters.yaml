@@ -42,7 +42,7 @@ parameters:
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/nfanelli/embeddings]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
       coco:
-        instances_path: [/leonardo_scratch/large/userexternal/nfanelli//annotations/instances_train2017.json]
+        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2017.json]
         emb_dir: *emb_dir
         img_dir: *img_dir
       val_lvis:

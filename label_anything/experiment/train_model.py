@@ -5,7 +5,8 @@ from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.image_logger import Logger
 from label_anything.experiment.substitution import Substitutor
-from label_anything.utils.utils import log_every_n
+from label_anything.utils.utils import find_divisor_pairs
+from label_anything.data.utils import random_batch
 from label_anything.utils.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
@@ -13,6 +14,41 @@ from label_anything.utils.metrics import jaccard, fbiou
 
 logger = get_logger(__name__)
 
+
+def get_batch_size(batch_tuple):
+    if batch_tuple[0].get("images") is not None:
+        return batch_tuple[0]["images"].shape[0]
+    if batch_tuple[0].get("embeddings") is not None:
+        return batch_tuple[0]["embeddings"].shape[0]
+    
+    
+def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
+    """
+    Execute forward and backward with maximum input lenght to avoid out of memories
+    """
+    depth = 256
+    height = 1024
+    width = 1024
+    num_classes = 10
+    num_objects = 10
+    
+    max_num_images = dataloader.batch_sampler.get_max_num_images()
+    batch_size_examples_pairs = find_divisor_pairs(max_num_images)
+    logger.info(f"Max number of images: {max_num_images}")
+    for batch_size, num_examples in batch_size_examples_pairs:
+        optimizer.zero_grad()
+        batch_dict, gt = random_batch(
+            batch_size, num_examples, depth, height, width, num_classes, num_objects
+        )
+        batch_dict = accelerator.prepare(batch_dict) # TODO: Make this work
+        outputs = model(batch_dict)
+        loss = criterion(outputs, gt)
+        pred = outputs.argmax(dim=1)
+        accelerator.backward(loss)
+        optimizer.step()
+        logger.info(f"Batch size {batch_size}; num examples: {num_examples} OK")
+    logger.info("Allocating memory test PASSED")
+    logger.info(torch.cuda.mem_get_info())
 
 def train_epoch(
     model,
@@ -31,15 +67,17 @@ def train_epoch(
     first_step_loss = 0
     first_step_jaccard = 0
     first_step_fbiou = 0
-    batch_size = dataloader.batch_size
 
     model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+    # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
     tot_steps = 0
+    tot_images = 0
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
+        cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
             batch_tuple,
             threshold=train_params.get("substitution_threshold", None),
@@ -71,7 +109,8 @@ def train_epoch(
 
             comet_logger.log_batch(
                     batch_idx=batch_idx,
-                    batch_size=batch_size,
+                    image_idx=tot_images,
+                    batch_size=cur_batch_size,
                     step=tot_steps,
                     substitution_step=i,
                     input_dict=input_dict,
@@ -89,6 +128,7 @@ def train_epoch(
                 }
             )
             tot_steps += 1
+        tot_images += cur_batch_size
 
     total_loss /= tot_steps
     total_jaccard /= tot_steps
@@ -108,20 +148,26 @@ def train_epoch(
     )
 
 
-def validate(model, criterion, dataloader, epoch, comet_logger):
+def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     model.eval()
     total_loss = 0
     jaccard_value = 0
     fbiou_value = 0
+    
+    dataloader = accelerator.prepare(dataloader)
+    bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
 
     with torch.no_grad():
-        for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+        for batch_idx, batch_tuple in bar:
+            batch_dict, dataset_names = batch_tuple
+            batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
             image_dict, gt = batch_dict
-
+            
             output = model(image_dict)
             jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
-            fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
+            fbiou_value += fbiou(output, gt)
             total_loss += criterion(output, gt).item()  # sum up batch loss
+            # TODO Log validation images
 
         total_loss /= len(dataloader.dataset)
 
@@ -192,11 +238,11 @@ def train_and_test(
             )
             logger.info(f"Finished Epoch {epoch}")
 
-            save_model(comet_logger.experiment, model, model._get_name)
+            save_model(comet_logger.experiment, model, model._get_name())
             if val_loader:
                 with comet_logger.experiment.validate():
-                    logger.info(f"Running Model Testing {args.name}")
-                    validate(model, criterion, val_loader, epoch, comet_logger)
+                    logger.info(f"Running Model Validation")
+                    validate(model, criterion, val_loader, epoch, comet_logger, accelerator)
                     
     if test_loader:
         with comet_logger.experiment.test():
