@@ -238,6 +238,7 @@ class CocoLVISDataset(Dataset):
         )
         return self.example_generator.generate_examples(
             query_image_id=img_data["id"],
+            image_classes=img_cats,
             sampled_classes=torch.tensor(sampled_classes),
             num_examples=num_examples,
         )

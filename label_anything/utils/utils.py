@@ -166,3 +166,13 @@ def get_checkpoints_dir_path(
     """
     if ckpt_root_dir:
         return os.path.join(ckpt_root_dir, project_name, group_name)
+
+
+def find_divisor_pairs(number):
+    divisor_pairs = []
+    
+    for i in range(1, int(number**0.5) + 1):
+        if number % i == 0:
+            divisor_pairs.append((i, number // i))
+    
+    return divisor_pairs

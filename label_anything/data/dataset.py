@@ -229,3 +229,6 @@ class VariableBatchSampler(BatchSampler):
             while len(batch) < batch_size and indices:
                 batch.append((next(indices), num_examples))
             yield batch
+            
+    def get_max_num_images(self):
+        return self.batch_sizes[0] * self.num_examples[0]

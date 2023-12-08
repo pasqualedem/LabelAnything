@@ -25,7 +25,7 @@ parameters:
     compile: [False]
     initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
-    substitute: [True]
+    substitute: [False]
     freeze_backbone: [True]
 
   model:
@@ -41,16 +41,18 @@ parameters:
       coco:
         instances_path: [data/annotations/instances_train2017.json]
         img_dir: *img_dir
-      # val_lvis:
-      #   instances_path: [data/annotations/lvis_v1_val.json]
-      #   seed: *seed
-      #   do_subsample: [False]
-      #   add_box_noise: [False]
-      # val_coco:
-      #   instances_path: [data/annotations/instances_val2017.json]
-      #   seed: *seed
-      #   do_subsample: [False]
-      #   add_box_noise: [False]
+      val_lvis:
+        instances_path: [data/annotations/lvis_v1_val.json]
+        img_dir: *img_dir
+        seed: *seed
+        do_subsample: [False]
+        add_box_noise: [False]
+      val_coco:
+        instances_path: [data/annotations/instances_val2017.json]
+        img_dir: *img_dir
+        seed: *seed
+        do_subsample: [False]
+        add_box_noise: [False]
     common:
       do_subsample: [True]
       add_box_noise: [True]
@@ -58,6 +60,6 @@ parameters:
       load_embeddings: [False]
   dataloader:
     batch_size: [1]
-    num_workers: [0]
+    num_workers: [8]
 
 other_grids:
