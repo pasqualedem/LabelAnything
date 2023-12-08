@@ -21,11 +21,12 @@ def validate_polygon(polygon):
 
 
 class Logger:
-    def __init__(self, experiment, tmp_dir: str, log_frequency: int = 1000):
+    def __init__(self, experiment, tmp_dir: str, log_frequency: int = 100, image_log_frequency: int = 1000):
         self.experiment = experiment
         self.tmp_dir = tmp_dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
+        self.image_log_frequency = image_log_frequency
 
     def __get_class_ids(self, classes):
         res_classes = []
@@ -52,7 +53,7 @@ class Logger:
         dataset,
         dataset_names,
     ):
-        if log_every_n(image_idx, batch_size, self.log_frequency):
+        if log_every_n(image_idx, batch_size, self.image_log_frequency):
             dataset.log_images = True
             return
         if dataset.log_images:

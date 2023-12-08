@@ -176,3 +176,16 @@ def find_divisor_pairs(number):
             divisor_pairs.append((i, number // i))
     
     return divisor_pairs
+
+
+class RunningAverage:
+    def __init__(self):
+        self.accumulator = 0
+        self.steps = 0
+        
+    def update(self, value):
+        self.accumulator += value
+        self.steps += 1
+        
+    def compute(self):
+        return self.accumulator / self.steps

@@ -40,9 +40,7 @@ def comet_experiment(comet_information: dict, params: dict):
     experiment.add_tags(comet_information.get("tags"))
     experiment.log_parameters(params)
     
-    logger = Logger(experiment, **logger_params)
-    
-    return logger
+    return Logger(experiment, **logger_params)
 
 
 class Run:

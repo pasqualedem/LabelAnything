@@ -10,7 +10,8 @@ parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
   logger:
-    log_frequency: [100]
+    log_frequency: [10]
+    image_log_frequency: [100]
     tmp_dir: [tmp]
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
