@@ -11,7 +11,7 @@ import requests
 import torch
 import torchvision.transforms
 from PIL import Image
-from safetensors import safe_open
+from safetensors.torch import load_file
 from torch.utils.data import Dataset
 from torchvision.transforms import PILToTensor, ToTensor
 
@@ -55,7 +55,7 @@ class CocoLVISDataset(Dataset):
         load_embeddings=False,
         split="train",
         do_subsample=True,
-        add_box_noise=True
+        add_box_noise=True,
     ):
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -194,10 +194,9 @@ class CocoLVISDataset(Dataset):
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def __load_safe_embeddings(self, img_data):
-        with safe_open(
-            f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors", framework="pt"
-        ) as f:
-            tensor = f.get_tensor("embedding")
+        tensor = load_file(
+            f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors"
+        )["embedding"]
         return tensor
 
     def _load_image(self, img_data: dict) -> Image:
@@ -230,9 +229,7 @@ class CocoLVISDataset(Dataset):
         """
         img_cats = torch.tensor(list(self.img2cat[img_data["id"]]))
         sampled_classes = (
-            self.example_generator.sample_classes_from_query(
-                img_cats, uniform_sampling
-            )
+            self.example_generator.sample_classes_from_query(img_cats, uniform_sampling)
             if self.do_subsample
             else img_cats
         )
@@ -320,7 +317,9 @@ class CocoLVISDataset(Dataset):
         idx, num_examples = idx_num_examples
         if self.split == "train":
             base_image_data = self.images[self.image_ids[idx]]
-            image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
+            image_ids, aux_cat_ids = self._extract_examples(
+                base_image_data, num_examples
+            )
             cat_ids = list(set(itertools.chain(*aux_cat_ids)))
             cat_ids.insert(0, -1)  # add the background class
         else:
