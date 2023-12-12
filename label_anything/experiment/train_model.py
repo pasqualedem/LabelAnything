@@ -102,6 +102,8 @@ def train_epoch(
             accelerator.backward(loss)
             sd = {k: param.clone() for k, param in model.state_dict().items()}
             optimizer.step()
+            max_param = torch.max(torch.stack([torch.max(torch.abs(param)) for param in model.parameters()]))
+            avg_param = torch.mean((torch.stack([torch.mean(param) for param in model.parameters()])))
             params_nan = torch.tensor([torch.isnan(param).any() for param in model.parameters()]).any()
             if params_nan:
                 torch.save(sd, "model_healthy.pt")
@@ -149,6 +151,8 @@ def train_epoch(
                     "loss": loss.item(),
                     "jac/miou": jaccard_value.item(),
                     "fbiou": fbiou_value.item(),
+                    "max_param": max_param.item(),
+                    "avg_param": avg_param.item(),
                 }
             )
             tot_steps += 1
@@ -162,6 +166,8 @@ def train_epoch(
             "avg_first_step_loss": first_step_loss.compute(),
             "avg_first_step_jaccard": first_step_jaccard.compute(),
             "avg_first_step_fbiou": first_step_fbiou.compute(),
+            "max_param": max_param.item(),
+            "avg_param": avg_param.item(),
         },
         epoch=epoch,
     )
