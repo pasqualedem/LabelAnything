@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import Tuple
 from label_anything.data.utils import get_preprocess_shape
 
+
 class CustomResize(object):
     def __init__(self, long_side_length: int = 1024):
         self.long_side_length = long_side_length

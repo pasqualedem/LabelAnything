@@ -178,6 +178,23 @@ def find_divisor_pairs(number):
     return divisor_pairs
 
 
+def get_divisors(n):
+    """
+    Returns a list of divisors of a given number.
+
+    Args:
+        n (int): The number to find divisors for.
+
+    Returns:
+        list: A list of divisors of the given number.
+    """
+    divisors = []
+    for i in range(1, n + 1):
+        if n % i == 0:
+            divisors.append(i)
+    return divisors
+
+
 class RunningAverage:
     def __init__(self):
         self.accumulator = 0

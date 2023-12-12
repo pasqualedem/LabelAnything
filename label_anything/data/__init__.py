@@ -6,14 +6,7 @@ from torchvision.transforms import Compose, PILToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.transforms import CustomNormalize, CustomResize
-
-
-def get_divisors(n):
-    divisors = []
-    for i in range(1, n + 1):
-        if n % i == 0:
-            divisors.append(i)
-    return divisors
+from label_anything.utils.utils import get_divisors
 
 
 def get_example_num_list(dataset_len, batch_size, max_num_examples):

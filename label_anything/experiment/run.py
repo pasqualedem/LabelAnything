@@ -1,7 +1,6 @@
 import os
 from label_anything.data import get_dataloaders
 from label_anything.logger.text_logger import get_logger
-from label_anything.experiment.parameters import parse_params
 import sys
 import comet_ml
 from copy import deepcopy
@@ -11,6 +10,15 @@ from label_anything.experiment.train_model import train_and_test
 from label_anything.models import model_registry
 
 logger = get_logger(__name__)
+
+
+def parse_params(params_dict):
+    train_params = params_dict.get("train_params", {})
+    dataset_params = params_dict.get("dataset", {})
+    model_params = params_dict.get("model", {})
+    dataloader_params = params_dict.get("dataloader", {})
+
+    return train_params, dataset_params, dataloader_params, model_params
 
 
 def comet_experiment(comet_information: dict, params: dict):
