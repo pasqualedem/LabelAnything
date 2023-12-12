@@ -90,11 +90,25 @@ def train_epoch(
 
             outputs = model(input_dict)
             loss = criterion(outputs, gt)
+            loss_nan = torch.isnan(loss).any()
+            if loss_nan:
+                torch.save(input_dict, "crimine.pt")
+                torch.save(model.state_dict(), "model.pt")
+                torch.save({"gt": gt}, "gt.pt")
+                raise ValueError("NaNs in loss")                
 
             pred = outputs.argmax(dim=1)
 
             accelerator.backward(loss)
+            sd = {k: param.clone() for k, param in model.state_dict().items()}
             optimizer.step()
+            params_nan = torch.tensor([torch.isnan(param).any() for param in model.parameters()]).any()
+            if params_nan:
+                torch.save(sd, "model_healthy.pt")
+                torch.save(model.state_dict(), "model.pt")
+                torch.save(input_dict, "crimine.pt")
+                torch.save({"gt": gt}, "gt.pt")
+                raise ValueError("NaNs in model parameters")
 
             if tot_steps % comet_logger.log_frequency == 0:
                 pred = accelerator.gather(pred)
