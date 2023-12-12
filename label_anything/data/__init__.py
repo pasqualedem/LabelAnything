@@ -26,9 +26,17 @@ def get_example_num_list(dataset_len, batch_size, max_num_examples):
     examples_nums = [
         x - 1 for x in examples_nums
     ] # Subtract 1 to count also the query image
-    if dataset_len % target_examples_num != 0:
-        examples_nums.append(dataset_len % target_examples_num)
-        batch_sizes.append(1)
+    examples_nums = []
+    batch_sizes = []
+    remaining_images = dataset_len
+    while remaining_images > 0:
+        examples_num = random.choice(possible_target_examples_len)
+        cur_batch_size = target_examples_num // examples_num
+        if cur_batch_size > remaining_images:
+            cur_batch_size = remaining_images
+        examples_nums.append(examples_num - 1)
+        batch_sizes.append(cur_batch_size)
+        remaining_images -= cur_batch_size
     return examples_nums, batch_sizes
 
 
