@@ -20,6 +20,23 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+    
+    
+def check_nan(model, input_dict, loss, step, train_params):
+    if not train_params.get("check_nan", False):
+        return
+    if step % train_params['check_nan'] != 0:
+        return
+    if torch.isnan(loss) or loss.detach() in [torch.inf, -torch.inf]:
+        if train_params['check_nan'] == 1: # Makes sense only if we are checking every step
+            state_dict = {
+                "model": model.state_dict(),
+                "input_dict": input_dict,
+                "loss": loss,
+                "step": step,
+            }
+            torch.save(state_dict, "nan.pt")
+        raise ValueError("NaNs in loss")
 
 
 def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
@@ -90,27 +107,10 @@ def train_epoch(
 
             outputs = model(input_dict)
             loss = criterion(outputs, gt)
-            loss_nan = torch.isnan(loss).any()
-            if loss_nan:
-                torch.save(input_dict, "crimine.pt")
-                torch.save(model.state_dict(), "model.pt")
-                torch.save({"gt": gt}, "gt.pt")
-                raise ValueError("NaNs in loss")                
-
-            pred = outputs.argmax(dim=1)
-
             accelerator.backward(loss)
-            sd = {k: param.clone() for k, param in model.state_dict().items()}
+            pred = outputs.argmax(dim=1)
+            check_nan(model, input_dict, loss, batch_idx, train_params)
             optimizer.step()
-            max_param = torch.max(torch.stack([torch.max(torch.abs(param)) for param in model.parameters()]))
-            avg_param = torch.mean((torch.stack([torch.mean(param) for param in model.parameters()])))
-            params_nan = torch.tensor([torch.isnan(param).any() for param in model.parameters()]).any()
-            if params_nan:
-                torch.save(sd, "model_healthy.pt")
-                torch.save(model.state_dict(), "model.pt")
-                torch.save(input_dict, "crimine.pt")
-                torch.save({"gt": gt}, "gt.pt")
-                raise ValueError("NaNs in model parameters")
 
             if tot_steps % comet_logger.log_frequency == 0:
                 pred = accelerator.gather(pred)
@@ -151,8 +151,6 @@ def train_epoch(
                     "loss": loss.item(),
                     "jac/miou": jaccard_value.item(),
                     "fbiou": fbiou_value.item(),
-                    "max_param": max_param.item(),
-                    "avg_param": avg_param.item(),
                 }
             )
             tot_steps += 1
@@ -166,8 +164,6 @@ def train_epoch(
             "avg_first_step_loss": first_step_loss.compute(),
             "avg_first_step_jaccard": first_step_jaccard.compute(),
             "avg_first_step_fbiou": first_step_fbiou.compute(),
-            "max_param": max_param.item(),
-            "avg_param": avg_param.item(),
         },
         epoch=epoch,
     )

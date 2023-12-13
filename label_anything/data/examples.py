@@ -119,21 +119,13 @@ class ExampleGenerator:
         )
         return intersection - set(excluded_ids)
 
-    def backup_sampling(self, class_set, image_ids, frequencies):
-        HIGH_FREQUENCY = 100
+    def backup_sampling(self, class_set, frequencies):
         for cls in class_set:
-            images_containing = self.get_image_ids_intersection([cls], image_ids)
+            images_containing = self.get_image_ids_intersection([cls], [])
             if len(images_containing) > 0:
                 if cls not in frequencies:
                     frequencies[cls] = 0
                 return images_containing, [cls], frequencies
-        # Get a random class
-        all_classes = list(self.categories_to_imgs.keys())
-        cls = all_classes[torch.randint(0, len(all_classes), (1,)).item()]
-        if cls not in frequencies:
-            frequencies[cls] = HIGH_FREQUENCY
-        images_containing = self.get_image_ids_intersection([cls], image_ids)
-        return images_containing, [cls], frequencies
 
     def generate_examples(self, query_image_id, image_classes, sampled_classes, num_examples):
         """
@@ -186,7 +178,7 @@ class ExampleGenerator:
                     not example_sampled_classes
                 ):  # If no image found, sample a single class and try again
                     images_containing, example_sampled_classes, frequencies = self.backup_sampling(
-                        image_classes.tolist(), image_ids, frequencies
+                        image_classes.tolist(), frequencies
                     )
                     found = True
             example_id = self.image_sample_function(images_containing, image_ids)
