@@ -181,7 +181,9 @@ class ExampleGenerator:
                         image_classes.tolist(), frequencies
                     )
                     found = True
-            example_id = self.image_sample_function(images_containing, image_ids)
+                    example_id = self.image_sample_function(images_containing, []) # Doesn't matter we take a sampled image
+                else:
+                    example_id = self.image_sample_function(images_containing, image_ids)
             image_ids.append(example_id)
             for cat in example_sampled_classes:
                 frequencies[cat] += 1
