@@ -31,7 +31,7 @@ def generate_ground_truths(dataset_name, anns_path, outfolder):
             mask[mask == 1] = ann["category_id"]
             image_mask = torch.max(image_mask, torch.from_numpy(mask))
         loaded = safetch.load_file(
-            os.path.join(outfolder, f"{image['id']}.safetensors")
+            os.path.join(outfolder, f"{image['id'].zfill(12)}.safetensors")
         )
         loaded[f"{dataset_name}_gt"] = image_mask
         save_file(loaded, os.path.join(outfolder, f"{image['id']}.safetensors"))
