@@ -3,16 +3,40 @@ import os
 
 import numpy as np
 import torch
+import json
 import torch.nn.functional as F
 from safetensors.torch import save_file
 from torchvision.transforms import Compose, PILToTensor
 from tqdm import tqdm
 
 from label_anything.data.coco import LabelAnyThingOnlyImageDataset
+from label_anything.data.transforms import PromptsProcessor
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.models import model_registry
+import safetensors.torch as safetch
 
 
+def generate_ground_truths(dataset_name, anns_path, outfolder):
+    with open(anns_path, "r") as f:
+        anns = json.load(f)
+    pp = PromptsProcessor()
+    images = anns["images"]
+    annotations = anns["annotations"]
+
+    for image in tqdm(images):
+        image_anns = [ann for ann in annotations if ann["image_id"] == image["id"]]
+        image_mask = torch.zeros(image["height"], image["width"], dtype=torch.long)
+        for ann in image_anns:
+            mask = pp.get_mask(ann["segmentation"], image["height"], image["width"]).astype(np.int64)
+            mask[mask == 1] = ann["category_id"]
+            image_mask = torch.max(image_mask, torch.from_numpy(mask))
+        loaded = safetch.load_file(
+            os.path.join(outfolder, f"{image['id']}.safetensors")
+        )
+        loaded[f"{dataset_name}_gt"] = image_mask
+        save_file(loaded, os.path.join(outfolder, f"{image['id']}.safetensors")
+
+    
 @torch.no_grad()
 def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
     """

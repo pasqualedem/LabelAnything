@@ -1,5 +1,8 @@
 import comet_ml
-from label_anything.preprocess import preprocess_images_to_embeddings
+from label_anything.preprocess import (
+    preprocess_images_to_embeddings,
+    generate_ground_truths,
+)
 from label_anything.experiment.experiment import experiment as run_experiment
 
 import click
@@ -11,7 +14,9 @@ def main():
 
 
 @main.command("experiment")
-@click.option("--parameters", default="parameters.yaml", help="Path to the parameters file")
+@click.option(
+    "--parameters", default="parameters.yaml", help="Path to the parameters file"
+)
 def experiment(parameters):
     run_experiment(param_path=parameters)
 
@@ -77,6 +82,26 @@ def preprocess(
         outfolder=outfolder,
         compile=compile,
     )
+
+@main.command("generate_gt")
+@click.option(
+    "--dataset_name",
+    default="coco",
+    help="Select the dataset to use",
+)
+@click.option(
+    "--anns_path",
+    default="data/raw/instances_train2017.json",
+    help="Select the file to use as checkpoint",
+)
+@click.option(
+    "--outfolder",
+    default="embeddings",
+    help="Folder to save the embeddings",
+)
+def generate_gt(dataset_name, anns_path, outfolder):
+    generate_ground_truths(dataset_name, anns_path, outfolder)
+
 
 @main.command("benchmark")
 def benchmark():
