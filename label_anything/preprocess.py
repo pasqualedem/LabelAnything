@@ -27,14 +27,14 @@ def generate_ground_truths(dataset_name, anns_path, outfolder):
         image_anns = [ann for ann in annotations if ann["image_id"] == image["id"]]
         image_mask = torch.zeros(image["height"], image["width"], dtype=torch.long)
         for ann in image_anns:
-            mask = pp.get_mask(ann["segmentation"], image["height"], image["width"]).astype(np.int64)
+            mask = pp.convert_mask(ann["segmentation"], image["height"], image["width"]).astype(np.int64)
             mask[mask == 1] = ann["category_id"]
             image_mask = torch.max(image_mask, torch.from_numpy(mask))
         loaded = safetch.load_file(
             os.path.join(outfolder, f"{image['id']}.safetensors")
         )
         loaded[f"{dataset_name}_gt"] = image_mask
-        save_file(loaded, os.path.join(outfolder, f"{image['id']}.safetensors")
+        save_file(loaded, os.path.join(outfolder, f"{image['id']}.safetensors"))
 
     
 @torch.no_grad()
