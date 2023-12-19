@@ -28,6 +28,7 @@ parameters:
     optimizer: [AdamW]
     substitute: [False]
     freeze_backbone: [True]
+    check_nan: [1] # check for nan every n batches
 
   model:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients

@@ -1,4 +1,5 @@
 import torch
+import itertools
 
 from typing import Any, Dict, List, Tuple
 
@@ -184,7 +185,7 @@ class LabelAnythingDataset(Dataset):
         # flag_gts
         flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
         for i, x in enumerate(classes):
-            flag_gts[i, : len(x[0]) + 1] = 1
+            flag_gts[i, : len(list(set(itertools.chain(*x)))) + 1] = 1
 
         # images
         if "embeddings" in batched_input[0].keys():

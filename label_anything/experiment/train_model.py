@@ -20,6 +20,23 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+    
+    
+def check_nan(model, input_dict, loss, step, train_params):
+    if not train_params.get("check_nan", False):
+        return
+    if step % train_params['check_nan'] != 0:
+        return
+    if torch.isnan(loss) or loss.detach() in [torch.inf, -torch.inf]:
+        if train_params['check_nan'] == 1: # Makes sense only if we are checking every step
+            state_dict = {
+                "model": model.state_dict(),
+                "input_dict": input_dict,
+                "loss": loss,
+                "step": step,
+            }
+            torch.save(state_dict, "nan.pt")
+        raise ValueError("NaNs in loss")
 
 
 def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
@@ -90,10 +107,9 @@ def train_epoch(
 
             outputs = model(input_dict)
             loss = criterion(outputs, gt)
-
-            pred = outputs.argmax(dim=1)
-
             accelerator.backward(loss)
+            pred = outputs.argmax(dim=1)
+            check_nan(model, input_dict, loss, batch_idx, train_params)
             optimizer.step()
 
             if tot_steps % comet_logger.log_frequency == 0:
