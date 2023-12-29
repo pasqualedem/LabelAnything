@@ -46,6 +46,7 @@ class CocoLVISDataset(Dataset):
     Dataset for the COCO dataset.
 
     Args:
+        name (str): Name of the dataset (coco or lvis).
         instances_path (str): Path to the COCO instances file.
         img_dir (str): Path to the directory containing the images.
         max_num_examples (int): Maximum number of examples for each image.
@@ -390,6 +391,7 @@ class CocoLVISDataset(Dataset):
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
 
+        # convert the ground truths to the right format
         if self.load_gts:
             for i, cat_id in enumerate(cat_ids):
                 if cat_id == -1:

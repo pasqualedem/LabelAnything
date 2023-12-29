@@ -117,6 +117,12 @@ class PromptsProcessor:
             if isinstance(mask, list):
                 first_polygon = mask[0]
                 fp_x, fp_y = int(first_polygon[0]), int(first_polygon[1])
+                # check if fp_x and fp_y are within the image
+                fp_x = min(fp_x, w - 1)
+                fp_y = min(fp_y, h - 1)
+                # check if fp_x and fp_y are negative
+                fp_x = max(fp_x, 0)
+                fp_y = max(fp_y, 0) 
                 matrix[fp_y, fp_x] = 1
             else:
                 matrix[0, 0] = 1

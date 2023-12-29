@@ -34,7 +34,7 @@ def generate_ground_truths(dataset_name, anns_path, outfolder):
             os.path.join(outfolder, f"{str(image['id']).zfill(12)}.safetensors")
         )
         loaded[f"{dataset_name}_gt"] = image_mask
-        save_file(loaded, os.path.join(outfolder, f"{image['id']}.safetensors"))
+        save_file(loaded, os.path.join(outfolder, f"{str(image['id']).zfill(12)}.safetensors"))
 
     
 @torch.no_grad()
