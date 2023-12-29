@@ -27,7 +27,6 @@ class LabelAnythingDataset(Dataset):
         Args:
             datasets_params (Dict): A dictionary containing the parameters for each dataset.
             common_params (Dict): A dictionary containing the common parameters for all datasets.
-            load_embeddings (bool, optional): Whether to load embeddings. Defaults to False.
         """
         self._log_images = True  # logs the first batch
         self.load_embeddings = common_params.get("load_embeddings")
