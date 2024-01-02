@@ -22,7 +22,7 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["embeddings"].shape[0]
     
     
-def check_nan(model, input_dict, gt ,loss, step, train_params):
+def check_nan(model, input_dict, output, gt, loss, step, train_params):
     if not train_params.get("check_nan", False):
         return
     if step % train_params['check_nan'] != 0:
@@ -35,6 +35,7 @@ def check_nan(model, input_dict, gt ,loss, step, train_params):
                 "loss": loss,
                 "step": step,
                 "gt": gt,
+                "output": output,
             }
             torch.save(state_dict, "nan.pt")
         raise ValueError("NaNs in loss")
@@ -110,7 +111,7 @@ def train_epoch(
             loss = criterion(outputs, gt)
             accelerator.backward(loss)
             pred = outputs.argmax(dim=1)
-            check_nan(model, input_dict, gt, loss, batch_idx, train_params)
+            check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
             optimizer.step()
 
             if tot_steps % comet_logger.log_frequency == 0:
