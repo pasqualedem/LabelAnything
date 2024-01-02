@@ -122,7 +122,7 @@ class CocoLVISDataset(Dataset):
     def __set_all_seeds(self):
         """Enable reproducibility."""
         random.seed(self.seed)
-        np.random.seed(self.seed)
+        np.random.seed(int(self.seed))
         torch.manual_seed(self.seed)
 
         self.log_images = True
