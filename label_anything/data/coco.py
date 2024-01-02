@@ -392,16 +392,14 @@ class CocoLVISDataset(Dataset):
         )
 
         # convert the ground truths to the right format
+        ground_truths_copy = ground_truths.clone()
+        # set ground_truths to all 0s
+        ground_truths = torch.zeros_like(ground_truths)
         if self.load_gts:
             for i, cat_id in enumerate(cat_ids):
                 if cat_id == -1:
                     continue
-                ground_truths[ground_truths == cat_id] = i
-            ground_truths[
-                ~torch.tensor(
-                    [elem in cat_ids for elem in ground_truths.flatten()]
-                ).reshape(ground_truths.shape)
-            ] = 0
+                ground_truths[ground_truths_copy == cat_id] = i
 
         data_dict = {
             image_key: images,
