@@ -38,18 +38,22 @@ parameters:
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       lvis:
+        name: [lvis]
         instances_path: [data/annotations/lvis_v1_train.json]
         img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
       coco:
+        name: [coco]
         instances_path: [data/annotations/instances_train2017.json]
         img_dir: *img_dir
       val_lvis:
+        name: [lvis]
         instances_path: [data/annotations/lvis_v1_val.json]
         img_dir: *img_dir
         seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
       val_coco:
+        name: [coco]
         instances_path: [data/annotations/instances_val2017.json]
         img_dir: *img_dir
         seed: *seed
@@ -62,6 +66,6 @@ parameters:
       load_embeddings: [False]
   dataloader:
     batch_size: [1]
-    num_workers: [8]
+    num_workers: [0]
 
 other_grids:
