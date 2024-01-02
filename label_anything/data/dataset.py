@@ -192,7 +192,7 @@ class LabelAnythingDataset(Dataset):
             images = torch.stack([x[image_key] for x in batched_input])
         else:
             image_key = "images"
-            images = torch.stack([torch.stack(x["images"]) for x in batched_input])
+            images = torch.stack([x["images"] for x in batched_input])
 
         data_dict = {
             image_key: images,
