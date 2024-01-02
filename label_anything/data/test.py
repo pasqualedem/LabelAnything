@@ -1,5 +1,7 @@
 from torchvision.transforms import ToTensor
-from dataset import CocoLVISDataset, PromptType
+from dataset import CocoLVISDataset
+from label_anything.data.coco import PromptType
+
 import utils
 from typing import Any, Dict, List, Tuple
 import torch
@@ -7,17 +9,24 @@ import torch
 
 class LabelAnythingTestDataset(CocoLVISDataset):
     def __init__(
-            self,
-            instances_path,  # Path
-            img_dir=None,  # directory (only if images have to be loaded from disk)
-            max_num_examples=10,  # number of max examples to be given for the target image
-            preprocess=ToTensor(),  # preprocess step
-            j_index_value=0.5,  # threshold for extracting examples
-            seed=42,  # for reproducibility
-            max_mum_coords=10,  # max number of coords for each example for each class
+        self,
+        instances_path,  # Path
+        img_dir=None,  # directory (only if images have to be loaded from disk)
+        max_num_examples=10,  # number of max examples to be given for the target image
+        preprocess=ToTensor(),  # preprocess step
+        j_index_value=0.5,  # threshold for extracting examples
+        seed=42,  # for reproducibility
+        max_mum_coords=10,  # max number of coords for each example for each class
     ):
-        super(LabelAnythingTestDataset, self).__init__(instances_path, img_dir, max_num_examples, preprocess,
-                                                       j_index_value, seed, max_mum_coords)
+        super(LabelAnythingTestDataset, self).__init__(
+            instances_path,
+            img_dir,
+            max_num_examples,
+            preprocess,
+            j_index_value,
+            seed,
+            max_mum_coords,
+        )
 
     def _extract_examples(self):
         prompt_images = set()
@@ -44,7 +53,7 @@ class LabelAnythingTestDataset(CocoLVISDataset):
         image = self._load_image(base_image_data)
         if self.preprocess:
             image = self.preprocess(image)
-        img_id = base_image_data['id']
+        img_id = base_image_data["id"]
         gt = self.get_ground_truths([img_id], self.img2cat[img_id])
         gt = torch.tensor(gt[0])
         dim = torch.as_tensor(gt.size())
@@ -73,7 +82,7 @@ class LabelAnythingTestDataset(CocoLVISDataset):
         return data_dict, gt
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from torch.utils.data import DataLoader
     from torchvision.transforms import Compose, ToTensor, PILToTensor
     from transforms import CustomNormalize, CustomResize
@@ -88,7 +97,8 @@ if __name__ == '__main__':
     )
 
     dataset = LabelAnythingTestDataset(
-        instances_path="lvis_v1_train.json",
+        img_dir="/home/emanuele/Dottorato/dataset-vari/VOC12",
+        instances_path="notebooks/instances_voc12.json",
         preprocess=preprocess,
         max_num_examples=10,
         j_index_value=0.1,
@@ -109,7 +119,10 @@ if __name__ == '__main__':
     )
     data_dict, gt = next(iter(dataloader))
 
-    print([f"{k}: {v.size() if isinstance(v, torch.Tensor) else v}" for k, v in data_dict.items()])
+    print(
+        [
+            f"{k}: {v.size() if isinstance(v, torch.Tensor) else v}"
+            for k, v in data_dict.items()
+        ]
+    )
     print(f"gt: {gt.size()}")
-
-
