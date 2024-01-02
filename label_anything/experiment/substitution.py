@@ -112,7 +112,7 @@ class Substitutor:
         "flag_bboxes",
         "flag_points",
     ]
-    list_keys_to_exchange = ["classes"]
+    list_keys_to_exchange = ["classes", "image_ids"]
     list_keys_to_separate = []
 
     def __init__(
