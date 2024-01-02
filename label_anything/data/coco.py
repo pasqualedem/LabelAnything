@@ -411,6 +411,7 @@ class CocoLVISDataset(Dataset):
             "flag_bboxes": flag_bboxes,
             "dims": dims,
             "classes": list(classes.values()),
+            "image_ids": image_ids,
             "ground_truths": ground_truths,
         }
 

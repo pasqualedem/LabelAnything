@@ -180,6 +180,9 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
+        
+        # image ids
+        image_ids = [x["image_ids"] for x in batched_input]
 
         # flag_gts
         flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
@@ -204,6 +207,7 @@ class LabelAnythingDataset(Dataset):
             "flag_masks": flag_masks,
             "dims": dims,
             "classes": classes,
+            "image_ids": image_ids,
             "flag_gts": flag_gts,
         }
 
