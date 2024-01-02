@@ -646,7 +646,7 @@ def collate_gts(gt, dims):
     out = torch.zeros(dims)
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
-    return out.type(torch.uint8)
+    return out
 
 
 def collate_batch_gts(gt, dims, fill_value=-100):
