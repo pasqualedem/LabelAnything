@@ -391,11 +391,11 @@ class CocoLVISDataset(Dataset):
             [utils.collate_gts(x, max_dims) for x in ground_truths]
         )
 
-        # convert the ground truths to the right format
-        ground_truths_copy = ground_truths.clone()
-        # set ground_truths to all 0s
-        ground_truths = torch.zeros_like(ground_truths)
         if self.load_gts:
+            # convert the ground truths to the right format
+            ground_truths_copy = ground_truths.clone()
+            # set ground_truths to all 0s
+            ground_truths = torch.zeros_like(ground_truths)
             for i, cat_id in enumerate(cat_ids):
                 if cat_id == -1:
                     continue
