@@ -426,18 +426,18 @@ class CocoLVISDataset(Dataset):
 
     def get_ground_truths(self, image_ids, cat_ids):
         # initialization
-        ground_truths = dict((img_id, {}) for img_id in image_ids)
+        ground_truths = [dict() for _ in image_ids]
         # generate masks
-        for img_id in image_ids:
-            img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
+        for i, image_id in enumerate(image_ids):
+            img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
             for cat_id in cat_ids:
-                ground_truths[img_id][cat_id] = np.zeros(img_size, dtype=np.int64)
+                ground_truths[i][cat_id] = np.zeros(img_size, dtype=np.int64)
                 # zero mask for no segmentation
-                if cat_id not in self.img2cat_annotations[img_id]:
+                if cat_id not in self.img2cat_annotations[image_id]:
                     continue
-                for ann in self.img2cat_annotations[img_id][cat_id]:
-                    ground_truths[img_id][cat_id] = np.logical_or(
-                        ground_truths[img_id][cat_id],
+                for ann in self.img2cat_annotations[image_id][cat_id]:
+                    ground_truths[i][cat_id] = np.logical_or(
+                        ground_truths[i][cat_id],
                         self.prompts_processor.convert_mask(
                             ann["segmentation"], *img_size
                         ),
@@ -446,14 +446,14 @@ class CocoLVISDataset(Dataset):
             ground_truth = torch.from_numpy(
                 np.array(
                     [
-                        ground_truths[img_id][cat_id].astype(np.int64)
+                        ground_truths[i][cat_id].astype(np.int64)
                         for cat_id in cat_ids
                     ]
                 )
             )
-            ground_truths[img_id] = torch.argmax(ground_truth, 0)
+            ground_truths[i] = torch.argmax(ground_truth, 0)
 
-        return list(ground_truths.values())
+        return ground_truths
 
     def __len__(self):
         return len(self.images) if self.split == "train" else 1000
