@@ -268,30 +268,30 @@ class CocoLVISDataset(Dataset):
             num_examples=num_examples,
         )
 
-    def _get_annotations(self, image_ids, cat_ids):
-        bboxes = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
-        masks = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
-        points = {img_id: {cat_id: [] for cat_id in cat_ids} for img_id in image_ids}
+    def _get_annotations(self, image_ids: list, cat_ids: list) -> (list, list, list, list, list):
+        bboxes = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
 
         # get prompts from annotations
-        classes = {img_id: list() for img_id in image_ids}
+        classes = [list() for _ in image_ids]
+        img_sizes = [(self.images[img_id]["height"], self.images[img_id]["width"]) for img_id in image_ids]
 
-        for img_id in image_ids:
-            img_size = (self.images[img_id]["height"], self.images[img_id]["width"])
+        for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
             for cat_id in cat_ids:
                 # for each pair (image img_id and category cat_id)
                 if cat_id not in self.img2cat_annotations[img_id]:
                     # the chosen category is not in the iamge
                     continue
 
-                classes[img_id].append(cat_id)
+                classes[i].append(cat_id)
                 for ann in self.img2cat_annotations[img_id][cat_id]:
                     # choose the prompt type
                     prompt_type = random.choice(list(PromptType))
 
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
-                        bboxes[img_id][cat_id].append(
+                        bboxes[i][cat_id].append(
                             self.prompts_processor.convert_bbox(
                                 ann["bbox"],
                                 *img_size,
@@ -300,7 +300,7 @@ class CocoLVISDataset(Dataset):
                         )
                     elif prompt_type == PromptType.MASK:
                         # take the mask
-                        masks[img_id][cat_id].append(
+                        masks[i][cat_id].append(
                             self.prompts_processor.convert_mask(
                                 ann["segmentation"],
                                 *img_size,
@@ -312,17 +312,17 @@ class CocoLVISDataset(Dataset):
                             ann["segmentation"],
                             *img_size,
                         )
-                        points[img_id][cat_id].append(
+                        points[i][cat_id].append(
                             self.prompts_processor.sample_point(mask)
                         )
 
         # convert the lists of prompts to arrays
-        for img_id in image_ids:
+        for i in range(len(image_ids)):
             for cat_id in cat_ids:
-                bboxes[img_id][cat_id] = np.array((bboxes[img_id][cat_id]))
-                masks[img_id][cat_id] = np.array((masks[img_id][cat_id]))
-                points[img_id][cat_id] = np.array((points[img_id][cat_id]))
-        return bboxes, masks, points, classes
+                bboxes[i][cat_id] = np.array((bboxes[i][cat_id]))
+                masks[i][cat_id] = np.array((masks[i][cat_id]))
+                points[i][cat_id] = np.array((points[i][cat_id]))
+        return bboxes, masks, points, classes, img_sizes
 
     def _load_and_preprocess_image(self, image_data):
         image = self._load_image(image_data)
@@ -373,12 +373,12 @@ class CocoLVISDataset(Dataset):
         images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
 
         # create the prompt dicts
-        bboxes, masks, points, classes = self._get_annotations(image_ids, cat_ids)
+        bboxes, masks, points, classes, img_sizes = self._get_annotations(image_ids, cat_ids)
 
         # obtain padded tensors
-        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
-        masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
-        points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, img_sizes, PromptType.BBOX)
+        masks, flag_masks = self.annotations_to_tensor(masks, img_sizes, PromptType.MASK)
+        points, flag_points = self.annotations_to_tensor(points, img_sizes, PromptType.POINT)
 
         # obtain ground truths
         if ground_truths is None:
@@ -410,7 +410,7 @@ class CocoLVISDataset(Dataset):
             "prompt_bboxes": bboxes,
             "flag_bboxes": flag_bboxes,
             "dims": dims,
-            "classes": list(classes.values()),
+            "classes": classes,
             "image_ids": image_ids,
             "ground_truths": ground_truths,
         }
@@ -458,7 +458,7 @@ class CocoLVISDataset(Dataset):
     def __len__(self):
         return len(self.images) if self.split == "train" else 1000
 
-    def annotations_to_tensor(self, annotations, prompt_type) -> torch.Tensor:
+    def annotations_to_tensor(self, annotations: list, img_sizes: list, prompt_type: PromptType) -> torch.Tensor:
         """Transform a dict of annotations of prompt_type to a padded tensor.
 
         Args:
@@ -469,7 +469,7 @@ class CocoLVISDataset(Dataset):
             torch.Tensor: padded tensor
         """
         n = len(annotations)
-        c = len(next(iter(annotations.values())))
+        c = len(annotations[0])
 
         if prompt_type == PromptType.BBOX:
             max_annotations = utils.get_max_annotations(annotations)
@@ -488,32 +488,28 @@ class CocoLVISDataset(Dataset):
         )
 
         if prompt_type == PromptType.MASK:
-            for i, img_id in enumerate(annotations):
-                for j, cat_id in enumerate(annotations[img_id]):
+            for i, annotation in enumerate(annotations):
+                for j, cat_id in enumerate(annotation):
                     mask = self.prompts_processor.apply_masks(
-                        annotations[img_id][cat_id]
+                        annotation[cat_id]
                     )
                     tensor_mask = torch.tensor(mask)
                     tensor[i, j, :] = tensor_mask
                     flag[i, j] = 1 if torch.sum(tensor_mask) > 0 else 0
         else:
-            for i, img_id in enumerate(annotations):
-                img_original_size = (
-                    self.images[img_id]["height"],
-                    self.images[img_id]["width"],
-                )
-                for j, cat_id in enumerate(annotations[img_id]):
-                    if annotations[img_id][cat_id].size == 0:
+            for i, (annotation, img_original_size) in enumerate(zip(annotations, img_sizes)):
+                for j, cat_id in enumerate(annotation):
+                    if annotation[cat_id].size == 0:
                         continue
-                    m = annotations[img_id][cat_id].shape[0]
+                    m = annotation[cat_id].shape[0]
                     if prompt_type == PromptType.BBOX:
                         boxes_ann = self.prompts_processor.apply_boxes(
-                            annotations[img_id][cat_id], img_original_size
+                            annotation[cat_id], img_original_size
                         )
                         tensor[i, j, :m, :] = torch.tensor(boxes_ann)
                     elif prompt_type == PromptType.POINT:
                         points_ann = self.prompts_processor.apply_coords(
-                            annotations[img_id][cat_id], img_original_size
+                            annotation[cat_id], img_original_size
                         )
                         tensor[i, j, :m, :] = torch.tensor(points_ann)
                     flag[i, j, :m] = 1

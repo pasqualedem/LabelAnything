@@ -32,11 +32,11 @@ class LabelAnythingTestDataset(CocoLVISDataset):
     def extract_prompts(self):
         image_ids = self._extract_examples()
         cat_ids = list(self.categories.keys())
-        bboxes, masks, points, _ = self._get_annotations(image_ids, cat_ids)
+        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids)
 
-        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, PromptType.BBOX)
-        masks, flag_masks = self.annotations_to_tensor(masks, PromptType.MASK)
-        points, flag_points = self.annotations_to_tensor(points, PromptType.POINT)
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
+        masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
+        points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
         return bboxes, masks, points
 
     def __getitem__(self, item):
