@@ -1,3 +1,4 @@
+import gc
 from tqdm import tqdm
 import torch
 
@@ -39,7 +40,27 @@ def check_nan(model, input_dict, output, gt, loss, step, train_params):
             }
             torch.save(state_dict, "nan.pt")
         raise ValueError("NaNs in loss")
-
+    
+    
+def handle_oom(model, input_dict, batch_tuple, optimizer, gt, epoch, step):
+    logger.warning(f"OOM at step {step}")
+    logger.warning(torch.cuda.memory_summary())
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "input_dict": input_dict,
+            "batch_tuple": batch_tuple,
+            "gt": gt,
+        },
+        f"oom_epoch_{epoch}_step_{step}.pt",
+    )
+    optimizer.zero_grad()
+    del input_dict
+    del batch_tuple
+    del gt
+    gc.collect()
+    torch.cuda.empty_cache()
 
 def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
     """
@@ -94,6 +115,7 @@ def train_epoch(
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
     tot_steps = 0
     tot_images = 0
+    oom = False
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
@@ -107,7 +129,18 @@ def train_epoch(
         for i, (input_dict, gt) in enumerate(substitutor):
             optimizer.zero_grad()
 
-            outputs = model(input_dict)
+            try:
+                outputs = model(input_dict)
+            except RuntimeError as e:
+                if "out of memory" in str(e):
+                    handle_oom(model, input_dict, batch_tuple, optimizer, gt, epoch, batch_idx)
+                    if oom:
+                        raise e
+                    oom = True
+                    break
+                else:
+                    raise e
+            oom = False
             loss = criterion(outputs, gt)
             accelerator.backward(loss)
             pred = outputs.argmax(dim=1)
