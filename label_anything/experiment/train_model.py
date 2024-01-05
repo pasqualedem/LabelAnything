@@ -140,9 +140,9 @@ def train_epoch(
                     break
                 else:
                     raise e
-            oom = False
             loss = criterion(outputs, gt)
             accelerator.backward(loss)
+            oom = False
             pred = outputs.argmax(dim=1)
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
             optimizer.step()
