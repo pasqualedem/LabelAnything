@@ -71,12 +71,12 @@ parameters:
     common:
       do_subsample: [True]
       add_box_noise: [True]
-      max_num_examples: [6]
+      max_num_examples: [4]
       load_embeddings: [True]
       load_gts: [True]
   dataloader:
     batch_size: [4]
     num_workers: [16]
-    prefetch_factor: [4]
+    prefetch_factor: [2]
 
 other_grids:
