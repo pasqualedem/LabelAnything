@@ -1,50 +1,8 @@
+import torch.nn.functional as F
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss, Module, MSELoss
-import torch.nn.functional as F
+
 from einops import rearrange
-from .utils import instantiate_class, substitute_values
-
-
-def get_reduction(reduction: str):
-    if reduction == "none":
-        return lambda x: x
-    elif reduction == "mean":
-        return torch.mean
-    elif reduction == "sum":
-        return torch.sum
-    else:
-        raise NotImplementedError(f"Invalid reduction mode: {reduction}")
-
-
-class FocalLoss(Module):
-    def __init__(
-        self, gamma: float = 0, weight=None, reduction: str = "mean", **kwargs
-    ):
-        super().__init__()
-        self.weight = None
-        if weight:
-            self.weight = torch.tensor(weight)
-        self.gamma = gamma
-
-        self.reduction = get_reduction(reduction)
-
-    def __call__(self, x, target, **kwargs):
-        ce_loss = F.cross_entropy(x, target, reduction="none", **kwargs)
-        pt = torch.exp(-ce_loss)
-        if self.weight is not None:
-            self.weight = self.weight.to(x.device)
-            wtarget = substitute_values(
-                target,
-                self.weight,
-                unique=torch.arange(len(self.weight), device=target.device),
-            )
-            focal_loss = torch.pow((1 - pt), self.gamma) * wtarget * ce_loss
-        else:
-            focal_loss = torch.pow((1 - pt), self.gamma) * ce_loss
-
-        return self.reduction(focal_loss)
-
 
 # based on:
 # https://github.com/kevinzakka/pytorch-goodies/blob/master/losses.py
@@ -84,7 +42,7 @@ class DiceLoss(nn.Module):
     """
 
     def __init__(
-        self, weight=None, reduction: str = "mean", average: str = "micro", ignore_index=-100,
+        self, weight=None, reduction: str = "mean", average: str = "macro", ignore_index=-100,
     ) -> None:
         super(DiceLoss, self).__init__()
         self.weight = None
@@ -155,33 +113,3 @@ class DiceLoss(nn.Module):
             dice = dice * self.weight.to(input.device)
         dice = dice.mean(dim=1)
         return self.reduction(dice)
-    
-
-class LabelAnythingLoss(nn.Module):
-    """This loss is a linear combination of the following losses:
-    - FocalLoss
-    - DiceLoss
-    """
-    def __init__(self, focal_weight=20, dice_weight=1):
-        super().__init__()
-        self.focal_loss = FocalLoss(gamma=2)
-        self.focal_weight = focal_weight
-        self.dice_loss = DiceLoss(average="macro")
-        self.dice_weight = dice_weight
-
-    def forward(self, logits, target):
-        return (
-            self.focal_weight * self.focal_loss(logits, target)
-            + self.dice_weight * self.dice_loss(logits, target)
-        )
-
-
-if __name__ == "__main__":
-    criterion = LabelAnythingLoss()
-    logits = torch.randn(
-        2, 3, 256, 256
-    )  # batch size, number of classes, height, width
-    target = torch.randint(0, 3, (2, 256, 256))
-    loss = criterion(logits, target)
-    print(loss)  
-

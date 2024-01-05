@@ -7,7 +7,7 @@ from label_anything.logger.image_logger import Logger
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import find_divisor_pairs, RunningAverage
 from label_anything.data.utils import random_batch
-from label_anything.utils.loss import LabelAnythingLoss
+from label_anything.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
 from label_anything.utils.metrics import jaccard, fbiou
@@ -252,7 +252,7 @@ def train_and_test(
     logger.info("Start training loop...")
     accelerator = Accelerator()
 
-    criterion = LabelAnythingLoss(**train_params["loss"])
+    criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
         model.get_learnable_params(train_params), lr=train_params["initial_lr"]
     )
