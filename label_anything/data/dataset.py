@@ -27,7 +27,6 @@ class LabelAnythingDataset(Dataset):
         Args:
             datasets_params (Dict): A dictionary containing the parameters for each dataset.
             common_params (Dict): A dictionary containing the common parameters for all datasets.
-            load_embeddings (bool, optional): Whether to load embeddings. Defaults to False.
         """
         self._log_images = True  # logs the first batch
         self.load_embeddings = common_params.get("load_embeddings")
@@ -181,6 +180,9 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
+        
+        # image ids
+        image_ids = [x["image_ids"] for x in batched_input]
 
         # flag_gts
         flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
@@ -193,7 +195,7 @@ class LabelAnythingDataset(Dataset):
             images = torch.stack([x[image_key] for x in batched_input])
         else:
             image_key = "images"
-            images = torch.stack([torch.stack(x["images"]) for x in batched_input])
+            images = torch.stack([x["images"] for x in batched_input])
 
         data_dict = {
             image_key: images,
@@ -205,6 +207,7 @@ class LabelAnythingDataset(Dataset):
             "flag_masks": flag_masks,
             "dims": dims,
             "classes": classes,
+            "image_ids": image_ids,
             "flag_gts": flag_gts,
         }
 

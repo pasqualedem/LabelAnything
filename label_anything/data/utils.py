@@ -16,11 +16,11 @@ from torch.utils.data import Dataset
 MAX_PIXELS_BBOX_NOISE = 20  # noise limit for bounding boxes taken from SA
 
 
-def get_max_annotations(annotations):
+def get_max_annotations(annotations: list) -> int:
     anns = []
     for image in annotations:
-        for cat in annotations[image]:
-            anns += [annotations[image][cat].shape[0]]
+        for cat in image:
+            anns += [image[cat].shape[0]]
     return max(anns)
 
 def compute_j_index(class_a: List[int], class_b: List[int]) -> float:
@@ -646,7 +646,7 @@ def collate_gts(gt, dims):
     out = torch.zeros(dims)
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
-    return out.type(torch.uint8)
+    return out
 
 
 def collate_batch_gts(gt, dims, fill_value=-100):

@@ -24,10 +24,10 @@ def get_example_num_list(dataset_len, batch_size, max_num_examples):
         cur_batch_size = target_examples_num // examples_num
         if cur_batch_size > remaining_images:
             cur_batch_size = remaining_images
-        examples_nums.append(examples_num - 1)
+        examples_nums.append(examples_num)
         batch_sizes.append(cur_batch_size)
         remaining_images -= cur_batch_size
-    return examples_nums, batch_sizes
+    return batch_sizes, examples_nums
 
 
 def get_dataloaders(dataset_args, dataloader_args):

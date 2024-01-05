@@ -162,9 +162,10 @@ class ExampleGenerator:
                 images_containing = self.get_image_ids_intersection(
                     example_sampled_classes, image_ids
                 )
-                if len(images_containing) > 0:
+                if len(images_containing) > 0: # We found at least one image, we can take one of them and stop
                     found = True
-                else:
+                    example_id = self.image_sample_function(images_containing, image_ids)
+                else: # We didn't find an image, we need to remove a class and try again
                     max_frequency_class = max(
                         {
                             k: v
@@ -176,14 +177,12 @@ class ExampleGenerator:
                     example_sampled_classes.remove(max_frequency_class)
                 if (
                     not example_sampled_classes
-                ):  # If no image found, sample a single class and try again
+                ):  # We removed all classes, we need to backup sample
                     images_containing, example_sampled_classes, frequencies = self.backup_sampling(
                         image_classes.tolist(), frequencies
                     )
                     found = True
                     example_id = self.image_sample_function(images_containing, []) # Doesn't matter we take a sampled image
-                else:
-                    example_id = self.image_sample_function(images_containing, image_ids)
             image_ids.append(example_id)
             for cat in example_sampled_classes:
                 frequencies[cat] += 1
