@@ -29,7 +29,7 @@ parameters:
     compile: [False]
     initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
-    substitute: [False]
+    substitute: [True]
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
 
@@ -65,6 +65,7 @@ parameters:
     common:
       do_subsample: [True]
       add_box_noise: [True]
+      max_points_annotations: [50]
       max_num_examples: [2, 10, 20]
       load_embeddings: [False]
   dataloader:

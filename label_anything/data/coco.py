@@ -67,13 +67,14 @@ class CocoLVISDataset(Dataset):
         instances_path,  # Path
         img_dir=None,  # directory (only if images have to be loaded from disk)
         max_num_examples=10,  # number of max examples to be given for the target image
+        max_points_annotations=50,  # Max number of annotations for a class to be sampled as points or bboxes, if limit is reached it will be sampled as mask
         preprocess=ToTensor(),  # preprocess step
         seed=42,  # for reproducibility
         emb_dir=None,
         n_folds=-1,  # for fss benchmark (coco20i)
         val_fold=-1,  # for fss benchmark (coco20i)
         load_embeddings=False,
-        load_gts=False, # gts are in emb_dir files
+        load_gts=False,  # gts are in emb_dir files
         split="train",  # for fss benchmark (coco20i)
         do_subsample=True,
         add_box_noise=True,
@@ -87,6 +88,7 @@ class CocoLVISDataset(Dataset):
         self.emb_dir = emb_dir
         self.load_embeddings = load_embeddings
         self.load_gts = load_gts
+        self.max_points_annotations = max_points_annotations
         self.load_from_dir = img_dir is not None
         self.img_dir = img_dir
         self.log_images = False
@@ -268,14 +270,19 @@ class CocoLVISDataset(Dataset):
             num_examples=num_examples,
         )
 
-    def _get_annotations(self, image_ids: list, cat_ids: list) -> (list, list, list, list, list):
+    def _get_annotations(
+        self, image_ids: list, cat_ids: list
+    ) -> (list, list, list, list, list):
         bboxes = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
 
         # get prompts from annotations
         classes = [list() for _ in image_ids]
-        img_sizes = [(self.images[img_id]["height"], self.images[img_id]["width"]) for img_id in image_ids]
+        img_sizes = [
+            (self.images[img_id]["height"], self.images[img_id]["width"])
+            for img_id in image_ids
+        ]
 
         for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
             for cat_id in cat_ids:
@@ -285,10 +292,15 @@ class CocoLVISDataset(Dataset):
                     continue
 
                 classes[i].append(cat_id)
-                for ann in self.img2cat_annotations[img_id][cat_id]:
-                    # choose the prompt type
-                    prompt_type = random.choice(list(PromptType))
-
+                number_of_annotations = len(self.img2cat_annotations[img_id][cat_id])
+                if number_of_annotations > self.max_points_annotations:
+                    # if there are too many annotations, sample a mask
+                    prompt_types = [PromptType.MASK] * number_of_annotations
+                else:
+                    prompt_types = random.choices(
+                        list(PromptType), k=number_of_annotations
+                    )
+                for ann, prompt_type in zip(self.img2cat_annotations[img_id][cat_id], prompt_types):
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -373,12 +385,20 @@ class CocoLVISDataset(Dataset):
         images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
 
         # create the prompt dicts
-        bboxes, masks, points, classes, img_sizes = self._get_annotations(image_ids, cat_ids)
+        bboxes, masks, points, classes, img_sizes = self._get_annotations(
+            image_ids, cat_ids
+        )
 
         # obtain padded tensors
-        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, img_sizes, PromptType.BBOX)
-        masks, flag_masks = self.annotations_to_tensor(masks, img_sizes, PromptType.MASK)
-        points, flag_points = self.annotations_to_tensor(points, img_sizes, PromptType.POINT)
+        bboxes, flag_bboxes = self.annotations_to_tensor(
+            bboxes, img_sizes, PromptType.BBOX
+        )
+        masks, flag_masks = self.annotations_to_tensor(
+            masks, img_sizes, PromptType.MASK
+        )
+        points, flag_points = self.annotations_to_tensor(
+            points, img_sizes, PromptType.POINT
+        )
 
         # obtain ground truths
         if ground_truths is None:
@@ -445,10 +465,7 @@ class CocoLVISDataset(Dataset):
             # make the ground truth tensor for image img_id
             ground_truth = torch.from_numpy(
                 np.array(
-                    [
-                        ground_truths[i][cat_id].astype(np.int64)
-                        for cat_id in cat_ids
-                    ]
+                    [ground_truths[i][cat_id].astype(np.int64) for cat_id in cat_ids]
                 )
             )
             ground_truths[i] = torch.argmax(ground_truth, 0)
@@ -458,7 +475,9 @@ class CocoLVISDataset(Dataset):
     def __len__(self):
         return len(self.images) if self.split == "train" else 1000
 
-    def annotations_to_tensor(self, annotations: list, img_sizes: list, prompt_type: PromptType) -> torch.Tensor:
+    def annotations_to_tensor(
+        self, annotations: list, img_sizes: list, prompt_type: PromptType
+    ) -> torch.Tensor:
         """Transform a dict of annotations of prompt_type to a padded tensor.
 
         Args:
@@ -490,14 +509,14 @@ class CocoLVISDataset(Dataset):
         if prompt_type == PromptType.MASK:
             for i, annotation in enumerate(annotations):
                 for j, cat_id in enumerate(annotation):
-                    mask = self.prompts_processor.apply_masks(
-                        annotation[cat_id]
-                    )
+                    mask = self.prompts_processor.apply_masks(annotation[cat_id])
                     tensor_mask = torch.tensor(mask)
                     tensor[i, j, :] = tensor_mask
                     flag[i, j] = 1 if torch.sum(tensor_mask) > 0 else 0
         else:
-            for i, (annotation, img_original_size) in enumerate(zip(annotations, img_sizes)):
+            for i, (annotation, img_original_size) in enumerate(
+                zip(annotations, img_sizes)
+            ):
                 for j, cat_id in enumerate(annotation):
                     if annotation[cat_id].size == 0:
                         continue
