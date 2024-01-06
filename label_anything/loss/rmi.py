@@ -220,7 +220,7 @@ class RMILoss(nn.Module):
         rmi_pool_way=1,
         rmi_pool_size=4,
         rmi_pool_stride=4,
-        weight=None,
+        weight=False,
         loss_weight_lambda=0.5,
         lambda_way=1,
         ignore_index=-100,
@@ -239,7 +239,7 @@ class RMILoss(nn.Module):
         self.weight_lambda = loss_weight_lambda
         self.lambda_way = lambda_way
 
-        self.weight = torch.tensor(weight) if weight else None
+        self.weight = weight
         # dimension of the distribution
         self.half_d = self.rmi_radius * self.rmi_radius
         self.d = 2 * self.half_d
@@ -293,12 +293,15 @@ class RMILoss(nn.Module):
 
         # binary loss, multiplied by the not_ignore_mask
         valid_pixels = torch.sum(label_mask_flat)
-        if self.weight is not None:
-            self.weight = self.weight.to(logits_4D.device)
+        if self.weight:
+            weights = torch.ones(num_classes, device=labels_4D.device)
+            classes, counts = labels_4D.unique(return_counts=True)
+            median = torch.median(counts.float())
+            weights[classes] = median / counts
             wtarget = substitute_values(
                 labels_4D,
-                self.weight,
-                unique=torch.arange(len(self.weight), device=labels_4D.device),
+                weights,
+                unique=torch.arange(num_classes, device=labels_4D.device),
             )
             label_mask_flat = label_mask_flat * wtarget.view(
                 [
