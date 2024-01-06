@@ -293,28 +293,30 @@ class RMILoss(nn.Module):
 
         # binary loss, multiplied by the not_ignore_mask
         valid_pixels = torch.sum(label_mask_flat)
+        there_is_ignore = self.ignore_index in labels_4D
         if self.weight:
-            there_is_ignore_index = self.ignore_index in labels_4D
-            weight_num_classes = num_classes + there_is_ignore_index
+            if there_is_ignore:
+                weight_labels = labels_4D.clone()
+                weight_labels += 1
+                weight_labels[weight_labels == self.ignore_index + 1] = 0
+                weight_num_classes = num_classes + 1
+            else:
+                weight_labels = labels_4D
+                weight_num_classes = num_classes
             weights = torch.ones(weight_num_classes, device=labels_4D.device)
             classes, counts = labels_4D.unique(return_counts=True)
-            unique = torch.arange(num_classes, device=labels_4D.device)
-            if there_is_ignore_index:  # Assumes ignore_index is < 0
-                classes[classes != self.ignore_index] += 1
-                classes[classes == self.ignore_index] = 0
-                median = torch.median(counts[classes != 0].float())
+            classes = classes.long()
+            if there_is_ignore:
+                median = torch.median(counts[1:].float())
                 weights[classes] = median / counts
-                weights[classes == 0] = 0
-                unique = torch.cat(
-                    [torch.tensor([self.ignore_index], device=labels_4D.device), unique]
-                )
+                weights[0] = 0
             else:
                 median = torch.median(counts.float())
                 weights[classes] = median / counts
             wtarget = substitute_values(
-                labels_4D,
+                weight_labels,
                 weights,
-                unique=unique,
+                unique=torch.arange(weight_num_classes, device=labels_4D.device),
             )
             label_mask_flat = label_mask_flat * wtarget.view(
                 [
