@@ -294,14 +294,27 @@ class RMILoss(nn.Module):
         # binary loss, multiplied by the not_ignore_mask
         valid_pixels = torch.sum(label_mask_flat)
         if self.weight:
-            weights = torch.ones(num_classes, device=labels_4D.device)
+            there_is_ignore_index = self.ignore_index in labels_4D
+            weight_num_classes = num_classes + there_is_ignore_index
+            weights = torch.ones(weight_num_classes, device=labels_4D.device)
             classes, counts = labels_4D.unique(return_counts=True)
-            median = torch.median(counts.float())
-            weights[classes] = median / counts
+            unique = torch.arange(num_classes, device=labels_4D.device)
+            if there_is_ignore_index:  # Assumes ignore_index is < 0
+                classes[classes != self.ignore_index] += 1
+                classes[classes == self.ignore_index] = 0
+                median = torch.median(counts[classes != 0].float())
+                weights[classes] = median / counts
+                weights[classes == 0] = 0
+                unique = torch.cat(
+                    torch.tensor([self.ignore_index], device=labels_4D.device), unique
+                )
+            else:
+                median = torch.median(counts.float())
+                weights[classes] = median / counts
             wtarget = substitute_values(
                 labels_4D,
                 weights,
-                unique=torch.arange(num_classes, device=labels_4D.device),
+                unique=unique,
             )
             label_mask_flat = label_mask_flat * wtarget.view(
                 [
