@@ -306,7 +306,7 @@ class RMILoss(nn.Module):
                 weights[classes] = median / counts
                 weights[classes == 0] = 0
                 unique = torch.cat(
-                    torch.tensor([self.ignore_index], device=labels_4D.device), unique
+                    [torch.tensor([self.ignore_index], device=labels_4D.device), unique]
                 )
             else:
                 median = torch.median(counts.float())
