@@ -304,7 +304,7 @@ class RMILoss(nn.Module):
                 weight_labels = labels_4D
                 weight_num_classes = num_classes
             weights = torch.ones(weight_num_classes, device=labels_4D.device)
-            classes, counts = labels_4D.unique(return_counts=True)
+            classes, counts = weight_labels.unique(return_counts=True)
             classes = classes.long()
             if there_is_ignore:
                 median = torch.median(counts[1:].float())
