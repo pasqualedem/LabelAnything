@@ -38,14 +38,15 @@ def comet_experiment(comet_information: dict, params: dict):
         tmp_dir = logger_params.get("tmp_dir", None)
         logger.info(f"No temporary directory found in environment variables, using {tmp_dir} for images")
     os.makedirs(tmp_dir, exist_ok=True)
+    tags = comet_information.pop("tags", [])
     
-    if comet_information.get("offline"):
+    if comet_information.pop("offline"):
         offdir = comet_information.pop("offline_directory", None)
-        experiment = comet_ml.OfflineExperiment(offline_directory=offdir)
+        experiment = comet_ml.OfflineExperiment(offline_directory=offdir, **comet_information)
     else:
-        experiment = comet_ml.Experiment()
+        experiment = comet_ml.Experiment(**comet_information)
     comet_ml.init(comet_information)
-    experiment.add_tags(comet_information.get("tags"))
+    experiment.add_tags(tags)
     experiment.log_parameters(params)
     
     return Logger(experiment, **logger_params)
@@ -86,7 +87,7 @@ class Run:
 
         comet_params = self.params.get("logger", {}).get("comet", {})
         comet_information = {
-            "apikey": os.getenv("COMET_API_KEY"),
+            "api_key": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
             **comet_params,
         }
