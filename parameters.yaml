@@ -12,7 +12,8 @@ parameters:
   
   logger:
     log_frequency: [50]
-    image_log_frequency: [10000]
+    train_image_log_frequency: [10000]
+    val_image_log_frequency: [1000]
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
@@ -22,16 +23,15 @@ parameters:
 
   train_params:
     loss:
-      rmi:
-        weight: [1.0]
+      focal:
+        weight: [1.0] 
         params:
-          weight: [True]
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [5, 10]
+    max_epochs: [5]
     compile: [False]
-    initial_lr: [0.0001, 0.00005]
+    initial_lr: [0.00001]
     optimizer: [AdamW]
     scheduler:
       type: [cosine]
