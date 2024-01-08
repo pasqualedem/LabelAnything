@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Tuple
 import numpy as np
 import requests
 import torch
-import torchvision.transforms
 from PIL import Image
 from safetensors.torch import load_file
 from torch.utils.data import Dataset
@@ -18,7 +17,6 @@ from torchvision.transforms import PILToTensor, ToTensor
 import label_anything.data.utils as utils
 from label_anything.data.examples import (
     ExampleGeneratorPowerLawUniform,
-    uniform_sampling,
 )
 from label_anything.data.transforms import (
     CustomNormalize,
@@ -536,6 +534,75 @@ class CocoLVISDataset(Dataset):
         return tensor, flag
 
 
+class CocoLVISTestDataset(CocoLVISDataset):
+    def __init__(
+            self,
+            instances_path,  # Path
+            img_dir=None,  # directory (only if images have to be loaded from disk)
+            max_num_examples=10,  # number of max examples to be given for the target image
+            preprocess=ToTensor(),  # preprocess step
+            j_index_value=0.5,  # threshold for extracting examples
+            seed=42,  # for reproducibility
+            max_mum_coords=10,  # max number of coords for each example for each class
+    ):
+        super(CocoLVISTestDataset, self).__init__(instances_path=instances_path, img_dir=img_dir,
+                                                  max_num_examples=max_num_examples, preprocess=preprocess,
+                                                  seed=seed)
+
+    def _extract_examples(self):
+        prompt_images = set()
+        for cat_id in self.categories.keys():
+            if cat_id not in self.cat2img:
+                continue
+            cat_images = self.cat2img[cat_id]
+            _, img = max(map(lambda x: (len(self.img2cat[x]), x), cat_images))
+            prompt_images.add(img)
+        return prompt_images
+
+    def extract_prompts(self):
+        image_ids = self._extract_examples()
+        cat_ids = list(self.categories.keys())
+        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids)
+
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
+        masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
+        points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
+        return bboxes, masks, points
+
+    def __getitem__(self, item):
+        base_image_data = self.images[self.image_ids[item]]
+        image = self._load_image(base_image_data)
+        if self.preprocess:
+            image = self.preprocess(image)
+        img_id = base_image_data['id']
+        gt = self.get_ground_truths([img_id], self.img2cat[img_id])
+        gt = torch.tensor(gt[0])
+        dim = torch.as_tensor(gt.size())
+        data_dict = {
+            "image": image,
+            "dim": dim,
+            "gt": gt,
+        }
+        return data_dict
+
+    def collate_fn(
+        self, batched_input: List[Dict[str, Any]]
+    ) -> Tuple[Dict[str, Any], torch.Tensor]:
+        images = torch.stack([x["image"] for x in batched_input])
+
+        dims = torch.stack([x["dim"] for x in batched_input])
+
+        max_dims = torch.max(dims, 0).values.tolist()
+        gt = torch.stack([utils.collate_gts(x["gt"], max_dims) for x in batched_input])
+
+        data_dict = {
+            "images": images,
+            "dims": dims,
+        }
+
+        return data_dict, gt
+
+
 class LabelAnyThingOnlyImageDataset(Dataset):
     def __init__(self, directory=None, preprocess=None):
         super().__init__()
@@ -564,7 +631,7 @@ if __name__ == "__main__":
             CustomNormalize(),
         ]
     )
-    dataset = CocoLVISDataset(
+    dataset = CocoLVISTestDataset(
         instances_path="lvis_v1_train.json",
         max_num_examples=10,
         preprocess=preprocess,

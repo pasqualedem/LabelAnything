@@ -2,13 +2,10 @@ import torch
 import itertools
 
 from typing import Any, Dict, List, Tuple
-
 from torch.utils.data import Dataset, BatchSampler
-from torchvision.transforms import PILToTensor, ToTensor
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
 
 datasets = {
     "coco": CocoLVISDataset,
