@@ -1,78 +1,187 @@
+import cv2
+import numpy as np
+import os
+from shapely.geometry import Polygon
+import xml.etree.ElementTree as ET
 import pathlib
-import json
-from torch.utils.data import Dataset
 from PIL import Image
-from torchvision.transforms import PILToTensor
+import json
 
-from label_anything.data.transforms import CustomNormalize, CustomResize
+url_voc = "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
+download_command = f"wget {url_voc}"
+tar_command = f"tar -xvf VOCtrainval_11-May-2012.tar"
+instances_voc12 = {
+    "info": {
+        "description": "VOC 2012 Dataset Annotations files",
+        "version": "1.0",
+        "year": 2024,
+        "contributor": "CILAB",
+        "date_created": "02/01/2024",
+    },
+    "images": [],
+    "annotations": [],
+    "categories": [],
+}
+
+VOC2012 = pathlib.Path("VOCdevkit/VOC2012/")
 
 
-class VOC12Dataset(Dataset):
-    def __init__(self, root, json_file):
-        with open(json_file, "r") as f:
-            self.data = json.load(f)
+def get_items(root, ids):
+    images = []
+    all_boxes = []
+    all_masks = []
+    all_labels = []
 
-        self.root = pathlib.Path(root)
-        self.images = self.data["images"]
-        self.annotations = self.data["annotations"]
-        self.categories = self.data["categories"]
+    for image_id in ids:
+        image = _get_images(root, image_id)
+        boxes, labels = _get_annotations(root, image_id)
+        masks = _get_masks(root, image_id)
 
-    def __len__(self):
-        return len(self.images)
+        images.append(image)
+        all_boxes.append(boxes)
+        all_masks.append(masks)
+        all_labels.append(labels)
 
-    def __getitem__(self, idx):
-        image_info = self.images[idx]
-        image_id = image_info["id"]
+    return images, all_boxes, all_masks, all_labels
 
-        # Load the image
-        image_path = self.root / image_info["file_name"]
-        image = Image.open(image_path).convert("RGB")
 
-        # Find all annotations for the current image
-        image_annotations = [
-            ann for ann in self.annotations if ann["image_id"] == image_id
-        ]
+def _read_image_ids(image_sets_file):
+    ids = []
+    with open(image_sets_file) as f:
+        for line in f:
+            ids.append(line.rstrip())
+    return ids
 
-        # For simplicity, let's assume each image has exactly one annotation
-        # You might need to handle the case where an image has multiple annotations
-        annotation = image_annotations[0]
 
-        # Extract the bounding box and label
-        bbox = annotation["bbox"]
-        label = annotation["category_id"]
+def _get_images(root, image_id):
+    image_file = os.path.join(root, "JPEGImages", image_id + ".jpg")
+    image = cv2.imread(str(image_file))
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    return image
 
-        # For the mask, let's assume it's stored in a separate file with the same name as the image
-        mask_path = self.root / (image_info["file_name"] + "_mask.png")
-        mask = Image.open(mask_path)
 
-        return image, bbox, mask, label
+def _get_masks(root, image_id):
+    mask_file = os.path.join(root, "SegmentationClass", image_id + ".png")
+    mask = np.array(Image.open(mask_file).convert("P"))
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    polygons = []
+    for contour in contours:
+        contour = np.squeeze(contour, axis=1)
+        if len(contour) >= 4:
+            polygon = Polygon(contour)
+            polygons.append(polygon)
+
+    return polygons
+
+
+def _get_annotations(root, image_id):
+    annotation_file = os.path.join(root, "Annotations", image_id + ".xml")
+    objects = ET.parse(annotation_file).findall("object")
+    boxes = []
+    labels = []
+    for object in objects:
+        class_name = object.find("name").text.lower().strip()
+        bbox = object.find("bndbox")
+        x1 = float(bbox.find("xmin").text) - 1
+        y1 = float(bbox.find("ymin").text) - 1
+        x2 = float(bbox.find("xmax").text) - 1
+        y2 = float(bbox.find("ymax").text) - 1
+        boxes.append([x1, y1, x2, y2])
+        labels.append(class_name)
+
+    # return bbox y labels
+    return (np.array(boxes, dtype=np.float32), np.array(labels))
+
+
+def create_lvis_style_annotation(ids, images, boxes, polygons, labels, annotations):
+    print("Creating annotations...")
+    # generate set of categories
+    annotations_images = []
+    annotations_segmentations = []
+
+    annotations_categories = [
+        {"id": i, "name": name} for i, name in enumerate(set(np.concatenate(labels)))
+    ]
+    category_to_id = {
+        category["name"]: category["id"] for category in annotations_categories
+    }
+
+    for enum, id_ in enumerate(ids):
+        # print(ids[i])
+        image = {
+            "file_name": id_,  # This is the only field that is compulsory
+            "url": f"JPEGImages/{id_}.jpg",
+            "height": images[enum].shape[0],
+            "width": images[enum].shape[1],
+            "id": enum,
+        }
+        annotations_images.append(image)
+
+    i = 0
+    for enum, (box, polygon, label) in enumerate(zip(boxes, polygons, labels)):
+        for b, p, l in zip(box, polygon, label):
+            annotation = {
+                "segmentation": [list(p.exterior.coords)],
+                "area": p.area,
+                "image_id": enum,
+                "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
+                "category_id": category_to_id[l],
+                "id": i,
+            }
+            annotations_segmentations.append(annotation)
+            i += 1
+
+    annotations["images"] = annotations_images
+    annotations["annotations"] = annotations_segmentations
+    annotations["categories"] = annotations_categories
+    print("Generate instances.json file")
+    return annotations
+
+
+def generate_dataset_file(voc_folder):
+    files = os.listdir(os.path.join(voc_folder, "ImageSets/Segmentation/"))
+    contents = ""
+    for file in files:
+        with open(os.path.join(voc_folder, "ImageSets/Segmentation/", file), "r") as f:
+            file_content = f.read()
+        contents += file_content
+
+    with open(os.path.join(voc_folder, "ImageSets/Segmentation/dataset.txt"), "w") as f:
+        f.write(contents)
 
 
 if __name__ == "__main__":
-    from torch.utils.data import DataLoader
-    from torchvision.transforms import Compose
+    if not os.path.exists(VOC2012):
+        print("Downloading VOC2012 dataset...")
+        os.system(download_command)
+        os.system(tar_command)
 
-    preprocess = Compose(
-        [
-            CustomResize(1024),
-            PILToTensor(),
-            CustomNormalize(),
-        ]
+    # generate dataset.txt
+    if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
+        print("Generating dataset.txt...")
+        generate_dataset_file(VOC2012)
+
+    # path dataset.txt
+    images_file = os.path.join(
+        os.path.join(VOC2012, "ImageSets", "Segmentation", "dataset.txt")
     )
 
-    dataset = VOC12Dataset(
-        dataset_path="/home/emanuele/Dottorato/dataset-vari/VOC12",
-        instances_path="notebooks/instances_voc12.json",
-        max_num_examples=10,
-        preprocess=preprocess,
+    ids = _read_image_ids(images_file)
+    images, boxes, polygons, labels = get_items(VOC2012, ids)
+
+    # generate file, if you want to use it in the future
+    annotations = create_lvis_style_annotation(
+        ids,
+        images,
+        boxes,
+        polygons,
+        labels,
+        instances_voc12,
     )
-    
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True)
-    image, boxes, mask, labels = next(iter(dataloader))
-    
-    # print the shape of the image and the boxes
-    print(f"image: {image.shape}")
-    print(f"boxes: {boxes.shape}")
-    print(f"labels: {labels.shape}")
-    print(f"mask: {mask.shape}")
-    # print(f"masks: {masks.shape}")
+
+    with open("instances_voc12.json", "w") as file:
+        json.dump(annotations, file)
+
+    print("Done!")
