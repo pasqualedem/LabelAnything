@@ -17,6 +17,7 @@ from torchvision.transforms import PILToTensor, ToTensor
 import label_anything.data.utils as utils
 from label_anything.data.examples import (
     ExampleGeneratorPowerLawUniform,
+    uniform_sampling,
 )
 from label_anything.data.transforms import (
     CustomNormalize,

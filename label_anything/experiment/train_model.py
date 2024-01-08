@@ -115,6 +115,7 @@ def train_epoch(
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
     tot_steps = 0
     tot_images = 0
+    loss_normalizer = 1
     oom = False
 
     for batch_idx, batch_tuple in bar:
@@ -126,9 +127,8 @@ def train_epoch(
             num_points=train_params.get("num_points", 1),
             substitute=train_params.get("substitute", True),
         )
+        loss_normalizer = batch_tuple[1].shape[1] if train_params.get("accumulate_substitution", True) else 1
         for i, (input_dict, gt) in enumerate(substitutor):
-            optimizer.zero_grad()
-
             try:
                 outputs = model(input_dict)
             except RuntimeError as e:
@@ -140,12 +140,14 @@ def train_epoch(
                     break
                 else:
                     raise e
-            loss = criterion(outputs, gt)
+            loss = criterion(outputs, gt) / loss_normalizer
             accelerator.backward(loss)
             oom = False
             pred = outputs.argmax(dim=1)
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
-            optimizer.step()
+            if not train_params.get("accumulate_substitution", False) or i == loss_normalizer - 1:
+                optimizer.step()
+                optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
                 pred = accelerator.gather(pred)
