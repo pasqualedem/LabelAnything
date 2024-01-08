@@ -68,10 +68,10 @@ parameters:
       do_subsample: [True]
       add_box_noise: [True]
       max_points_annotations: [50]
-      max_num_examples: [2, 10, 20]
+      max_num_examples: [1]
       load_embeddings: [False]
   dataloader:
-    batch_size: [1]
+    batch_size: [2]
     num_workers: [0]
 
 other_grids:
