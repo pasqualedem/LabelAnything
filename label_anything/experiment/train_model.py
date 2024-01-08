@@ -122,8 +122,6 @@ def train_epoch(
     cur_lr = train_params["initial_lr"]
 
     for batch_idx, batch_tuple in bar:
-        if batch_idx == 4:
-            break
         batch_tuple, dataset_names = batch_tuple
         cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
