@@ -21,12 +21,24 @@ def validate_polygon(polygon):
 
 
 class Logger:
-    def __init__(self, experiment, tmp_dir: str, log_frequency: int = 100, image_log_frequency: int = 1000):
+    def __init__(
+        self,
+        experiment,
+        tmp_dir: str,
+        log_frequency: int = 100,
+        train_image_log_frequency: int = 1000,
+        val_image_log_frequency: int = 1000,
+        test_image_log_frequency: int = 1000,
+    ):
         self.experiment = experiment
         self.tmp_dir = tmp_dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
-        self.image_log_frequency = image_log_frequency
+        self.prefix_frequency_dict = {
+            "train": train_image_log_frequency,
+            "val": val_image_log_frequency,
+            "test": test_image_log_frequency,
+        }
 
     def __get_class_ids(self, classes):
         res_classes = []
@@ -52,8 +64,9 @@ class Logger:
         pred,
         dataset,
         dataset_names,
+        phase,
     ):
-        if log_every_n(image_idx, batch_size, self.image_log_frequency):
+        if log_every_n(image_idx, batch_size, self.prefix_frequency_dict[phase]):
             dataset.log_images = True
             return
         if dataset.log_images:
@@ -66,6 +79,7 @@ class Logger:
                 input_dict=input_dict,
                 categories=categories,
                 dataset_names=dataset_names,
+                prefix=phase,
             )
             self.log_gt_pred(
                 batch_idx=batch_idx,
@@ -77,6 +91,7 @@ class Logger:
                 pred=pred,
                 categories=categories,
                 dataset_names=dataset_names,
+                prefix=phase,
             )
             dataset.log_images = False
 
@@ -91,6 +106,7 @@ class Logger:
         pred,
         categories,
         dataset_names,
+        prefix
     ):
         images = input_dict["images"]
         dims = input_dict["dims"]
@@ -141,7 +157,7 @@ class Logger:
             if data_pred:
                 annotations.append({"name": "Prediction", "data": data_pred})
             self.log_image(
-                name=f"image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
+                name=f"{prefix}_image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
                 metadata={
@@ -152,6 +168,7 @@ class Logger:
                     "type": "gt_pred",
                     "pred_bg_percent": torch.sum(sample_pred[0]).item()
                     / (sample_pred.shape[1] * sample_pred.shape[2]),
+                    "phase": prefix,
                 },
                 step=step,
             )
@@ -165,6 +182,7 @@ class Logger:
         input_dict,
         categories,
         dataset_names,
+        prefix
     ):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
@@ -250,7 +268,7 @@ class Logger:
                             }
                         )
                 self.log_image(
-                    name=f"image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
+                    name=f"{prefix}_image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
                     image_data=image,
                     annotations=annotations,
                     metadata={
@@ -259,6 +277,7 @@ class Logger:
                         "sample_idx": i,
                         "substitution_step": substitution_step,
                         "type": "prompt",
+                        "phase": prefix,
                     },
                     step=step,
                 )

@@ -12,6 +12,7 @@ from label_anything.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
 from label_anything.utils.metrics import jaccard, fbiou
+from transformers import get_scheduler
 
 logger = get_logger(__name__)
 
@@ -94,6 +95,7 @@ def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
 def train_epoch(
     model,
     optimizer,
+    scheduler,
     criterion,
     dataloader,
     epoch,
@@ -117,8 +119,11 @@ def train_epoch(
     tot_images = 0
     loss_normalizer = 1
     oom = False
+    cur_lr = train_params["initial_lr"]
 
     for batch_idx, batch_tuple in bar:
+        if batch_idx == 4:
+            break
         batch_tuple, dataset_names = batch_tuple
         cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
@@ -147,6 +152,8 @@ def train_epoch(
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
             if not train_params.get("accumulate_substitution", False) or i == loss_normalizer - 1:
                 optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
@@ -159,6 +166,7 @@ def train_epoch(
                 comet_logger.log_metric("batch_fbiou", fbiou_value.item())
                 avg_jaccard.update(jaccard_value.item())
                 avg_fbiou.update(fbiou_value.item())
+                cur_lr = scheduler.get_lr()[0] if scheduler else train_params["initial_lr"]
 
             avg_loss.update(loss.item())
             if i == 0:
@@ -169,6 +177,7 @@ def train_epoch(
                     first_step_fbiou.update(fbiou_value.item())
                     comet_logger.log_metric("first_step_jaccard", jaccard_value.item())
                     comet_logger.log_metric("first_step_fbiou", fbiou_value.item())
+                    comet_logger.log_metric("lr", cur_lr)
 
             comet_logger.log_batch(
                 batch_idx=batch_idx,
@@ -181,6 +190,7 @@ def train_epoch(
                 pred=outputs,
                 dataset=dataloader.dataset,
                 dataset_names=dataset_names,
+                phase="train",
             )
             substitutor.generate_new_points(outputs, gt)
             bar.set_postfix(
@@ -188,6 +198,7 @@ def train_epoch(
                     "loss": loss.item(),
                     "jac/miou": jaccard_value.item(),
                     "fbiou": fbiou_value.item(),
+                    "lr": cur_lr,
                 }
             )
             tot_steps += 1
@@ -213,12 +224,15 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
+    tot_steps = 0
+    tot_images = 0
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
             batch_dict, dataset_names = batch_tuple
             batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
+            cur_batch_size = get_batch_size(batch_dict)
             image_dict, gt = batch_dict
 
             output = model(image_dict)
@@ -234,9 +248,24 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                 {
                     "jac/miou": jaccard_value.item(),
                     "fbiou": fbiou_value.item(),
-                    "loss": loss,
+                    "loss": loss.item(),
                 }
             )
+            comet_logger.log_batch(
+                batch_idx=batch_idx,
+                image_idx=tot_images,
+                batch_size=cur_batch_size,
+                step=tot_steps,
+                substitution_step=0,
+                input_dict=image_dict,
+                gt=gt,
+                pred=output,
+                dataset=dataloader.dataset,
+                dataset_names=dataset_names,
+                phase="val",
+            )
+            tot_steps += 1
+            tot_images += cur_batch_size
 
         comet_logger.log_metrics(
             {
@@ -244,8 +273,12 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                 "loss": avg_loss.compute(),
                 "fbiou": avg_fbiou.compute(),
             },
-            epoch=epoch,
+            epoch=epoch
         )
+    logger.info(f"Validation Epoch {epoch} finished")
+    logger.info(f"Jaccard: {avg_jaccard.compute()}")
+    logger.info(f"Loss: {avg_loss.compute()}")
+    logger.info(f"FBIoU: {avg_fbiou.compute()}")
 
 
 def test(model, criterion, dataloader, comet_logger):
@@ -291,6 +324,17 @@ def train_and_test(
     optimizer = AdamW(
         model.get_learnable_params(train_params), lr=train_params["initial_lr"]
     )
+    
+    scheduler = None
+    scheduler_params = train_params.get("scheduler", None)
+    if scheduler_params:
+        scheduler = get_scheduler(
+            scheduler_params["type"],
+            optimizer=optimizer,
+            num_warmup_steps=scheduler_params["warmup_steps"],
+            num_training_steps=train_params["max_epochs"] * len(train_loader),
+        )
+
     if train_params.get("compile", False):
         model = torch.compile(model)
 
@@ -302,6 +346,7 @@ def train_and_test(
             train_epoch(
                 model,
                 optimizer,
+                scheduler,
                 criterion,
                 train_loader,
                 epoch,
