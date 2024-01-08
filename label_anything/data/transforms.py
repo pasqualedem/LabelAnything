@@ -9,6 +9,7 @@ from copy import deepcopy
 from typing import Tuple
 from label_anything.data.utils import get_preprocess_shape
 
+
 class CustomResize(object):
     def __init__(self, long_side_length: int = 1024):
         self.long_side_length = long_side_length
@@ -111,11 +112,20 @@ class PromptsProcessor:
         """
         rle = self.__ann_to_rle(mask, h, w)
         matrix = mask_utils.decode(rle)
-        unique_values = np.unique(matrix).tolist()
-        if len(unique_values) == 1 and unique_values[0] == 0:
-            pol = torch.as_tensor(mask).view(-1, 2)
-            y, x = torch.mean(pol, 0).type(torch.int).tolist()
-            matrix[x, y] = 1
+        # if matrix is made by all zeros
+        if np.all(matrix == 0):
+            if isinstance(mask, list):
+                first_polygon = mask[0]
+                fp_x, fp_y = int(first_polygon[0]), int(first_polygon[1])
+                # check if fp_x and fp_y are within the image
+                fp_x = min(fp_x, w - 1)
+                fp_y = min(fp_y, h - 1)
+                # check if fp_x and fp_y are negative
+                fp_x = max(fp_x, 0)
+                fp_y = max(fp_y, 0) 
+                matrix[fp_y, fp_x] = 1
+            else:
+                matrix[0, 0] = 1
         return matrix
 
     def sample_point(self, mask: np.ndarray):

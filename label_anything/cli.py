@@ -1,5 +1,8 @@
 import comet_ml
-from label_anything.preprocess import preprocess_images_to_embeddings
+from label_anything.preprocess import (
+    preprocess_images_to_embeddings,
+    generate_ground_truths,
+)
 from label_anything.experiment.experiment import experiment as run_experiment
 
 import click
@@ -11,8 +14,11 @@ def main():
 
 
 @main.command("experiment")
-def experiment():
-    run_experiment()
+@click.option(
+    "--parameters", default="parameters.yaml", help="Path to the parameters file"
+)
+def experiment(parameters):
+    run_experiment(param_path=parameters)
 
 
 @main.command("preprocess")
@@ -76,3 +82,65 @@ def preprocess(
         outfolder=outfolder,
         compile=compile,
     )
+
+@main.command("generate_gt")
+@click.option(
+    "--dataset_name",
+    default="coco",
+    help="Select the dataset to use",
+)
+@click.option(
+    "--anns_path",
+    default="data/raw/instances_train2017.json",
+    help="Select the file to use as checkpoint",
+)
+@click.option(
+    "--outfolder",
+    default="embeddings",
+    help="Folder to save the embeddings",
+)
+def generate_gt(dataset_name, anns_path, outfolder):
+    generate_ground_truths(dataset_name, anns_path, outfolder)
+
+
+@main.command("benchmark")
+def benchmark():
+    import torch
+    import torch.nn as nn
+    import time
+
+    # Define a simple neural network
+    class SimpleNet(nn.Module):
+        def __init__(self):
+            super(SimpleNet, self).__init__()
+            self.fc1 = nn.Linear(1000, 500)
+            self.relu = nn.ReLU()
+            self.fc2 = nn.Linear(500, 10)
+
+        def forward(self, x):
+            x = self.fc1(x)
+            x = self.relu(x)
+            x = self.fc2(x)
+            return x
+
+    # Create an instance of the network
+    net = SimpleNet().cuda()
+
+    # Generate random input data
+    input_data = torch.randn(100, 1000).cuda()
+
+    # Warm-up GPU
+    for _ in range(10):
+        _ = net(input_data)
+
+    # Benchmark the forward pass on GPU
+    num_iterations = 100
+    start_time = time.time()
+    for _ in range(num_iterations):
+        _ = net(input_data)
+    end_time = time.time()
+
+    # Calculate average time per iteration
+    average_time = (end_time - start_time) / num_iterations
+
+    print(f"Average time per iteration: {average_time:.5f} seconds")

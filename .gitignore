@@ -8,6 +8,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 venv/
+.venv/
+.cometml-runs
 env/
 build/
 develop-eggs/
@@ -97,3 +99,4 @@ target/
 /label_anything/data/*.json
 exp_log.csv
 /label_anything/data/raw/annotations
+notebooks/instances_voc12.json

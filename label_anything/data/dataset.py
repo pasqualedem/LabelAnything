@@ -1,7 +1,8 @@
-import random
-from typing import Any, Dict, List, Tuple
 import torch
-from torch.utils.data import Dataset
+import itertools
+
+from typing import Any, Dict, List, Tuple
+from torch.utils.data import Dataset, BatchSampler
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
@@ -17,19 +18,22 @@ datasets = {
 
 class LabelAnythingDataset(Dataset):
     def __init__(self, datasets_params: Dict, common_params: Dict) -> None:
-        self._log_images = True  # logs the first batch
-        self.num_examples = 0
-        self.max_num_examples = common_params["max_num_examples"]
-        self.load_embeddings = common_params["load_embeddings"]
-        self.do_subsample = common_params["do_subsample"]
-        self.add_box_noise = common_params["add_box_noise"]
+        """
+        Initializes a LabelAnythingDataset Dataset object.
 
-        self._cur_dataset = None
-        self._categories = None
+        Args:
+            datasets_params (Dict): A dictionary containing the parameters for each dataset.
+            common_params (Dict): A dictionary containing the common parameters for all datasets.
+        """
+        self._log_images = True  # logs the first batch
+        self.load_embeddings = common_params.get("load_embeddings")
 
         self.datasets = {
-            dataset_name: datasets[dataset_name](**params, **common_params)
+            dataset_name: datasets[dataset_name](**{**common_params, **params})
             for dataset_name, params in datasets_params.items()
+        }
+        self.categories = {
+            dataset_name: dataset.categories for dataset_name, dataset in self.datasets.items()
         }
         index = sum(
             [
@@ -39,23 +43,25 @@ class LabelAnythingDataset(Dataset):
             [],
         )
         self.index = {i: index for i, index in enumerate(index)}
-
-        self.reset_num_examples()
+        
         super().__init__()
 
     def __len__(self):
         return sum([len(dataset) for dataset in self.datasets.values()])
 
-    def __getitem__(self, index) -> Any:
-        dataset_name, dataset_index = self.index[index]
-        self._cur_dataset = dataset_name
-        return self.datasets[dataset_name][dataset_index]
+    def __getitem__(self, idx_num_examples) -> Any:
+        """
+        Returns the item at the given index.
 
-    def reset_num_examples(self):
-        """Set the number of examples for the next query image."""
-        self.num_examples = random.randint(1, self.max_num_examples)
-        for dataset in self.datasets.values():
-            dataset.num_examples = self.num_examples
+        Args:
+            idx_num_examples: A tuple containing the index and the number of examples.
+
+        Returns:
+            Any: The item at the given index.
+        """
+        idx, num_examples = idx_num_examples
+        dataset_name, dataset_index = self.index[idx]
+        return self.datasets[dataset_name][(dataset_index, num_examples)], dataset_name
 
     @property
     def log_images(self):
@@ -67,68 +73,66 @@ class LabelAnythingDataset(Dataset):
         for dataset in self.datasets.values():
             dataset.log_images = value
 
-    @property
-    def categories(self):
-        return self.datasets[self._cur_dataset].categories
-
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
     ) -> Tuple[Dict[str, Any], torch.Tensor]:
         """
         Performs the collate_fn, which is useful for batching data points in a dataloader.
 
-        Arguments:
-            batched_input: list of batch_size elements, in which each element is a dict with the following entries:
-                'target': query image as a torch tensor of shape 3 x H x W.
-                'examples': example image as a torch tensor of shape M x 3 x H x W, where M is the number of examples
+        Args:
+            batched_input (List[Dict[str, Any]]): A list of batch_size elements, where each element is a dictionary
+                containing the following entries:
+                - 'target': query image as a torch tensor of shape 3 x H x W.
+                - 'examples': example image as a torch tensor of shape M x 3 x H x W, where M is the number of examples
                     extracted for the given query image.
-                'prompt_mask': example image masks as a torch tensor of shape M x C x H x W, where M is the number of
-                    examples extracted for the given query image and C is the number of classed associated to it.
-                'prompt_coords': example image coordinates as a torch tensor of shape M x C x N x K x 2, where M is the
-                    number of examples extracted for the given query image, C is the number of classes associated to the
-                    given image, N is the maximum number of annotations associated to a pair (image, class), and K is
+                - 'prompt_mask': example image masks as a torch tensor of shape M x C x H x W, where M is the number of
+                    examples extracted for the given query image and C is the number of classes associated with it.
+                - 'prompt_coords': example image coordinates as a torch tensor of shape M x C x N x K x 2, where M is the
+                    number of examples extracted for the given query image, C is the number of classes associated with the
+                    given image, N is the maximum number of annotations associated with a pair (image, class), and K is
                     the number of points extracted.
-                'flag_coords': example image coordinate flags as a torch tensor of shape M x C x N x K, where M is the
-                    number of examples extracted for the given query image, C is the number of classes associated to the
-                    given image, N is the maximum number of annotations associated to a pair (image, class), and K is
+                - 'flag_coords': example image coordinate flags as a torch tensor of shape M x C x N x K, where M is the
+                    number of examples extracted for the given query image, C is the number of classes associated with the
+                    given image, N is the maximum number of annotations associated with a pair (image, class), and K is
                     the number of points extracted.
-                'prompt_bbox': example image bounding boxes as a torch tensor of shape M x C x N x 4, where M is the
-                    number of examples extracted for the given query image, C is the number of classes associated to the
-                    given image, and N is the maximum number of annotations associated to a pair (image, class). The
+                - 'prompt_bbox': example image bounding boxes as a torch tensor of shape M x C x N x 4, where M is the
+                    number of examples extracted for the given query image, C is the number of classes associated with the
+                    given image, and N is the maximum number of annotations associated with a pair (image, class). The
                     last dimension is 4 because a single bounding box is represented by the top-left and bottom-right
                     coordinates.
-                'flag_bbox': example image bounding box flags as a torch tensor of shape M x C x N x 4, where M is the
-                    number of examples extracted for the given query image, C is the number of classes associated to the
-                    given image, and N is the maximum number of annotations associated to a pair (image, class).
-                'gt': query image classes mask as a tensor of shape H x W, in which each pixel has a certain value k if
-                    that pixel is in the mask of the k-th class associated to the query image.
-                'classes': dict in which each pair k: v is ith class corresponding to class id.
+                - 'flag_bbox': example image bounding box flags as a torch tensor of shape M x C x N x 4, where M is the
+                    number of examples extracted for the given query image, C is the number of classes associated with the
+                    given image, and N is the maximum number of annotations associated with a pair (image, class).
+                - 'gt': query image classes mask as a tensor of shape H x W, in which each pixel has a certain value k if
+                    that pixel is in the mask of the k-th class associated with the query image.
+                - 'classes': dictionary in which each pair k: v represents the ith class corresponding to class id.
 
         Returns:
-            Dict[str, Any]: batched dictionary having the following entries:
-                'query_image': query image as a torch tensor of shape B x 3 x H x W.
-                'example_images': example images as a torch tensor of shape B x M x 3 x H x W.
-                'point_coords':  example image coordinates as a torch tensor of shape B x M x C x N x K x 2, where M is
-                    the number of examples extracted for the given query image, C is the number of classes associated to
-                    the given image, N is the maximum number of annotations associated to a pair (image, class), and K
+            Tuple[Dict[str, Any], torch.Tensor]: A tuple containing the batched dictionary and the batched output masks.
+                The batched dictionary has the following entries:
+                - 'query_image': query image as a torch tensor of shape B x 3 x H x W.
+                - 'example_images': example images as a torch tensor of shape B x M x 3 x H x W.
+                - 'point_coords': example image coordinates as a torch tensor of shape B x M x C x N x K x 2, where M is
+                    the number of examples extracted for the given query image, C is the number of classes associated with
+                    the given image, N is the maximum number of annotations associated with a pair (image, class), and K
                     is the number of points extracted.
-                'point_flags': example image coordinate flags as a torch tensor of shape B xM x C x N x K, where M is
-                    the number of examples extracted for the given query image, C is the number of classes associated to
-                    the given image, N is the maximum number of annotations associated to a pair (image, class), and K
+                - 'point_flags': example image coordinate flags as a torch tensor of shape B x M x C x N x K, where M is
+                    the number of examples extracted for the given query image, C is the number of classes associated with
+                    the given image, N is the maximum number of annotations associated with a pair (image, class), and K
                     is the number of points extracted.
-                'boxes': example image bounding boxes as a torch tensor of shape B x M x C x N x 4, where M is the
-                    number of examples extracted for the given query image, C is the number of classes associated to the
-                    given image, and N is the maximum number of annotations associated to a pair (image, class). The
+                - 'boxes': example image bounding boxes as a torch tensor of shape B x M x C x N x 4, where M is the
+                    number of examples extracted for the given query image, C is the number of classes associated with the
+                    given image, and N is the maximum number of annotations associated with a pair (image, class). The
                     last dimension is 4 because a single bounding box is represented by the top-left and bottom-right
                     coordinates.
-                'box_flags': example image bounding box flags as a torch tensor of shape B x M x C x N x 4, where M is
-                    the number of examples extracted for the given query image, C is the number of classes associated to
-                    the given image, and N is the maximum number of annotations associated to a pair (image, class).
-                'mask_inputs': example image masks as a torch tensor of shape B x M x C x H x W, where M is the number
-                    of examples extracted for the given query image and C is the number of classed associated to it.
-            torch.Tensor: batched output masks as a torch tensor of shape B x H x W.
-
+                - 'box_flags': example image bounding box flags as a torch tensor of shape B x M x C x N x 4, where M is
+                    the number of examples extracted for the given query image, C is the number of classes associated with
+                    the given image, and N is the maximum number of annotations associated with a pair (image, class).
+                - 'mask_inputs': example image masks as a torch tensor of shape B x M x C x H x W, where M is the number
+                    of examples extracted for the given query image and C is the number of classes associated with it.
+            The batched output masks is a torch tensor of shape B x H x W.
         """
+        batched_input, dataset_names = zip(*batched_input)
         # classes
         max_classes = max([x["prompt_masks"].size(1) for x in batched_input])
 
@@ -173,11 +177,14 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
+        
+        # image ids
+        image_ids = [x["image_ids"] for x in batched_input]
 
         # flag_gts
         flag_gts = torch.zeros((len(batched_input), max_classes), dtype=torch.bool)
         for i, x in enumerate(classes):
-            flag_gts[i, : len(x[0]) + 1] = 1
+            flag_gts[i, : len(list(set(itertools.chain(*x)))) + 1] = 1
 
         # images
         if "embeddings" in batched_input[0].keys():
@@ -185,7 +192,7 @@ class LabelAnythingDataset(Dataset):
             images = torch.stack([x[image_key] for x in batched_input])
         else:
             image_key = "images"
-            images = torch.stack([torch.stack(x["images"]) for x in batched_input])
+            images = torch.stack([x["images"] for x in batched_input])
 
         data_dict = {
             image_key: images,
@@ -197,6 +204,7 @@ class LabelAnythingDataset(Dataset):
             "flag_masks": flag_masks,
             "dims": dims,
             "classes": classes,
+            "image_ids": image_ids,
             "flag_gts": flag_gts,
         }
 
@@ -204,7 +212,55 @@ class LabelAnythingDataset(Dataset):
             log_images = torch.stack([x["images"] for x in batched_input])
             data_dict["images"] = log_images
 
-        # reset dataset parameters
-        self.reset_num_examples()
+        return (data_dict, ground_truths), dataset_names
 
-        return data_dict, ground_truths
+
+class VariableBatchSampler(BatchSampler):
+    """
+    A custom batch sampler that generates variable-sized batches based on the provided batch_sizes and num_examples.
+
+    Args:
+        data_source (Dataset): The dataset to sample from.
+        batch_sizes (list): A list of batch sizes for each iteration.
+        num_examples (list): A list of the number of examples for each iteration.
+        drop_last (bool, optional): If True, drops the last incomplete batch. Default is False.
+
+    Raises:
+        ValueError: If no batch size is provided.
+
+    Returns:
+        An iterator that yields variable-sized batches.
+
+    Example:
+        data_source = MyDataset()
+        batch_sizes = [32, 16, 8]
+        num_examples = [1000, 500, 200]
+        sampler = VariableBatchSampler(data_source, batch_sizes, num_examples)
+        for batch in sampler:
+            # Process the batch
+    """
+
+    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False):
+        self.data_source = data_source
+        self.batch_sizes = batch_sizes
+        self.num_examples = num_examples
+        self.drop_last = drop_last
+        self.sampler = torch.utils.data.sampler.RandomSampler(data_source)
+
+        if len(batch_sizes) == 0:
+            raise ValueError("At least one batch size should be provided.")
+        
+    def __len__(self):
+        return len(self.batch_sizes)
+
+    def __iter__(self):
+        indices = self.sampler.__iter__()
+
+        for batch_size, num_examples in zip(self.batch_sizes, self.num_examples):
+            batch = []
+            while len(batch) < batch_size and indices:
+                batch.append((next(indices), num_examples))
+            yield batch
+            
+    def get_max_num_images(self):
+        return self.batch_sizes[0] * self.num_examples[0]

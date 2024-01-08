@@ -134,13 +134,12 @@ def convert_commentedmap_to_dict(data):
         return data
 
 
-def log_every_n(batch_idx: int, n: int):
+def log_every_n(image_idx: int, batch_size: int, n: int):
     if n is None:
         return False
-    if batch_idx % n == 0:
-        return True
-    else:
-        return False
+    cur_step = image_idx % n
+    next_step = (image_idx + batch_size) % n
+    return cur_step > next_step
 
 
 def dict_to_yaml_string(mapping: Mapping) -> str:
@@ -167,3 +166,43 @@ def get_checkpoints_dir_path(
     """
     if ckpt_root_dir:
         return os.path.join(ckpt_root_dir, project_name, group_name)
+
+
+def find_divisor_pairs(number):
+    divisor_pairs = []
+    
+    for i in range(1, int(number**0.5) + 1):
+        if number % i == 0:
+            divisor_pairs.append((i, number // i))
+    
+    return divisor_pairs
+
+
+def get_divisors(n):
+    """
+    Returns a list of divisors of a given number.
+
+    Args:
+        n (int): The number to find divisors for.
+
+    Returns:
+        list: A list of divisors of the given number.
+    """
+    divisors = []
+    for i in range(1, n + 1):
+        if n % i == 0:
+            divisors.append(i)
+    return divisors
+
+
+class RunningAverage:
+    def __init__(self):
+        self.accumulator = 0
+        self.steps = 0
+        
+    def update(self, value):
+        self.accumulator += value
+        self.steps += 1
+        
+    def compute(self):
+        return self.accumulator / self.steps

@@ -10,16 +10,17 @@ import numpy as np
 import itertools
 import json
 from typing import List, Tuple, Dict
+from torch.utils.data import Dataset
 
 
 MAX_PIXELS_BBOX_NOISE = 20  # noise limit for bounding boxes taken from SA
 
 
-def get_max_annotations(annotations):
+def get_max_annotations(annotations: list) -> int:
     anns = []
     for image in annotations:
-        for cat in annotations[image]:
-            anns += [annotations[image][cat].shape[0]]
+        for cat in image:
+            anns += [image[cat].shape[0]]
     return max(anns)
 
 def compute_j_index(class_a: List[int], class_b: List[int]) -> float:
@@ -301,7 +302,7 @@ def load_dict(path: str):
     """
     name, ext = str(path).split(".")
     if ext == "json":
-        with open(path) as f:
+        with open(path, "r") as f:
             instances = json.load(f)
     elif ext in {"pickle", "pkl"}:
         print("Using pickle")
@@ -645,7 +646,7 @@ def collate_gts(gt, dims):
     out = torch.zeros(dims)
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
-    return out.type(torch.uint8)
+    return out
 
 
 def collate_batch_gts(gt, dims, fill_value=-100):
@@ -666,3 +667,93 @@ def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
     neww = int(neww + 0.5)
     newh = int(newh + 0.5)
     return (newh, neww)
+
+
+def random_item(num_examples, depth, height, width, num_classes, num_objects):
+    return {
+        "embeddings": torch.rand(num_examples, depth, height // 16, width // 16),
+        "prompt_masks": torch.randint(
+            0, 2, (num_examples, num_classes, height // 4, width // 4)
+        ).float(),
+        "flag_masks": torch.randint(0, 2, (num_examples, num_classes)),
+        "prompt_points": torch.randint(
+            0, 2, (num_examples, num_classes, num_objects, 2)
+        ),
+        "flag_points": torch.randint(0, 2, (num_examples, num_classes, num_objects)),
+        "prompt_bboxes": torch.rand(num_examples, num_classes, num_objects, 4),
+        "flag_bboxes": torch.randint(0, 2, (num_examples, num_classes, num_objects)),
+        "dims": torch.tensor([height, width]),
+        "classes": [{1, 2}, {2, 3}],
+    }, torch.randint(0, 3, (num_examples, height // 4, width // 4))
+
+
+def random_batch(
+    batch_size, num_examples, depth, height, width, num_classes, num_objects
+):
+    return RandomDataset.collate_fn(
+        None,
+        [
+            random_item(num_examples, depth, height, width, num_classes, num_objects)
+            for _ in range(batch_size)
+        ]
+    )
+    
+    
+class VariableDataset(Dataset):
+    def __init__(self, examples_batch_pairs, num_classes, num_objects, height, width):
+        self.examples_batch_pairs = examples_batch_pairs
+        self.num_classes = num_classes
+        self.num_objects = num_objects
+        
+    def __getitem__(self, index):
+        batch_size, num_examples, = self.examples_batch_pairs[index]
+        return random_item(*self.examples_batch_pairs[index], self.num_classes, self.num_objects, self.height, self.width)
+
+
+class RandomDataset(Dataset):
+    def __init__(self):
+        self.len = 100
+
+    def __getitem__(self, index):
+        H, W = 1024, 1024
+        M = 2
+        C = 3
+        D = 256
+        N = 5
+        return {
+            "embeddings": torch.rand(M, D, H // 16, W // 16),
+            "prompt_masks": torch.randint(0, 2, (M, C, H // 4, W // 4)).float(),
+            "flags_masks": torch.randint(0, 2, (M, C)),
+            "prompt_points": torch.randint(0, 2, (M, C, N, 2)),
+            "flags_points": torch.randint(0, 2, (M, C, N)),
+            "prompt_bboxes": torch.rand(M, C, N, 4),
+            "flags_bboxes": torch.randint(0, 2, (M, C, N)),
+            "dims": torch.tensor([H, W]),
+            "classes": [{1, 2}, {2, 3}],
+        }, torch.randint(0, 3, (M, H // 4, W // 4))
+
+    def __len__(self):
+        return self.len
+
+    def collate_fn(self, batch):
+        result_dict = {}
+        gt_list = []
+        for elem in batch:
+            dictionary, gts = elem
+            gt_list.append(gts)
+            for key, value in dictionary.items():
+                if key in result_dict:
+                    if not isinstance(result_dict[key], list):
+                        result_dict[key] = [result_dict[key]]
+                    if isinstance(value, list):
+                        result_dict[key].extend(value)
+                    else:
+                        result_dict[key].append(value)
+                else:
+                    if isinstance(value, list):
+                        result_dict[key] = value
+                    else:
+                        result_dict[key] = [value]
+        return {
+            k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()
+        }, torch.stack(gt_list)

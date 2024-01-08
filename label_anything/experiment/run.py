@@ -1,7 +1,6 @@
 import os
 from label_anything.data import get_dataloaders
 from label_anything.logger.text_logger import get_logger
-from label_anything.experiment.parameters import parse_params
 import sys
 import comet_ml
 from copy import deepcopy
@@ -13,13 +12,44 @@ from label_anything.models import model_registry
 logger = get_logger(__name__)
 
 
-def comet_experiment(comet_information, args, train_params):
+def parse_params(params_dict):
+    train_params = params_dict.get("train_params", {})
+    dataset_params = params_dict.get("dataset", {})
+    model_params = params_dict.get("model", {})
+    dataloader_params = params_dict.get("dataloader", {})
+
+    return train_params, dataset_params, dataloader_params, model_params
+
+
+def comet_experiment(comet_information: dict, params: dict):
+    global logger
+    logger_params = deepcopy(params.get("logger", {}))
+    logger_params.pop("comet", None)
+    if os.environ.get("TMPDIR", None) or os.environ.get("TMP", None) or os.environ.get("TEMP", None):
+        if os.environ.get("TMPDIR", None):
+            tmp_dir = os.environ.get("TMPDIR")
+        elif os.environ.get("TMP", None):
+            tmp_dir = os.environ.get("TMP")
+        else:
+            tmp_dir = os.environ.get("TEMP")
+        logger.info(f"Using {tmp_dir} as temporary directory from environment variables")
+        logger_params["tmp_dir"] = tmp_dir
+    else:
+        tmp_dir = logger_params.get("tmp_dir", None)
+        logger.info(f"No temporary directory found in environment variables, using {tmp_dir} for images")
+    os.makedirs(tmp_dir, exist_ok=True)
+    tags = comet_information.pop("tags", [])
+    
+    if comet_information.pop("offline"):
+        offdir = comet_information.pop("offline_directory", None)
+        experiment = comet_ml.OfflineExperiment(offline_directory=offdir, **comet_information)
+    else:
+        experiment = comet_ml.Experiment(**comet_information)
     comet_ml.init(comet_information)
-    experiment = comet_ml.Experiment()
-    experiment.add_tags(args["tags"])
-    experiment.log_parameters(train_params)
-    logger = Logger(experiment)
-    return logger, experiment
+    experiment.add_tags(tags)
+    experiment.log_parameters(params)
+    
+    return Logger(experiment, **logger_params)
 
 
 class Run:
@@ -55,16 +85,16 @@ class Run:
             self.model_params,
         ) = parse_params(params)
 
+        comet_params = self.params.get("logger", {}).get("comet", {})
         comet_information = {
-            "apykey": os.getenv("COMET_API_KEY"),
+            "api_key": os.getenv("COMET_API_KEY"),
             "project_name": self.params["experiment"]["name"],
+            **comet_params,
         }
 
-        self.comet_logger, self.experiment = comet_experiment(
-            comet_information, self.params, self.train_params
-        )
-        self.url = self.experiment.url
-        self.name = self.experiment.name
+        self.comet_logger = comet_experiment(comet_information, self.params)
+        self.url = self.comet_logger.experiment.url
+        self.name = self.comet_logger.experiment.name
 
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
             self.dataset_params, self.dataloader_params
@@ -80,6 +110,5 @@ class Run:
             self.val_loader,
             self.test_loader,
             self.comet_logger,
-            self.experiment,
             self.train_params,
         )
