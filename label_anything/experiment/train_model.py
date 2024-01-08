@@ -12,6 +12,7 @@ from label_anything.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
 from label_anything.utils.metrics import jaccard, fbiou
+from transformers import get_scheduler
 
 logger = get_logger(__name__)
 
@@ -94,6 +95,7 @@ def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
 def train_epoch(
     model,
     optimizer,
+    scheduler,
     criterion,
     dataloader,
     epoch,
@@ -147,6 +149,8 @@ def train_epoch(
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
             if not train_params.get("accumulate_substitution", False) or i == loss_normalizer - 1:
                 optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
@@ -291,6 +295,17 @@ def train_and_test(
     optimizer = AdamW(
         model.get_learnable_params(train_params), lr=train_params["initial_lr"]
     )
+    
+    scheduler = None
+    scheduler_params = train_params.get("scheduler", None)
+    if scheduler_params:
+        scheduler = get_scheduler(
+            scheduler_params["type"],
+            optimizer=optimizer,
+            num_warmup_steps=scheduler_params["warmup_steps"],
+            num_training_steps=train_params["max_epochs"] * len(train_loader),
+        )
+
     if train_params.get("compile", False):
         model = torch.compile(model)
 
@@ -302,6 +317,7 @@ def train_and_test(
             train_epoch(
                 model,
                 optimizer,
+                scheduler,
                 criterion,
                 train_loader,
                 epoch,
