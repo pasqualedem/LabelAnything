@@ -120,6 +120,7 @@ def train_epoch(
     loss_normalizer = 1
     oom = False
     cur_lr = train_params["initial_lr"]
+    dataloader.dataset.log_images = True # Logs the first batch
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
