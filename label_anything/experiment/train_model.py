@@ -201,6 +201,7 @@ def train_epoch(
                 }
             )
             tot_steps += 1
+        comet_logger.save_experiment_timed()
         tot_images += cur_batch_size
 
     comet_logger.log_metrics(
@@ -313,7 +314,7 @@ def train_and_test(
     train_loader,
     val_loader,
     test_loader,
-    comet_logger,
+    comet_logger: Logger,
     train_params,
 ):
     logger.info("Start training loop...")
@@ -362,10 +363,11 @@ def train_and_test(
                     validate(
                         model, criterion, val_loader, epoch, comet_logger, accelerator
                     )
+            comet_logger.save_experiment()
 
     if test_loader:
         with comet_logger.experiment.test():
             logger.info(f"Running Model Testing {args.name}")
             test(model, criterion, test_loader, comet_logger)
 
-    comet_logger.experiment.end()
+    comet_logger.end()

@@ -14,12 +14,12 @@ parameters:
     log_frequency: [50]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [1000]
+    experiment_save_delta: [3600] # save experiment every n seconds
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
     comet:
-      tags: [[Test]] # list of tags to attach to the run in logger platform
+      tags: [[FirstTry]] # list of tags to attach to the run in logger platform
       offline: [True]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
-      tags: [[FirstTry]] # list of tags to attach to the run in logger platform
 
   train_params:
     loss:

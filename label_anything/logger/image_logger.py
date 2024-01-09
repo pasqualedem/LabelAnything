@@ -1,19 +1,25 @@
 from label_anything.visualization.visualize import get_image
 from label_anything.logger.utils import (
     extract_polygons_from_tensor,
-    crop_padding,
-    resize_gt,
     take_image,
-    extract_masks_dynamic,
 )
+from label_anything.logger.text_logger import get_logger
 from label_anything.utils.utils import log_every_n
 import os
 import math
+import time
 import torch
 import tempfile
 import torch.nn.functional as F
 
 from PIL import Image
+from comet_ml import OfflineExperiment
+from comet_ml.utils import local_timestamp
+from comet_ml.offline_utils import create_experiment_archive
+from comet_ml.offline import OFFLINE_EXPERIMENT_END
+
+
+logger = get_logger(__name__)
 
 
 def validate_polygon(polygon):
@@ -29,6 +35,7 @@ class Logger:
         train_image_log_frequency: int = 1000,
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
+        experiment_save_delta: int = None
     ):
         self.experiment = experiment
         self.tmp_dir = tmp_dir
@@ -39,6 +46,8 @@ class Logger:
             "val": val_image_log_frequency,
             "test": test_image_log_frequency,
         }
+        self.start_time = time.time()
+        self.experiment_save_delta = experiment_save_delta
 
     def __get_class_ids(self, classes):
         res_classes = []
@@ -308,6 +317,40 @@ class Logger:
             name,
             parameter,
         )
+    def save_experiment_timed(self):
+        """
+        Save the experiment every `self.time_delta` seconds
+        """
+        if self.experiment_save_delta is None:
+            return
+        if type(self.experiment) != OfflineExperiment:
+            return
+        if time.time() - self.start_time > self.experiment_save_delta:
+            logger.info(f"Saving partial experiment as it has been running for more than {self.experiment_save_delta} seconds")
+            self.save_experiment()
+            self.start_time = time.time()
+        
+    def save_experiment(self):
+        if type(self.experiment) != OfflineExperiment:
+            return
+        self.experiment._write_experiment_meta_file()
+        self.experiment.add_tag("Partial")
+
+        zip_file_filename, _ = create_experiment_archive(
+            offline_directory=self.experiment.offline_directory,
+            offline_archive_file_name=self.experiment._get_offline_archive_file_name(),
+            data_dir=self.experiment.tmpdir,
+            logger=logger,
+        )
+
+        # Display the full command to upload the offline experiment
+        logger.info(f"Partial experiment saved at time {local_timestamp()}")
+        logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
+        
+    def end(self):
+        self.experiment.tags.remove("Partial")
+        self.experiment.end()
+        
 
 
 """
