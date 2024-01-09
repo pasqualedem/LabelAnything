@@ -248,13 +248,18 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
         )
 
 
-def test(model, criterion, dataloader, comet_logger):
+def test(model, criterion, dataloader, train_dataset, comet_logger):
     model.eval()
     total_loss = 0
     jaccard_value = 0
     fbiou_value = 0
 
-    examples = dataloader.dataset.get_examples()
+    examples = dataloader.dataset.extract_prompts(
+        train_dataset.cat2img,
+        train_dataset.img2cat,
+        train_dataset.images,
+        train_dataset.img2cat_annotations,
+    )
     class_embeddings = model.get_class_embeddings(examples)
 
     with torch.no_grad():
