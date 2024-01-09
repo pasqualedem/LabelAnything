@@ -538,6 +538,7 @@ class CocoLVISDataset(Dataset):
 class CocoLVISTestDataset(CocoLVISDataset):
     def __init__(
             self,
+            name,
             instances_path,  # Path
             img_dir=None,  # directory (only if images have to be loaded from disk)
             max_num_examples=10,  # number of max examples to be given for the target image
@@ -546,29 +547,117 @@ class CocoLVISTestDataset(CocoLVISDataset):
             seed=42,  # for reproducibility
             max_mum_coords=10,  # max number of coords for each example for each class
     ):
-        super(CocoLVISTestDataset, self).__init__(instances_path=instances_path, img_dir=img_dir,
-                                                  max_num_examples=max_num_examples, preprocess=preprocess,
+        super(CocoLVISTestDataset, self).__init__(name=name,
+                                                  instances_path=instances_path,
+                                                  img_dir=img_dir,
+                                                  max_num_examples=max_num_examples,
+                                                  preprocess=preprocess,
                                                   seed=seed)
 
-    def _extract_examples(self):
+    def _extract_examples(
+            self,
+            cat2img: dict,
+            img2cat: dict
+    ) -> list[int]:
         prompt_images = set()
         for cat_id in self.categories.keys():
-            if cat_id not in self.cat2img:
+            if cat_id not in cat2img:
                 continue
-            cat_images = self.cat2img[cat_id]
-            _, img = max(map(lambda x: (len(self.img2cat[x]), x), cat_images))
+            cat_images = cat2img[cat_id]
+            _, img = max(map(lambda x: (len(img2cat[x]), x), cat_images))
             prompt_images.add(img)
         return prompt_images
 
-    def extract_prompts(self):
-        image_ids = self._extract_examples()
+    def extract_prompts(
+            self,
+            cat2img: dict,
+            img2cat: dict,
+            images: dict,
+            img2cat_annotations: dict,
+    ) -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor):
+        image_ids = self._extract_examples(cat2img, img2cat)
+        prompt_images = torch.stack([
+            self.preprocess(self._load_image(images[x]))
+            for x in image_ids
+        ])
         cat_ids = list(self.categories.keys())
-        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids)
+        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
+                                                                      images, img2cat_annotations)
 
         bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
         masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
-        return bboxes, masks, points
+        return prompt_images, bboxes, masks, points, torch.as_tensor(image_sizes)
+
+    def _get_annotations(
+        self,
+        image_ids: list,
+        cat_ids: list,
+        images: dict,
+        img2cat_annotations: dict,
+    ) -> (list, list, list, list, list):
+        bboxes = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+
+        # get prompts from annotations
+        classes = [list() for _ in image_ids]
+        img_sizes = [
+            (images[img_id]["height"], images[img_id]["width"])
+            for img_id in image_ids
+        ]
+
+        for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
+            for cat_id in cat_ids:
+                # for each pair (image img_id and category cat_id)
+                if cat_id not in img2cat_annotations[img_id]:
+                    # the chosen category is not in the iamge
+                    continue
+
+                classes[i].append(cat_id)
+                number_of_annotations = len(img2cat_annotations[img_id][cat_id])
+                if number_of_annotations > self.max_points_annotations:
+                    # if there are too many annotations, sample a mask
+                    prompt_types = [PromptType.MASK] * number_of_annotations
+                else:
+                    prompt_types = random.choices(
+                        list(PromptType), k=number_of_annotations
+                    )
+                for ann, prompt_type in zip(img2cat_annotations[img_id][cat_id], prompt_types):
+                    if prompt_type == PromptType.BBOX:
+                        # take the bbox
+                        bboxes[i][cat_id].append(
+                            self.prompts_processor.convert_bbox(
+                                ann["bbox"],
+                                *img_size,
+                                noise=self.add_box_noise,
+                            ),
+                        )
+                    elif prompt_type == PromptType.MASK:
+                        # take the mask
+                        masks[i][cat_id].append(
+                            self.prompts_processor.convert_mask(
+                                ann["segmentation"],
+                                *img_size,
+                            )
+                        )
+                    elif prompt_type == PromptType.POINT:
+                        # take the point
+                        mask = self.prompts_processor.convert_mask(
+                            ann["segmentation"],
+                            *img_size,
+                        )
+                        points[i][cat_id].append(
+                            self.prompts_processor.sample_point(mask)
+                        )
+
+        # convert the lists of prompts to arrays
+        for i in range(len(image_ids)):
+            for cat_id in cat_ids:
+                bboxes[i][cat_id] = np.array((bboxes[i][cat_id]))
+                masks[i][cat_id] = np.array((masks[i][cat_id]))
+                points[i][cat_id] = np.array((points[i][cat_id]))
+        return bboxes, masks, points, classes, img_sizes
 
     def __getitem__(self, item):
         base_image_data = self.images[self.image_ids[item]]
@@ -588,7 +677,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
-    ) -> Tuple[Dict[str, Any], torch.Tensor]:
+    ) -> (Dict[str, Any], torch.Tensor):
         images = torch.stack([x["image"] for x in batched_input])
 
         dims = torch.stack([x["dim"] for x in batched_input])
