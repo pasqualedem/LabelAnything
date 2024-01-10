@@ -15,7 +15,7 @@ def get_example_num_list(dataset_len, batch_size, max_num_examples):
     such that the total number of examples is `batch_size * max_num_examples`
     """
     target_examples_num = batch_size * max_num_examples
-    possible_target_examples_len = get_divisors(max_num_examples)[1:] # Remove 1
+    possible_target_examples_len = get_divisors(max_num_examples)
     examples_nums = []
     batch_sizes = []
     remaining_images = dataset_len
