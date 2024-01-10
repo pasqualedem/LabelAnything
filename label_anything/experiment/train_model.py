@@ -318,7 +318,7 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    accelerator = Accelerator()
+    accelerator = Accelerator(even_batches=False)
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
