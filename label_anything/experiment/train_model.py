@@ -100,7 +100,7 @@ def train_epoch(
     dataloader,
     epoch,
     comet_logger: Logger,
-    accelerator,
+    accelerator: Accelerator,
     train_params,
 ):
     model.train()
@@ -111,7 +111,7 @@ def train_epoch(
     first_step_jaccard = RunningAverage()
     first_step_fbiou = RunningAverage()
 
-    model, optimizer, dataloader = accelerator.prepare(model, optimizer, dataloader)
+    model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
     # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
