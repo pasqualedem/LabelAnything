@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, PILToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
+from label_anything.data.coco import CocoLVISTestDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.utils.utils import get_divisors
 
@@ -15,7 +16,7 @@ def get_example_num_list(dataset_len, batch_size, max_num_examples):
     such that the total number of examples is `batch_size * max_num_examples`
     """
     target_examples_num = batch_size * max_num_examples
-    possible_target_examples_len = get_divisors(max_num_examples)[1:] # Remove 1
+    possible_target_examples_len = get_divisors(max_num_examples)
     examples_nums = []
     batch_sizes = []
     remaining_images = dataset_len
@@ -93,8 +94,23 @@ def get_dataloaders(dataset_args, dataloader_args):
         )
     else:
         val_dataloader = None
+    if test_datasets_params:
+        test_datasets = [
+            CocoLVISTestDataset(**v)
+            for v in test_datasets_params.values()
+        ]
+        test_dataloaders = [
+            DataLoader(
+                dataset=data,
+                **dataloader_args,
+                collate_fn=data.collate_fn,
+            )
+            for data in test_datasets
+        ]
+    else:
+        test_dataloaders = None
     return (
         train_dataloader,
         val_dataloader,
-        None,
-    )  # placeholder for val and test loaders until Raffaele implements them
+        test_dataloaders,
+    )

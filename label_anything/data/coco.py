@@ -546,13 +546,15 @@ class CocoLVISTestDataset(CocoLVISDataset):
             j_index_value=0.5,  # threshold for extracting examples
             seed=42,  # for reproducibility
             max_mum_coords=10,  # max number of coords for each example for each class
+            add_box_noise=False,
     ):
         super(CocoLVISTestDataset, self).__init__(name=name,
                                                   instances_path=instances_path,
                                                   img_dir=img_dir,
                                                   max_num_examples=max_num_examples,
                                                   preprocess=preprocess,
-                                                  seed=seed)
+                                                  seed=seed,
+                                                  add_box_noise=add_box_noise)
 
     def _extract_examples(
             self,
