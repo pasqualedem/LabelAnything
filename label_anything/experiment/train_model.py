@@ -157,14 +157,17 @@ def train_epoch(
 
             if tot_steps % comet_logger.log_frequency == 0:
                 print("pred before", pred)
+                print("pred shape", pred.shape)
                 pred = accelerator.gather(pred)
                 print("pred after", pred)
                 print("pred shape", pred.shape)
                 print("gt before", gt)
+                print("gt shape", gt.shape)
                 gt = accelerator.gather(gt)
                 print("gt after", gt)
                 print("gt shape", gt.shape)
                 print("outputs before", outputs)
+                print("outputs shape", outputs.shape)
                 outputs = accelerator.gather(outputs)
                 print("outputs after", outputs)
                 print("outputs shape", outputs.shape)
