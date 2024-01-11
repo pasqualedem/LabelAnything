@@ -182,6 +182,7 @@ def train_epoch(
                 batch_idx=batch_idx,
                 image_idx=tot_images,
                 batch_size=cur_batch_size,
+                epoch=epoch,
                 step=tot_steps,
                 substitution_step=i,
                 input_dict=input_dict,
@@ -224,6 +225,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
+    dataloader.dataset.log_images = True # Logs the first batch
     tot_steps = 0
     tot_images = 0
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
@@ -255,6 +257,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                 batch_idx=batch_idx,
                 image_idx=tot_images,
                 batch_size=cur_batch_size,
+                epoch=epoch,
                 step=tot_steps,
                 substitution_step=0,
                 input_dict=image_dict,
@@ -356,7 +359,7 @@ def train_and_test(
             )
             logger.info(f"Finished Epoch {epoch}")
 
-            save_model(comet_logger.experiment, model, model._get_name())
+            # save_model(comet_logger.experiment, model, model._get_name())
             if val_loader:
                 with comet_logger.experiment.validate():
                     logger.info(f"Running Model Validation")

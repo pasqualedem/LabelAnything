@@ -66,6 +66,7 @@ class Logger:
         batch_idx,
         image_idx,
         batch_size,
+        epoch,
         step,
         substitution_step,
         input_dict,
@@ -82,6 +83,7 @@ class Logger:
             categories = dataset.categories
             self.log_prompts(
                 batch_idx=batch_idx,
+                epoch=epoch,
                 step=step,
                 image_idx=image_idx,
                 substitution_step=substitution_step,
@@ -93,6 +95,7 @@ class Logger:
             self.log_gt_pred(
                 batch_idx=batch_idx,
                 image_idx=image_idx,
+                epoch=epoch,
                 step=step,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
@@ -108,6 +111,7 @@ class Logger:
         self,
         batch_idx,
         image_idx,
+        epoch,
         step,
         substitution_step,
         input_dict,
@@ -175,17 +179,20 @@ class Logger:
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
+                    "epoch": epoch,
+                    "step": step,
                     "pred_bg_percent": torch.sum(sample_pred[0]).item()
                     / (sample_pred.shape[1] * sample_pred.shape[2]),
                     "phase": prefix,
                 },
-                step=step,
+                step=epoch,
             )
 
     def log_prompts(
         self,
         batch_idx,
         image_idx,
+        epoch,
         step,
         substitution_step,
         input_dict,
@@ -286,9 +293,11 @@ class Logger:
                         "sample_idx": i,
                         "substitution_step": substitution_step,
                         "type": "prompt",
+                        "epoch": epoch,
+                        "step": step,
                         "phase": prefix,
                     },
-                    step=step,
+                    step=epoch,
                 )
 
     def log_image(
@@ -348,7 +357,9 @@ class Logger:
         logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
         
     def end(self):
-        self.experiment.tags.remove("Partial")
+        if "Partial" in self.experiment.tags:
+            logger.info("Removing partial tag from experiment")
+            self.experiment.tags.remove("Partial")
         self.experiment.end()
         
 
