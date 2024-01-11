@@ -22,15 +22,17 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
-    
-    
+
+
 def check_nan(model, input_dict, output, gt, loss, step, train_params):
     if not train_params.get("check_nan", False):
         return
-    if step % train_params['check_nan'] != 0:
+    if step % train_params["check_nan"] != 0:
         return
     if torch.isnan(loss) or loss.detach() in [torch.inf, -torch.inf]:
-        if train_params['check_nan'] == 1: # Makes sense only if we are checking every step
+        if (
+            train_params["check_nan"] == 1
+        ):  # Makes sense only if we are checking every step
             state_dict = {
                 "model": model.state_dict(),
                 "input_dict": input_dict,
@@ -41,8 +43,8 @@ def check_nan(model, input_dict, output, gt, loss, step, train_params):
             }
             torch.save(state_dict, "nan.pt")
         raise ValueError("NaNs in loss")
-    
-    
+
+
 def handle_oom(model, input_dict, batch_tuple, optimizer, gt, epoch, step):
     logger.warning(f"OOM at step {step}")
     logger.warning(torch.cuda.memory_summary())
@@ -62,6 +64,7 @@ def handle_oom(model, input_dict, batch_tuple, optimizer, gt, epoch, step):
     del gt
     gc.collect()
     torch.cuda.empty_cache()
+
 
 def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
     """
@@ -111,7 +114,9 @@ def train_epoch(
     first_step_jaccard = RunningAverage()
     first_step_fbiou = RunningAverage()
 
-    model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
+    model, optimizer, dataloader, scheduler = accelerator.prepare(
+        model, optimizer, dataloader, scheduler
+    )
     # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
@@ -120,7 +125,7 @@ def train_epoch(
     loss_normalizer = 1
     oom = False
     cur_lr = train_params["initial_lr"]
-    dataloader.dataset.log_images = True # Logs the first batch
+    dataloader.dataset.log_images = True  # Logs the first batch
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
@@ -131,13 +136,19 @@ def train_epoch(
             num_points=train_params.get("num_points", 1),
             substitute=train_params.get("substitute", True),
         )
-        loss_normalizer = batch_tuple[1].shape[1] if train_params.get("accumulate_substitution", True) else 1
+        loss_normalizer = (
+            batch_tuple[1].shape[1]
+            if train_params.get("accumulate_substitution", True)
+            else 1
+        )
         for i, (input_dict, gt) in enumerate(substitutor):
             try:
                 outputs = model(input_dict)
             except RuntimeError as e:
                 if "out of memory" in str(e):
-                    handle_oom(model, input_dict, batch_tuple, optimizer, gt, epoch, batch_idx)
+                    handle_oom(
+                        model, input_dict, batch_tuple, optimizer, gt, epoch, batch_idx
+                    )
                     if oom:
                         raise e
                     oom = True
@@ -149,22 +160,36 @@ def train_epoch(
             oom = False
             pred = outputs.argmax(dim=1)
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
-            if not train_params.get("accumulate_substitution", False) or i == loss_normalizer - 1:
+            if (
+                not train_params.get("accumulate_substitution", False)
+                or i == loss_normalizer - 1
+            ):
                 optimizer.step()
                 if scheduler is not None:
                     scheduler.step()
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
-                all_pred, all_gt, all_outputs = accelerator.pad_across_processes((pred, gt, outputs), dim=1, pad_index=-torch.inf)
-                all_pred, all_gt, all_outputs = accelerator.gather_for_metrics((all_pred, all_gt, all_outputs))
-                jaccard_value = jaccard(all_pred, all_gt, num_classes=all_outputs.shape[1])
+                all_pred, all_gt = accelerator.pad_across_processes(
+                    (pred, gt), dim=1, pad_index=0
+                )
+                all_outputs = accelerator.pad_across_processes(
+                    (outputs), dim=1, pad_index=-torch.inf
+                )
+                all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
+                    (all_pred, all_gt, all_outputs)
+                )
+                jaccard_value = jaccard(
+                    all_pred, all_gt, num_classes=all_outputs.shape[1]
+                )
                 fbiou_value = fbiou(all_outputs, all_gt)
                 comet_logger.log_metric("batch_jaccard", jaccard_value.item())
                 comet_logger.log_metric("batch_fbiou", fbiou_value.item())
                 avg_jaccard.update(jaccard_value.item())
                 avg_fbiou.update(fbiou_value.item())
-                cur_lr = scheduler.get_lr()[0] if scheduler else train_params["initial_lr"]
+                cur_lr = (
+                    scheduler.get_lr()[0] if scheduler else train_params["initial_lr"]
+                )
 
             avg_loss.update(loss.item())
             if i == 0:
@@ -224,7 +249,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
-    dataloader.dataset.log_images = True # Logs the first batch
+    dataloader.dataset.log_images = True  # Logs the first batch
     tot_steps = 0
     tot_images = 0
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
@@ -275,7 +300,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                 "loss": avg_loss.compute(),
                 "fbiou": avg_fbiou.compute(),
             },
-            epoch=epoch
+            epoch=epoch,
         )
     logger.info(f"Validation Epoch {epoch} finished")
     logger.info(f"Jaccard: {avg_jaccard.compute()}")
@@ -327,7 +352,7 @@ def train_and_test(
     optimizer = AdamW(
         model.get_learnable_params(train_params), lr=train_params["initial_lr"]
     )
-    
+
     scheduler = None
     scheduler_params = train_params.get("scheduler", None)
     if scheduler_params:
