@@ -181,6 +181,8 @@ def train_epoch(
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
                     (all_pred, all_gt, all_outputs)
                 )
+                accelerator.print("all_gt", all_gt)
+                accelerator.print("shape", all_gt.shape)
                 jaccard_value = jaccard(
                     all_pred, all_gt, num_classes=all_outputs.shape[1]
                 )
