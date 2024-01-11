@@ -11,8 +11,10 @@ parameters:
   # Each value should be a dict or a list
   logger:
     log_frequency: [10]
-    image_log_frequency: [100]
+    train_image_log_frequency: [10000]
+    val_image_log_frequency: [1000]
     tmp_dir: [tmp]
+    experiment_save_delta: [3600] # save experiment every n seconds
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
       offline: [True]
