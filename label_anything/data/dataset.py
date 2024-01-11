@@ -62,16 +62,9 @@ class LabelAnythingDataset(Dataset):
         idx, num_examples = idx_num_examples
         dataset_name, dataset_index = self.index[idx]
         return self.datasets[dataset_name][(dataset_index, num_examples)], dataset_name
-
-    @property
-    def log_images(self):
-        return self._log_images
-
-    @log_images.setter
-    def log_images(self, value):
-        self._log_images = value
-        for dataset in self.datasets.values():
-            dataset.log_images = value
+    
+    def load_and_preprocess_images(self, dataset_name, image_ids):
+        return self.datasets[dataset_name].load_and_preprocess_images(image_ids)
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]

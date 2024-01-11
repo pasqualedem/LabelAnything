@@ -120,7 +120,6 @@ def train_epoch(
     loss_normalizer = 1
     oom = False
     cur_lr = train_params["initial_lr"]
-    dataloader.dataset.log_images = True # Logs the first batch
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
@@ -134,6 +133,7 @@ def train_epoch(
         loss_normalizer = batch_tuple[1].shape[1] if train_params.get("accumulate_substitution", True) else 1
         for i, (input_dict, gt) in enumerate(substitutor):
             try:
+                pass
                 outputs = model(input_dict)
             except RuntimeError as e:
                 if "out of memory" in str(e):
@@ -225,7 +225,6 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
-    dataloader.dataset.log_images = True # Logs the first batch
     tot_steps = 0
     tot_images = 0
     bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
