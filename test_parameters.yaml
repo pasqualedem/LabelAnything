@@ -22,9 +22,10 @@ parameters:
 
   train_params:
     loss:
-      focal:
+      rmi:
         weight: [1.0] 
         params:
+          weight: [True]
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
@@ -73,7 +74,7 @@ parameters:
       do_subsample: [True]
       add_box_noise: [True]
       max_points_annotations: [50]
-      max_num_examples: [2]
+      max_num_examples: [1]
       load_embeddings: [False]
   dataloader:
     batch_size: [1]
