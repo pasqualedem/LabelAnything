@@ -158,7 +158,7 @@ def train_epoch(
             if tot_steps % comet_logger.log_frequency == 0:
                 all_pred, all_gt, all_outputs = accelerator.pad_across_processes((pred, gt, outputs), dim=1, pad_index=-torch.inf)
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics((all_pred, all_gt, all_outputs))
-                jaccard_value = jaccard(all_pred, all_gt, num_classes=outputs.shape[1])
+                jaccard_value = jaccard(all_pred, all_gt, num_classes=all_outputs.shape[1])
                 fbiou_value = fbiou(all_outputs, all_gt)
                 comet_logger.log_metric("batch_jaccard", jaccard_value.item())
                 comet_logger.log_metric("batch_fbiou", fbiou_value.item())
