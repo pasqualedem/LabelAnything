@@ -156,8 +156,14 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
+                print("pred before", pred)
                 pred = accelerator.gather(pred)
+                print("pred after", pred)
+                print("pred shape", pred.shape)
+                print("gt before", gt)
                 gt = accelerator.gather(gt)
+                print("gt after", gt)
+                print("gt shape", gt.shape)
                 outputs = accelerator.gather(outputs)
                 jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
                 fbiou_value = fbiou(outputs, gt)
