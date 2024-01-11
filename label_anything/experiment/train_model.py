@@ -349,8 +349,8 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
+    # kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(even_batches=False) #kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
