@@ -170,6 +170,11 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
+                all_pred, all_gt = pred, gt
+                for dim_to_pad in range(1, 4):
+                    all_pred, all_gt = accelerator.pad_across_processes(
+                        (pred, gt), dim=dim_to_pad, pad_index=-100
+                    )
                 all_outputs = accelerator.pad_across_processes(
                     (outputs), dim=1, pad_index=-torch.inf
                 )
