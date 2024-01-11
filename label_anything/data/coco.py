@@ -581,6 +581,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             for x in image_ids
         ])
         cat_ids = list(self.categories.keys())
+        random.shuffle(cat_ids)
         bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
                                                                       images, img2cat_annotations)
 
