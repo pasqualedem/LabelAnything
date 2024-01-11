@@ -10,7 +10,7 @@ from label_anything.utils.utils import find_divisor_pairs, RunningAverage
 from label_anything.data.utils import random_batch
 from label_anything.loss import LabelAnythingLoss
 from .save import save_model
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from label_anything.utils.metrics import jaccard, fbiou
 from transformers import get_scheduler
 
@@ -320,7 +320,8 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    accelerator = Accelerator(even_batches=False)
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
