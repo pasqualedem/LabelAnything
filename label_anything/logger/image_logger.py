@@ -1,19 +1,25 @@
 from label_anything.visualization.visualize import get_image
 from label_anything.logger.utils import (
     extract_polygons_from_tensor,
-    crop_padding,
-    resize_gt,
     take_image,
-    extract_masks_dynamic,
 )
+from label_anything.logger.text_logger import get_logger
 from label_anything.utils.utils import log_every_n
 import os
 import math
+import time
 import torch
 import tempfile
 import torch.nn.functional as F
 
 from PIL import Image
+from comet_ml import OfflineExperiment
+from comet_ml.utils import local_timestamp
+from comet_ml.offline_utils import create_experiment_archive
+from comet_ml.offline import OFFLINE_EXPERIMENT_END
+
+
+logger = get_logger(__name__)
 
 
 def validate_polygon(polygon):
@@ -21,12 +27,27 @@ def validate_polygon(polygon):
 
 
 class Logger:
-    def __init__(self, experiment, tmp_dir: str, log_frequency: int = 100, image_log_frequency: int = 1000):
+    def __init__(
+        self,
+        experiment,
+        tmp_dir: str,
+        log_frequency: int = 100,
+        train_image_log_frequency: int = 1000,
+        val_image_log_frequency: int = 1000,
+        test_image_log_frequency: int = 1000,
+        experiment_save_delta: int = None
+    ):
         self.experiment = experiment
         self.tmp_dir = tmp_dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
-        self.image_log_frequency = image_log_frequency
+        self.prefix_frequency_dict = {
+            "train": train_image_log_frequency,
+            "val": val_image_log_frequency,
+            "test": test_image_log_frequency,
+        }
+        self.start_time = time.time()
+        self.experiment_save_delta = experiment_save_delta
 
     def __get_class_ids(self, classes):
         res_classes = []
@@ -45,6 +66,7 @@ class Logger:
         batch_idx,
         image_idx,
         batch_size,
+        epoch,
         step,
         substitution_step,
         input_dict,
@@ -52,24 +74,28 @@ class Logger:
         pred,
         dataset,
         dataset_names,
+        phase,
     ):
-        if log_every_n(image_idx, batch_size, self.image_log_frequency):
+        if log_every_n(image_idx, batch_size, self.prefix_frequency_dict[phase]):
             dataset.log_images = True
             return
         if dataset.log_images:
             categories = dataset.categories
             self.log_prompts(
                 batch_idx=batch_idx,
+                epoch=epoch,
                 step=step,
                 image_idx=image_idx,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
                 categories=categories,
                 dataset_names=dataset_names,
+                prefix=phase,
             )
             self.log_gt_pred(
                 batch_idx=batch_idx,
                 image_idx=image_idx,
+                epoch=epoch,
                 step=step,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
@@ -77,6 +103,7 @@ class Logger:
                 pred=pred,
                 categories=categories,
                 dataset_names=dataset_names,
+                prefix=phase,
             )
             dataset.log_images = False
 
@@ -84,6 +111,7 @@ class Logger:
         self,
         batch_idx,
         image_idx,
+        epoch,
         step,
         substitution_step,
         input_dict,
@@ -91,6 +119,7 @@ class Logger:
         pred,
         categories,
         dataset_names,
+        prefix
     ):
         images = input_dict["images"]
         dims = input_dict["dims"]
@@ -141,7 +170,7 @@ class Logger:
             if data_pred:
                 annotations.append({"name": "Prediction", "data": data_pred})
             self.log_image(
-                name=f"image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
+                name=f"{prefix}_image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
                 image_data=image,
                 annotations=annotations,
                 metadata={
@@ -150,21 +179,26 @@ class Logger:
                     "sample_idx": b,
                     "substitution_step": substitution_step,
                     "type": "gt_pred",
+                    "epoch": epoch,
+                    "step": step,
                     "pred_bg_percent": torch.sum(sample_pred[0]).item()
                     / (sample_pred.shape[1] * sample_pred.shape[2]),
+                    "phase": prefix,
                 },
-                step=step,
+                step=epoch,
             )
 
     def log_prompts(
         self,
         batch_idx,
         image_idx,
+        epoch,
         step,
         substitution_step,
         input_dict,
         categories,
         dataset_names,
+        prefix
     ):
         images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
@@ -250,7 +284,7 @@ class Logger:
                             }
                         )
                 self.log_image(
-                    name=f"image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
+                    name=f"{prefix}_image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
                     image_data=image,
                     annotations=annotations,
                     metadata={
@@ -259,8 +293,11 @@ class Logger:
                         "sample_idx": i,
                         "substitution_step": substitution_step,
                         "type": "prompt",
+                        "epoch": epoch,
+                        "step": step,
+                        "phase": prefix,
                     },
-                    step=step,
+                    step=epoch,
                 )
 
     def log_image(
@@ -289,6 +326,42 @@ class Logger:
             name,
             parameter,
         )
+    def save_experiment_timed(self):
+        """
+        Save the experiment every `self.time_delta` seconds
+        """
+        if self.experiment_save_delta is None:
+            return
+        if type(self.experiment) != OfflineExperiment:
+            return
+        if time.time() - self.start_time > self.experiment_save_delta:
+            logger.info(f"Saving partial experiment as it has been running for more than {self.experiment_save_delta} seconds")
+            self.save_experiment()
+            self.start_time = time.time()
+        
+    def save_experiment(self):
+        if type(self.experiment) != OfflineExperiment:
+            return
+        self.experiment._write_experiment_meta_file()
+        self.experiment.add_tag("Partial")
+
+        zip_file_filename, _ = create_experiment_archive(
+            offline_directory=self.experiment.offline_directory,
+            offline_archive_file_name=self.experiment._get_offline_archive_file_name(),
+            data_dir=self.experiment.tmpdir,
+            logger=logger,
+        )
+
+        # Display the full command to upload the offline experiment
+        logger.info(f"Partial experiment saved at time {local_timestamp()}")
+        logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
+        
+    def end(self):
+        if "Partial" in self.experiment.tags:
+            logger.info("Removing partial tag from experiment")
+            self.experiment.tags.remove("Partial")
+        self.experiment.end()
+        
 
 
 """
