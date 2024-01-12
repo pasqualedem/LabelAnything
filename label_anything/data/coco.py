@@ -582,6 +582,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             self.preprocess(self._load_image(images[x]))
             for x in image_ids
         ])
+
         cat_ids = list(self.categories.keys())
         random.shuffle(cat_ids)
         bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
@@ -590,7 +591,16 @@ class CocoLVISTestDataset(CocoLVISDataset):
         bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
         masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
-        return prompt_images, bboxes, masks, points, torch.as_tensor(image_sizes)
+        return {
+            "images": prompt_images,
+            "prompt_masks": masks,
+            "flag_masks": flag_masks,
+            "prompt_points": points,
+            "flag_points": flag_points,
+            "prompt_bboxes": bboxes,
+            "flag_bboxes": flag_bboxes,
+            "dims": torch.as_tensor(image_sizes),
+        }
 
     def _get_annotations(
         self,
