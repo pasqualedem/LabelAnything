@@ -172,6 +172,7 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
+                outputs = accelerator.pad_across_processes(outputs, dim=1, pad_index=-torch.inf)
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
                     (pred, gt, outputs)
                 )
