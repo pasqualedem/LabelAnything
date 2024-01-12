@@ -172,23 +172,9 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
-                all_pred, all_gt = pred, gt
-                accelerator.print(outputs)
-                accelerator.print(pred)
-                accelerator.print(gt)
-                for dim_to_pad in range(1, 4):
-                    all_pred, all_gt = accelerator.pad_across_processes(
-                        (pred, gt), dim=dim_to_pad, pad_index=-100
-                    )
-                all_outputs = accelerator.pad_across_processes(
-                    (outputs), dim=1, pad_index=-torch.inf
-                )
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
-                    (all_pred, all_gt, all_outputs)
+                    (pred, gt, outputs)
                 )
-                accelerator.print(all_outputs)
-                accelerator.print(all_pred)
-                accelerator.print(all_gt)
                 jaccard_value = jaccard(
                     all_pred, all_gt, num_classes=all_outputs.shape[1]
                 )
@@ -355,8 +341,8 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
+    # kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(even_batches=False) # kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
