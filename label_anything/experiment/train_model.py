@@ -2,6 +2,7 @@ import gc
 from tqdm import tqdm
 import torch
 
+import lovely_tensors as lt
 from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.image_logger import Logger
@@ -106,6 +107,7 @@ def train_epoch(
     accelerator: Accelerator,
     train_params,
 ):
+    lt.monkey_patch()
     model.train()
     avg_loss = RunningAverage()
     avg_jaccard = RunningAverage()
@@ -171,6 +173,9 @@ def train_epoch(
 
             if tot_steps % comet_logger.log_frequency == 0:
                 all_pred, all_gt = pred, gt
+                accelerator.print(outputs)
+                accelerator.print(pred)
+                accelerator.print(gt)
                 for dim_to_pad in range(1, 4):
                     all_pred, all_gt = accelerator.pad_across_processes(
                         (pred, gt), dim=dim_to_pad, pad_index=-100
@@ -181,8 +186,9 @@ def train_epoch(
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
                     (all_pred, all_gt, all_outputs)
                 )
-                accelerator.print("all_gt", all_gt)
-                accelerator.print("shape", all_gt.shape)
+                accelerator.print(all_outputs)
+                accelerator.print(all_pred)
+                accelerator.print(all_gt)
                 jaccard_value = jaccard(
                     all_pred, all_gt, num_classes=all_outputs.shape[1]
                 )
@@ -349,8 +355,8 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    # kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(even_batches=False) #kwargs_handlers=[kwargs])
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
