@@ -67,6 +67,7 @@ parameters:
         do_subsample: [False]
         add_box_noise: [False]
       test_coco:
+        support: [coco]
         name: [ coco ]
         instances_path: [ data/annotations/instances_val2017.json ]
         img_dir: *img_dir

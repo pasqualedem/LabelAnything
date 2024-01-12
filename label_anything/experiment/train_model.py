@@ -234,6 +234,8 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
+            if batch_idx == 3:
+                break
             batch_dict, dataset_names = batch_tuple
             batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
             cur_batch_size = get_batch_size(batch_dict)
@@ -286,7 +288,20 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     logger.info(f"FBIoU: {avg_fbiou.compute()}")
 
 
-def test(model, criterion, dataloader, train_dataset, comet_logger):
+def set_class_embeddings(
+        model,
+        accelerator,
+        examples,
+):
+    tmp_device = 'cuda:0' if torch.cuda.device_count() > 0 else 'cpu'
+    model.to(tmp_device)
+    examples = {k: v.to(tmp_device) for k, v in examples.items()}
+    class_embeddings = model.generate_class_embeddings(examples)
+    model.class_embeddings = class_embeddings
+    return accelerator.prepare(model)
+
+
+def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator):
     model.eval()
     total_loss = 0
     jaccard_value = 0
@@ -298,13 +313,13 @@ def test(model, criterion, dataloader, train_dataset, comet_logger):
         train_dataset.images,
         train_dataset.img2cat_annotations,
     )
-    class_embeddings = model.get_class_embeddings(examples)
+    model = set_class_embeddings(model, accelerator, examples)
 
     with torch.no_grad():
         for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
             image_dict, gt = batch_dict
 
-            output = model.predict(image_dict, class_embeddings)
+            output = model.predict(image_dict)
             jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
             fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
             total_loss += criterion(output, gt).item()  # sum up batch loss
@@ -377,7 +392,10 @@ def train_and_test(
 
     if test_loader:
         with comet_logger.experiment.test():
-            logger.info(f"Running Model Testing {args.name}")
-            test(model, criterion, test_loader, comet_logger)
+            for dataloader, support_dataset in test_loader:
+                dataloader = accelerator.prepare(dataloader)
+                test(model=model, criterion=criterion, dataloader=dataloader,
+                     train_dataset=support_dataset, comet_logger=comet_logger,
+                     accelerator=accelerator)
 
     comet_logger.end()

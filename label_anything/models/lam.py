@@ -44,6 +44,7 @@ class Lam(nn.Module):
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
+        self.class_embeddings = None
 
     def forward(
         self, batched_input: List[Dict[str, Any]]
@@ -249,8 +250,10 @@ class Lam(nn.Module):
         return class_embeddings
 
     def predict(self, batched_input, class_embeddings=None):
-        if class_embeddings is None:
+        if class_embeddings is None and self.class_embeddings is None:
             return self.forward(batched_input)
+        if class_embeddings is None and self.class_embeddings is not None:
+            class_embeddings = self.class_embeddings
         query_embeddings = self.prepare_embeddings(batched_input)
 
         seg = self.mask_decoder(
