@@ -1,13 +1,15 @@
 import os
-from label_anything.data import get_dataloaders
-from label_anything.logger.text_logger import get_logger
 import sys
 import comet_ml
+import tempfile
+import subprocess
 from copy import deepcopy
 
 from label_anything.logger.image_logger import Logger
 from label_anything.experiment.train_model import train_and_test
 from label_anything.models import model_registry
+from label_anything.data import get_dataloaders
+from label_anything.logger.text_logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -112,3 +114,18 @@ class Run:
             self.comet_logger,
             self.train_params,
         )
+
+
+class ParallelRun:
+    slurm_command = "sbatch"
+    slurm_script = "train_model_parallel"
+    
+    def __init__(self):
+        if "." not in sys.path:
+            sys.path.extend(".")
+            
+    def launch(self, params: dict):
+        tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
+        tmp_parameters_file.write(str(params).encode())
+        tmp_parameters_file.close()
+        subprocess.run([self.slurm_command, self.slurm_script, tmp_parameters_file.name])
