@@ -178,12 +178,21 @@ def train_epoch(
                 all_outputs = accelerator.pad_across_processes(all_outputs, dim=1, pad_index=-torch.inf)
                 # pad image sizes
                 for i in range(1, 3):
-                    all_pred, all_gt, all_outputs = accelerator.pad_across_processes(
-                        (all_pred, all_gt, all_outputs), dim=-i, pad_index=-100
+                    all_outputs = accelerator.pad_across_processes(
+                        all_outputs, dim=i, pad_index=-torch.inf
+                    )
+                    all_gt = accelerator.pad_across_processes(
+                        all_gt, dim=-i, pad_index=-100
+                    )
+                    all_pred = accelerator.pad_across_processes(
+                        all_pred, dim=-i, pad_index=0
                     )
                 # pad batch size
-                all_pred, all_gt = accelerator.pad_across_processes(
-                    (all_pred, all_gt), dim=0, pad_index=-100
+                all_gt = accelerator.pad_across_processes(
+                    all_gt, dim=0, pad_index=-100
+                )
+                all_pred = accelerator.pad_across_processes(
+                    all_pred, dim=0, pad_index=0
                 )
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
                     (all_pred, all_gt, all_outputs)
