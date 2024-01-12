@@ -172,9 +172,21 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
-                outputs = accelerator.pad_across_processes(outputs, dim=1, pad_index=-torch.inf)
+                all_pred, all_gt, all_outputs = pred, gt, outputs
+                # pad outputs' classes
+                all_outputs = accelerator.pad_across_processes(all_outputs, dim=0, pad_index=-torch.inf)
+                all_outputs = accelerator.pad_across_processes(all_outputs, dim=1, pad_index=-torch.inf)
+                # pad image sizes
+                for i in range(1, 3):
+                    all_pred, all_gt, all_outputs = accelerator.pad_across_processes(
+                        (all_pred, all_gt, all_outputs), dim=-i, pad_index=-100
+                    )
+                # pad batch size
+                all_pred, all_gt = accelerator.pad_across_processes(
+                    (all_pred, all_gt), dim=0, pad_index=-100
+                )
                 all_pred, all_gt, all_outputs = accelerator.gather_for_metrics(
-                    (pred, gt, outputs)
+                    (all_pred, all_gt, all_outputs)
                 )
                 jaccard_value = jaccard(
                     all_pred, all_gt, num_classes=all_outputs.shape[1]
