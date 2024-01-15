@@ -146,7 +146,7 @@ class ParallelRun:
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         tmp_parameters_file.write(str(self.params).encode())
         tmp_parameters_file.close()
-        out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())}_{self.out_extension}"
+        out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4()[:8])}_{self.out_extension}"
         command = [
                 self.slurm_command,
                 self.slurm_stdout,

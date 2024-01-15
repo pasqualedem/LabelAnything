@@ -374,7 +374,7 @@ class ParallelExperimenter(Experimenter):
             self.exp_settings.group,
         )
         starting_run = self.exp_settings.start_from_run
-        self.exp_settings.uuid = self.exp_settings.uuid or str(uuid.uuid4())
+        self.exp_settings.uuid = self.exp_settings.uuid or str(uuid.uuid4()[:8])
         status_manager = StatusManager(len(self.grids), self.exp_settings.max_parallel_runs)
         if self.exp_settings.resume_last and self.exp_settings.search == "grid":
             logger.info("+ another run to finish!")
