@@ -20,6 +20,16 @@ def load_yaml(file_path):
         print(f"File '{file_path}' not found.")
     except yaml.YAMLError as e:
         print(f"Error parsing YAML file: {e}")
+        
+
+def write_yaml(data, file_path):
+    try:
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(data, yaml_file)
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
 
 
 def unwrap_model_from_parallel(model, return_was_wrapped=False):
