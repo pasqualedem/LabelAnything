@@ -151,7 +151,7 @@ def train_epoch(
             substitute=train_params.get("substitute", True),
         )
         loss_normalizer = (
-            batch_tuple[1].shape[1]
+            batch_tuple[1].shape[1] + 1
             if train_params.get("accumulate_substitution", True)
             else 1
         )
