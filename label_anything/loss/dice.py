@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 
 from einops import rearrange
+from .utils import get_reduction
 
 # based on:
 # https://github.com/kevinzakka/pytorch-goodies/blob/master/losses.py
