@@ -4,6 +4,7 @@ import copy
 import gc
 import os
 import glob
+import uuid
 import pandas as pd
 from typing import Mapping
 from easydict import EasyDict
@@ -60,6 +61,7 @@ class ExpSettings(EasyDict):
         self.direction = None
         self.n_trials = None
         self.max_parallel_runs = 1
+        self.uuid = None
         super().__init__(*args, **kwargs)
         self.tracking_dir = self.tracking_dir or ""
 
@@ -81,6 +83,7 @@ class ExpSettings(EasyDict):
         self.direction = e.direction or self.direction
         self.n_trials = e.n_trials or self.n_trials
         self.max_parallel_runs = e.max_parallel_runs or self.max_parallel_runs
+        self.uuid = e.uuid or self.uuid
 
 
 class Status:
@@ -371,6 +374,7 @@ class ParallelExperimenter(Experimenter):
             self.exp_settings.group,
         )
         starting_run = self.exp_settings.start_from_run
+        self.exp_settings.update({"uuid": str(uuid.uuid4())})
         status_manager = StatusManager(len(self.grids), self.exp_settings.max_parallel_runs)
         if self.exp_settings.resume_last and self.exp_settings.search == "grid":
             logger.info("+ another run to finish!")

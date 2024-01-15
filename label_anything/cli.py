@@ -3,7 +3,7 @@ from label_anything.preprocess import (
     preprocess_images_to_embeddings,
     generate_ground_truths,
 )
-from label_anything.experiment.experiment import experiment, run as run_experiment, run_single
+from label_anything.experiment.experiment import experiment as run_experiment, run as run_single
 
 import click
 
