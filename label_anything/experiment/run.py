@@ -3,6 +3,7 @@ import sys
 import comet_ml
 import tempfile
 import subprocess
+import uuid
 from copy import deepcopy
 
 from label_anything.logger.image_logger import Logger
@@ -27,30 +28,40 @@ def comet_experiment(comet_information: dict, params: dict):
     global logger
     logger_params = deepcopy(params.get("logger", {}))
     logger_params.pop("comet", None)
-    if os.environ.get("TMPDIR", None) or os.environ.get("TMP", None) or os.environ.get("TEMP", None):
+    if (
+        os.environ.get("TMPDIR", None)
+        or os.environ.get("TMP", None)
+        or os.environ.get("TEMP", None)
+    ):
         if os.environ.get("TMPDIR", None):
             tmp_dir = os.environ.get("TMPDIR")
         elif os.environ.get("TMP", None):
             tmp_dir = os.environ.get("TMP")
         else:
             tmp_dir = os.environ.get("TEMP")
-        logger.info(f"Using {tmp_dir} as temporary directory from environment variables")
+        logger.info(
+            f"Using {tmp_dir} as temporary directory from environment variables"
+        )
         logger_params["tmp_dir"] = tmp_dir
     else:
         tmp_dir = logger_params.get("tmp_dir", None)
-        logger.info(f"No temporary directory found in environment variables, using {tmp_dir} for images")
+        logger.info(
+            f"No temporary directory found in environment variables, using {tmp_dir} for images"
+        )
     os.makedirs(tmp_dir, exist_ok=True)
     tags = comet_information.pop("tags", [])
-    
+
     if comet_information.pop("offline"):
         offdir = comet_information.pop("offline_directory", None)
-        experiment = comet_ml.OfflineExperiment(offline_directory=offdir, **comet_information)
+        experiment = comet_ml.OfflineExperiment(
+            offline_directory=offdir, **comet_information
+        )
     else:
         experiment = comet_ml.Experiment(**comet_information)
     comet_ml.init(comet_information)
     experiment.add_tags(tags)
     experiment.log_parameters(params)
-    
+
     return Logger(experiment, **logger_params)
 
 
@@ -118,14 +129,25 @@ class Run:
 
 class ParallelRun:
     slurm_command = "sbatch"
-    slurm_script = "train_model_parallel"
-    
+    slurm_script = "launch_run"
+    slurm_script_first_parameter = '"--parameters='
+    slurm_output = "out/trainModelParallel_"
+    out_extension = ".out"
+
     def __init__(self):
         if "." not in sys.path:
             sys.path.extend(".")
-            
+
     def launch(self, params: dict):
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         tmp_parameters_file.write(str(params).encode())
         tmp_parameters_file.close()
-        subprocess.run([self.slurm_command, self.slurm_script, tmp_parameters_file.name])
+        out_file = self.slurm_output + str(uuid.uuid4()) + self.out_extension
+        subprocess.run(
+            [
+                self.slurm_command,
+                self.slurm_script,
+                self.slurm_script_first_parameter + tmp_parameters_file.name + '"',
+                out_file,
+            ]
+        )
