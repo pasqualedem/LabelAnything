@@ -132,7 +132,7 @@ class ParallelRun:
     slurm_script = "launch_run"
     slurm_script_first_parameter = '"--parameters='
     slurm_output = "out/run"
-    out_extension = ".out"
+    out_extension = "out"
     slurm_stderr = "-e"
     slurm_stdout = "-o"
 
@@ -143,10 +143,11 @@ class ParallelRun:
             sys.path.extend(".")
 
     def launch(self):
+        os.makedirs("out", exist_ok=True)
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         tmp_parameters_file.write(str(self.params).encode())
         tmp_parameters_file.close()
-        out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())[:8]}_{self.out_extension}"
+        out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())[:8]}.{self.out_extension}"
         command = [
                 self.slurm_command,
                 self.slurm_stdout,
