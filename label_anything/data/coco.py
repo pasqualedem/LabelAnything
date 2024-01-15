@@ -543,7 +543,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             img_dir=None,  # directory (only if images have to be loaded from disk)
             max_num_examples=10,  # number of max examples to be given for the target image
             preprocess=ToTensor(),  # preprocess step
-            j_index_value=0.5,  # threshold for extracting examples
+            emb_dir=None,
             seed=42,  # for reproducibility
             max_mum_coords=10,  # max number of coords for each example for each class
             add_box_noise=False,
@@ -554,7 +554,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
                                                   max_num_examples=max_num_examples,
                                                   preprocess=preprocess,
                                                   seed=seed,
-                                                  add_box_noise=add_box_noise)
+                                                  add_box_noise=add_box_noise,
+                                                  emb_dir=emb_dir)
 
     def _extract_examples(
             self,
