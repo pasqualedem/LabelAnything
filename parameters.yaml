@@ -68,6 +68,8 @@ parameters:
         emb_dir: *emb_dir
         seed: *seed
         add_box_noise: [ False ]
+        load_embeddings: [True]
+        load_gts: [True]
     common:
       do_subsample: [True]
       add_box_noise: [True]

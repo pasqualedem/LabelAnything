@@ -578,10 +578,17 @@ class CocoLVISTestDataset(CocoLVISDataset):
             img2cat_annotations: dict,
     ) -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor):
         image_ids = self._extract_examples(cat2img, img2cat)
-        prompt_images = torch.stack([
-            self.preprocess(self._load_image(images[x]))
+        prompt_images = [
+            self._get_images_or_embeddings(images[x])
             for x in image_ids
-        ])
+        ]
+        if self.emb_dir is not None:
+            prompt_images = [
+                self.preprocess(x) for x in prompt_images
+            ]
+        prompt_images = torch.stack(prompt_images)
+
+        prompt_images_key = 'embeddings' if self.load_embeddings else 'images'
 
         cat_ids = list(self.categories.keys())
         random.shuffle(cat_ids)
@@ -592,7 +599,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
         points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
         return {
-            "images": prompt_images,
+            prompt_images_key: prompt_images,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
             "prompt_points": points,
