@@ -131,7 +131,7 @@ class Run:
 class ParallelRun:
     slurm_command = "sbatch"
     slurm_script = "launch_run"
-    slurm_script_first_parameter = '"--parameters='
+    slurm_script_first_parameter = '--parameters='
     slurm_output = "out/run"
     out_extension = "out"
     slurm_stderr = "-e"
@@ -156,7 +156,7 @@ class ParallelRun:
                 self.slurm_stderr,
                 out_file,
                 self.slurm_script,
-                self.slurm_script_first_parameter + tmp_parameters_file.name + '"',
+                self.slurm_script_first_parameter + tmp_parameters_file.name,
             ]
         logger.info(f"Launching command: {' '.join(command)}")
         subprocess.run(command)
