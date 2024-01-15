@@ -133,6 +133,8 @@ class ParallelRun:
     slurm_script_first_parameter = '"--parameters='
     slurm_output = "out/run"
     out_extension = ".out"
+    slurm_stderr = "-e"
+    slurm_stdout = "-o"
 
     def __init__(self, params: dict, experiment_uuid: str):
         self.params = params
@@ -145,11 +147,14 @@ class ParallelRun:
         tmp_parameters_file.write(str(self.params).encode())
         tmp_parameters_file.close()
         out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())}_{self.out_extension}"
-        subprocess.run(
-            [
+        command = [
                 self.slurm_command,
+                self.slurm_stdout,
+                out_file,
+                self.slurm_stderr,
+                out_file,
                 self.slurm_script,
                 self.slurm_script_first_parameter + tmp_parameters_file.name + '"',
-                out_file,
             ]
-        )
+        logger.info(f"Launching command: {' '.join(command)}")
+        subprocess.run(command)
