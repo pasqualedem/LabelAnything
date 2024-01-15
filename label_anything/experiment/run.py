@@ -135,10 +135,10 @@ class ParallelRun:
     out_extension = ".out"
 
     def __init__(self, params: dict, experiment_uuid: str):
+        self.params = params
+        self.exp_uuid = experiment_uuid
         if "." not in sys.path:
             sys.path.extend(".")
-            self.params = params
-            self.exp_uuid = experiment_uuid
 
     def launch(self):
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
