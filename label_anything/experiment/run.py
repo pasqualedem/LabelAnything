@@ -127,7 +127,7 @@ class Run:
         )
 
 
-class ParallelRun(Run):
+class ParallelRun:
     slurm_command = "sbatch"
     slurm_script = "launch_run"
     slurm_script_first_parameter = '"--parameters='
