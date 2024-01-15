@@ -175,7 +175,7 @@ def train_epoch(
             oom = False
 
             preds = outputs.argmax(dim=1)
-            binary_preds = preds.argmax(dim=1)
+            binary_preds = preds.clone()
             binary_preds[binary_preds != 0] = 1
             binary_gt = gt
             binary_gt[binary_gt != 0] = 1
