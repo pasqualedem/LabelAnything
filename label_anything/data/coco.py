@@ -244,6 +244,20 @@ class CocoLVISDataset(Dataset):
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert(
             "RGB"
         )
+        
+    def load_and_preprocess_images(self, imgs_id: list[int]) -> list[Image.Image]:
+        """Load images from disk or from url.
+
+        Args:
+            imgs_id (list[int]): A list of image ids.
+
+        Returns:
+            list[PIL.Image]: The loaded images.
+        """
+        return [
+            self._load_and_preprocess_image(self.images[img_id])
+            for img_id in imgs_id
+        ]
 
     def _extract_examples(self, img_data: dict, num_examples: int) -> (list, list):
         """Chooses examples (and categories) for the query image.

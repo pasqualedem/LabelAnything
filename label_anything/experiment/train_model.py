@@ -129,13 +129,17 @@ def train_epoch(
     )
     # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
-    bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
+    bar = tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        postfix={"loss": 0},
+        desc=f"Train Epoch {epoch}/{train_params['max_epochs']-1}",
+    )
     tot_steps = 0
     tot_images = 0
     loss_normalizer = 1
     oom = False
     cur_lr = train_params["initial_lr"]
-    dataloader.dataset.log_images = True  # Logs the first batch
 
     for batch_idx, batch_tuple in bar:
         batch_tuple, dataset_names = batch_tuple
@@ -153,6 +157,7 @@ def train_epoch(
         )
         for i, (input_dict, gt) in enumerate(substitutor):
             try:
+                pass
                 outputs = model(input_dict)
             except RuntimeError as e:
                 if "out of memory" in str(e):
@@ -266,10 +271,15 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
-    dataloader.dataset.log_images = True  # Logs the first batch
+    
     tot_steps = 0
     tot_images = 0
-    bar = tqdm(enumerate(dataloader), total=len(dataloader), postfix={"loss": 0})
+    bar = tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        postfix={"loss": 0},
+        desc=f"Validation Epoch {epoch}",
+    )
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
