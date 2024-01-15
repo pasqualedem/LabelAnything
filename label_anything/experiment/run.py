@@ -134,14 +134,15 @@ class ParallelRun(Run):
     slurm_output = "out/run"
     out_extension = ".out"
 
-    def __init__(self, experiment_uuid: str):
+    def __init__(self, params: dict, experiment_uuid: str):
         if "." not in sys.path:
             sys.path.extend(".")
+            self.params = params
             self.exp_uuid = experiment_uuid
 
-    def launch(self, params: dict):
+    def launch(self):
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
-        tmp_parameters_file.write(str(params).encode())
+        tmp_parameters_file.write(str(self.params).encode())
         tmp_parameters_file.close()
         out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())}_{self.out_extension}"
         subprocess.run(
