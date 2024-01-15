@@ -545,7 +545,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             preprocess=ToTensor(),  # preprocess step
             emb_dir=None,
             seed=42,  # for reproducibility
-            max_mum_coords=10,  # max number of coords for each example for each class
+            load_embeddings=False,  # max number of coords for each example for each class
             add_box_noise=False,
     ):
         super(CocoLVISTestDataset, self).__init__(name=name,
@@ -555,7 +555,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
                                                   preprocess=preprocess,
                                                   seed=seed,
                                                   add_box_noise=add_box_noise,
-                                                  emb_dir=emb_dir)
+                                                  emb_dir=emb_dir,
+                                                  load_embeddings=load_embeddings)
 
     def _extract_examples(
             self,
