@@ -11,6 +11,7 @@ from label_anything.experiment.train_model import train_and_test
 from label_anything.models import model_registry
 from label_anything.data import get_dataloaders
 from label_anything.logger.text_logger import get_logger
+from label_anything.utils.utils import write_yaml
 
 logger = get_logger(__name__)
 
@@ -145,7 +146,7 @@ class ParallelRun:
     def launch(self):
         os.makedirs("out", exist_ok=True)
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
-        tmp_parameters_file.write(str(self.params).encode())
+        write_yaml(self.params, tmp_parameters_file.name)
         tmp_parameters_file.close()
         out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())[:8]}.{self.out_extension}"
         command = [
