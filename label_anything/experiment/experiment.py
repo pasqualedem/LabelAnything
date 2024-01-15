@@ -434,7 +434,7 @@ class ParallelExperimenter(Experimenter):
                     logger.info(
                         f"Running run {j} out of {len(grid) - 1} ({sum(len(self.grids[k]) for k in range(i)) + j} / {self.gs.total_runs - 1})"
                     )
-                    run = ParallelRun()
+                    run = ParallelRun(experiment_uuid=self.exp_settings.uuid)
                     run.init({"experiment": {**self.exp_settings}, **params})
                     yield status_manager.update_run(
                         run.name,
