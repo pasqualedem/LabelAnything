@@ -172,6 +172,7 @@ def train_epoch(
                     raise e
             loss = criterion(outputs, gt) / loss_normalizer
             accelerator.backward(loss)
+            check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
             oom = False
 
             preds = outputs.argmax(dim=1)
@@ -179,7 +180,6 @@ def train_epoch(
             binary_preds[binary_preds != 0] = 1
             binary_gt = gt
             binary_gt[binary_gt != 0] = 1
-            check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
 
             if (
                 not train_params.get("accumulate_substitution", False)
