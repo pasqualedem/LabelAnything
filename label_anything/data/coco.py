@@ -546,6 +546,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             emb_dir=None,
             seed=42,  # for reproducibility
             load_embeddings=False,  # max number of coords for each example for each class
+            load_gts=False,
             add_box_noise=False,
     ):
         super(CocoLVISTestDataset, self).__init__(name=name,
@@ -556,7 +557,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
                                                   seed=seed,
                                                   add_box_noise=add_box_noise,
                                                   emb_dir=emb_dir,
-                                                  load_embeddings=load_embeddings)
+                                                  load_embeddings=load_embeddings,
+                                                  load_gts=load_gts,)
 
     def _extract_examples(
             self,
