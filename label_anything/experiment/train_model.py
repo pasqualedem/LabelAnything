@@ -2,6 +2,7 @@ import gc
 from tqdm import tqdm
 import torch
 
+import lovely_tensors as lt
 from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.image_logger import Logger
@@ -9,8 +10,12 @@ from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import find_divisor_pairs, RunningAverage
 from label_anything.data.utils import random_batch
 from label_anything.loss import LabelAnythingLoss
+from torchmetrics.functional.classification import (
+    multiclass_jaccard_index,
+    binary_jaccard_index,
+)
 from .save import save_model
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from label_anything.utils.metrics import jaccard, fbiou
 from transformers import get_scheduler
 
@@ -106,13 +111,18 @@ def train_epoch(
     accelerator: Accelerator,
     train_params,
 ):
+    lt.monkey_patch()
     model.train()
     avg_loss = RunningAverage()
-    avg_jaccard = RunningAverage()
+    avg_miou = RunningAverage()
     avg_fbiou = RunningAverage()
     first_step_loss = RunningAverage()
-    first_step_jaccard = RunningAverage()
+    first_step_miou = RunningAverage()
     first_step_fbiou = RunningAverage()
+    metrics = {
+        "mIoU": multiclass_jaccard_index,
+        "FBIoU": binary_jaccard_index,
+    }
 
     model, optimizer, dataloader, scheduler = accelerator.prepare(
         model, optimizer, dataloader, scheduler
@@ -163,8 +173,14 @@ def train_epoch(
             loss = criterion(outputs, gt) / loss_normalizer
             accelerator.backward(loss)
             oom = False
-            pred = outputs.argmax(dim=1)
+
+            preds = outputs.argmax(dim=1)
+            binary_preds = preds.argmax(dim=1)
+            binary_preds[binary_preds != 0] = 1
+            binary_gt = gt
+            binary_gt[binary_gt != 0] = 1
             check_nan(model, input_dict, outputs, gt, loss, batch_idx, train_params)
+
             if (
                 not train_params.get("accumulate_substitution", False)
                 or i == loss_normalizer - 1
@@ -175,14 +191,23 @@ def train_epoch(
                 optimizer.zero_grad()
 
             if tot_steps % comet_logger.log_frequency == 0:
-                pred = accelerator.gather(pred)
-                gt = accelerator.gather(gt)
-                outputs = accelerator.gather(outputs)
-                jaccard_value = jaccard(pred, gt, num_classes=outputs.shape[1])
-                fbiou_value = fbiou(outputs, gt)
-                comet_logger.log_metric("batch_jaccard", jaccard_value.item())
-                comet_logger.log_metric("batch_fbiou", fbiou_value.item())
-                avg_jaccard.update(jaccard_value.item())
+                miou_value = torch.mean(
+                    accelerator.gather(
+                        metrics["mIoU"](
+                            preds, gt, num_classes=outputs.shape[1], ignore_index=-100
+                        )
+                    )
+                )
+                fbiou_value = torch.mean(
+                    accelerator.gather(
+                        metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
+                    )
+                )
+
+                comet_logger.log_metric("batch_mIoU", miou_value.item())
+                comet_logger.log_metric("batch_FBIoU", fbiou_value.item())
+
+                avg_miou.update(miou_value.item())
                 avg_fbiou.update(fbiou_value.item())
                 cur_lr = (
                     scheduler.get_lr()[0] if scheduler else train_params["initial_lr"]
@@ -193,10 +218,10 @@ def train_epoch(
                 first_step_loss.update(loss.item())
                 comet_logger.log_metric("first_step_loss", loss.item())
                 if tot_steps % comet_logger.log_frequency == 0:
-                    first_step_jaccard.update(jaccard_value.item())
+                    first_step_miou.update(miou_value.item())
                     first_step_fbiou.update(fbiou_value.item())
-                    comet_logger.log_metric("first_step_jaccard", jaccard_value.item())
-                    comet_logger.log_metric("first_step_fbiou", fbiou_value.item())
+                    comet_logger.log_metric("first_step_mIoU", miou_value.item())
+                    comet_logger.log_metric("first_step_FBIoU", fbiou_value.item())
                     comet_logger.log_metric("lr", cur_lr)
 
             comet_logger.log_batch(
@@ -217,8 +242,8 @@ def train_epoch(
             bar.set_postfix(
                 {
                     "loss": loss.item(),
-                    "jac/miou": jaccard_value.item(),
-                    "fbiou": fbiou_value.item(),
+                    "mIoU": miou_value.item(),
+                    "FBIoU": fbiou_value.item(),
                     "lr": cur_lr,
                 }
             )
@@ -229,11 +254,11 @@ def train_epoch(
     comet_logger.log_metrics(
         {
             "avg_loss": avg_loss.compute(),
-            "avg_jaccard": avg_jaccard.compute(),
+            "avg_jaccard": avg_miou.compute(),
             "avg_fbiou": avg_fbiou.compute(),
             "avg_first_step_loss": first_step_loss.compute(),
-            "avg_first_step_jaccard": first_step_jaccard.compute(),
-            "avg_first_step_fbiou": first_step_fbiou.compute(),
+            "avg_first_step_mIoU": first_step_miou.compute(),
+            "avg_first_step_FBIoU": first_step_fbiou.compute(),
         },
         epoch=epoch,
     )
@@ -246,6 +271,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_fbiou = RunningAverage()
 
     dataloader = accelerator.prepare(dataloader)
+    
     tot_steps = 0
     tot_images = 0
     bar = tqdm(
@@ -346,7 +372,8 @@ def train_and_test(
     train_params,
 ):
     logger.info("Start training loop...")
-    accelerator = Accelerator(even_batches=False)
+    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(train_params["loss"])
     optimizer = AdamW(
