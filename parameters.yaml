@@ -29,7 +29,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [5]
+    max_epochs: [1]
     compile: [False]
     initial_lr: [0.00001]
     optimizer: [AdamW]
@@ -49,12 +49,12 @@ parameters:
     datasets:
       coco:
         name: [coco]
-        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2017.json]
+        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2017.json]
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/nfanelli/embeddings]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
       val_coco:
         name: [coco]
-        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json]
+        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json]
         emb_dir: *emb_dir
         img_dir: *img_dir
         seed: *seed
