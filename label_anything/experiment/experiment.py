@@ -435,10 +435,6 @@ class ParallelExperimenter(Experimenter):
                         f"Running run {j} out of {len(grid) - 1} ({sum(len(self.grids[k]) for k in range(i)) + j} / {self.gs.total_runs - 1})"
                     )
                     run = ParallelRun(experiment_uuid=self.exp_settings.uuid, params={"experiment": {**self.exp_settings}, **params})
-                    yield status_manager.update_run(
-                        run.name,
-                        run.url,
-                    )
                     metric = run.launch()
                     print(self.EXP_FINISH_SEP)
                     exp_log.finish_run(i, j)
