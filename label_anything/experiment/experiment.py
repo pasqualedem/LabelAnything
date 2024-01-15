@@ -403,8 +403,8 @@ class ParallelExperimenter(Experimenter):
                     sr,
                     run.params,
                     grid_len,
-                    run.seg_trainer.sg_logger.name,
-                    run.seg_trainer.sg_logger.url,
+                    None,
+                    None,
                 )
                 logger.info(f"Running grid {sg} out of {len(self.grids) - 1}")
                 logger.info(
