@@ -574,6 +574,28 @@ class CocoLVISTestDataset(CocoLVISDataset):
             prompt_images.add(img)
         return prompt_images
 
+    def _get_images_or_embeddings(self, image_ids):
+        if self.load_embeddings:
+            embeddings_gts = [
+                self._load_safe(data)
+                for data in image_ids
+            ]
+            embeddings, gts = zip(*embeddings_gts)
+            if not self.load_gts:
+                gts = None
+            return torch.stack(embeddings), "embeddings", gts
+        images = [
+            self._load_and_preprocess_image(image_data)
+            for image_data in image_ids
+        ]
+        gts = None
+        if self.load_gts:
+            gts = [
+                self.__load_safe(image_data)[1]
+                for image_data in image_ids
+            ]
+        return torch.stack(images), "images", gts
+
     def extract_prompts(
             self,
             cat2img: dict,
@@ -582,6 +604,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
             img2cat_annotations: dict,
     ) -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor):
         image_ids = self._extract_examples(cat2img, img2cat)
+        prompt_images = [images[x] for x in image_ids]
+
         prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(image_ids)
 
         cat_ids = list(self.categories.keys())
