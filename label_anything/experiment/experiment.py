@@ -466,6 +466,15 @@ def experiment(param_path: str = "parameters.yaml", parallel: bool = False):
     experimenter.execute_runs()    
 
 
+def run(param_path: str = "parameters.yaml"):
+    logger.info("Running run")
+    settings = load_yaml(param_path)
+    logger.info(f"Loaded parameters from {param_path}")
+    single_run = Run()
+    single_run.init(settings)
+    single_run.launch()
+    
+
 def preview(settings: Mapping, param_path: str = "local variable"):
     print(f"Loaded parameters from {param_path}")
 
