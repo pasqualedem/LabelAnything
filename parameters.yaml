@@ -65,6 +65,7 @@ parameters:
         name: [ coco ]
         instances_path: *instance_dir
         img_dir: *img_dir
+        emb_dir: *emb_dir
         seed: *seed
         add_box_noise: [ False ]
     common:
