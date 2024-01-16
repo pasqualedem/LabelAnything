@@ -141,6 +141,9 @@ class CocoLVISDataset(Dataset):
         )
 
         self.seed = seed
+        self.random_generator = random.Random(self.seed)
+        self.np_random_generator = np.random.default_rng(self.seed)
+
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.__set_all_seeds()
@@ -310,7 +313,7 @@ class CocoLVISDataset(Dataset):
                     # if there are too many annotations, sample a mask
                     prompt_types = [PromptType.MASK] * number_of_annotations
                 else:
-                    prompt_types = random.choices(
+                    prompt_types = self.random_generator.choices(
                         list(PromptType), k=number_of_annotations
                     )
                 for ann, prompt_type in zip(self.img2cat_annotations[img_id][cat_id], prompt_types):
@@ -387,9 +390,9 @@ class CocoLVISDataset(Dataset):
             cat_ids.insert(0, -1)  # add the background class
         else:
             # take a random category (use numpy)
-            cat_id = np.random.choice(list(self.categories.keys()))
+            cat_id = self.np_random_generator.choice(list(self.categories.keys()))
             # take two random images from that category
-            image_ids = np.random.choice(
+            image_ids = self.np_random_generator.choice(
                 list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
             )
             cat_ids = [-1, cat_id]
