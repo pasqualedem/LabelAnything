@@ -178,7 +178,7 @@ def train_epoch(
             preds = outputs.argmax(dim=1)
             binary_preds = preds.clone()
             binary_preds[binary_preds != 0] = 1
-            binary_gt = gt
+            binary_gt = gt.clone()
             binary_gt[binary_gt != 0] = 1
 
             if (
