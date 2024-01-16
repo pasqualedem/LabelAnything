@@ -574,6 +574,12 @@ class CocoLVISTestDataset(CocoLVISDataset):
             prompt_images.add(img)
         return prompt_images
 
+    def _load_safe(self, img_data):
+        return super().__load_safe(img_data)
+
+    def _load_and_preprocess_image(self, image_data):
+        return super()._load_and_preprocess_image(image_data)
+
     def _get_images_or_embeddings(self, image_ids):
         if self.load_embeddings:
             embeddings_gts = [
