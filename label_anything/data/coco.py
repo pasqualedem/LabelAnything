@@ -606,7 +606,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         image_ids = self._extract_examples(cat2img, img2cat)
         prompt_images = [images[x] for x in image_ids]
 
-        prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(image_ids)
+        prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(prompt_images)
 
         cat_ids = list(self.categories.keys())
         random.shuffle(cat_ids)
