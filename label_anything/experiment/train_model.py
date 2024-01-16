@@ -295,7 +295,7 @@ def set_class_embeddings(
 ):
     tmp_device = 'cuda:0' if torch.cuda.device_count() > 0 else 'cpu'
     model.to(tmp_device)
-    examples = {k: v.to(tmp_device) for k, v in examples.items()}
+    examples = {k: v.unsqueeze().to(tmp_device) for k, v in examples.items()}
     class_embeddings = model.generate_class_embeddings(examples)
     model.class_embeddings = class_embeddings
     return accelerator.prepare(model)
