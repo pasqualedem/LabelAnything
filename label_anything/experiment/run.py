@@ -1,16 +1,20 @@
 import os
-import sys
-import comet_ml
-import tempfile
+import random
 import subprocess
+import sys
+import tempfile
 import uuid
 from copy import deepcopy
 
-from label_anything.logger.image_logger import Logger
-from label_anything.experiment.train_model import train_and_test
-from label_anything.models import model_registry
+import comet_ml
+import numpy as np
+import torch
+
 from label_anything.data import get_dataloaders
+from label_anything.experiment.train_model import train_and_test
+from label_anything.logger.image_logger import Logger
 from label_anything.logger.text_logger import get_logger
+from label_anything.models import model_registry
 from label_anything.utils.utils import write_yaml
 
 logger = get_logger(__name__)
@@ -117,6 +121,11 @@ class Run:
         self.model = model_registry[model_name](**self.model_params)
 
     def launch(self):
+        # set torch, numpy, random seeds
+        torch.manual_seed(42)
+        np.random.seed(42)
+        random.seed(42)
+
         train_and_test(
             self.params,
             self.model,
@@ -131,7 +140,7 @@ class Run:
 class ParallelRun:
     slurm_command = "sbatch"
     slurm_script = "launch_run"
-    slurm_script_first_parameter = '--parameters='
+    slurm_script_first_parameter = "--parameters="
     slurm_output = "out/run"
     out_extension = "out"
     slurm_stderr = "-e"
@@ -150,13 +159,13 @@ class ParallelRun:
         tmp_parameters_file.close()
         out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())[:8]}.{self.out_extension}"
         command = [
-                self.slurm_command,
-                self.slurm_stdout,
-                out_file,
-                self.slurm_stderr,
-                out_file,
-                self.slurm_script,
-                self.slurm_script_first_parameter + tmp_parameters_file.name,
-            ]
+            self.slurm_command,
+            self.slurm_stdout,
+            out_file,
+            self.slurm_stderr,
+            out_file,
+            self.slurm_script,
+            self.slurm_script_first_parameter + tmp_parameters_file.name,
+        ]
         logger.info(f"Launching command: {' '.join(command)}")
         subprocess.run(command)
