@@ -29,14 +29,14 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [5]
+    max_epochs: [1]
     compile: [False]
     initial_lr: [0.00001]
     optimizer: [AdamW]
     scheduler:
       type: [cosine]
       warmup_steps: [2500]
-    substitute: [True]
+    substitute: [False]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
@@ -70,6 +70,13 @@ parameters:
         seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
+      test_coco:
+        support: [coco]
+        name: [ coco ]
+        instances_path: [ data/annotations/instances_val2017.json ]
+        img_dir: *img_dir
+        seed: *seed
+        add_box_noise: [ False ]
     common:
       do_subsample: [True]
       add_box_noise: [True]

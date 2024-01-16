@@ -396,12 +396,20 @@ class PromptImageEncoder(PromptEncoder):
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
 
+    def sparse_dense_fusion(self, src, pos_src, sparse_embeddings, chunk_size=None):
+        if chunk_size is None:
+            return self.transformer(src, pos_src, sparse_embeddings)[1] # src: (BMC, HW, D)
+        for i in range(0, src.shape[1], chunk_size):
+            _, src[i:i+chunk_size] = self.transformer(src[i:i+chunk_size], pos_src, sparse_embeddings[i:i+chunk_size])
+        return src
+
     def forward(
         self,
         image_embeddings: torch.Tensor,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[torch.Tensor],
         masks: Optional[torch.Tensor],
+        chunk_size=None
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning class embeddings
@@ -432,7 +440,7 @@ class PromptImageEncoder(PromptEncoder):
         pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
 
         # Run the transformer to fuse the dense embeddings and sparse embeddings
-        hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, HW, D)
+        src = self.sparse_dense_fusion(src, pos_src, sparse_embeddings, chunk_size=chunk_size)
         src = rearrange(src, 'b hw d -> b d hw')
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2) # (BMC, D)
         src = rearrange(src, '(b m c) d -> b (m c) d', b=b, m=m, c=c)

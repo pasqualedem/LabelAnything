@@ -6,7 +6,7 @@ from torch.optim import AdamW
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.image_logger import Logger
 from label_anything.experiment.substitution import Substitutor
-from label_anything.utils.utils import find_divisor_pairs, RunningAverage
+from label_anything.utils.utils import get_divisors, find_divisor_pairs, RunningAverage
 from label_anything.data.utils import random_batch
 from label_anything.loss import LabelAnythingLoss
 from .save import save_model
@@ -22,6 +22,15 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+    
+    
+def get_example_class_size(batch_input):
+    if batch_input.get("prompt_points") is not None:
+        return batch_input["prompt_points"].shape[1], batch_input["prompt_points"].shape[2]
+    if batch_input.get("prompt_bboxes") is not None:
+        return batch_input["prompt_bboxes"].shape[1], batch_input["prompt_bboxes"].shape[2]
+    if batch_input.get("prompt_masks") is not None:
+        return batch_input["prompt_masks"].shape[1], batch_input["prompt_masks"].shape[2]
     
     
 def check_nan(model, input_dict, output, gt, loss, step, train_params):
@@ -296,7 +305,23 @@ def set_class_embeddings(
     tmp_device = 'cuda:0' if torch.cuda.device_count() > 0 else 'cpu'
     model.to(tmp_device)
     examples = {k: v.unsqueeze(dim=0).to(tmp_device) for k, v in examples.items()}
-    class_embeddings = model.generate_class_embeddings(examples)
+    example_size, num_classes = get_example_class_size(examples)
+    chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
+    passed = False
+    i = 0
+    while not passed and i < len(chunk_sizes):
+        try:
+            class_embeddings = model.generate_class_embeddings(examples, chunk_size=chunk_sizes[i])
+            passed = True
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                logger.warning(f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}")
+                message = str(e)
+            else:
+                raise e
+        i += 1
+    if not passed:
+        raise RuntimeError(message)
     model.class_embeddings = class_embeddings
     return accelerator.prepare(model)
 
