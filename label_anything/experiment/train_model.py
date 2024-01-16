@@ -375,7 +375,7 @@ def train_and_test(
     kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
     accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
 
-    criterion = LabelAnythingLoss(train_params["loss"])
+    criterion = LabelAnythingLoss(**train_params["loss"])
     optimizer = AdamW(
         model.get_learnable_params(train_params), lr=train_params["initial_lr"]
     )

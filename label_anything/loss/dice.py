@@ -5,6 +5,7 @@ import torch.nn as nn
 from einops import rearrange
 from .utils import get_reduction
 
+
 # based on:
 # https://github.com/kevinzakka/pytorch-goodies/blob/master/losses.py
 class DiceLoss(nn.Module):
@@ -43,22 +44,24 @@ class DiceLoss(nn.Module):
     """
 
     def __init__(
-        self, weight=None, reduction: str = "mean", average: str = "macro", ignore_index=-100,
+        self,
+        reduction: str = "mean",
+        average: str = "macro",
+        ignore_index=-100,
     ) -> None:
         super(DiceLoss, self).__init__()
-        self.weight = None
         self.average = average
         self.ignore_index = ignore_index
-        if weight:
-            self.weight = torch.tensor(weight)
-            if self.average == "micro":
-                raise ValueError(
-                    "Weighted Dice Loss is only supported for macro average"
-                )
         self.reduction = get_reduction(reduction)
         self.eps: float = 1e-6
 
-    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        input: torch.Tensor,
+        target: torch.Tensor,
+        class_weights: torch.Tensor = None,
+        **kwargs
+    ) -> torch.Tensor:
         if not torch.is_tensor(input):
             raise TypeError(
                 "Input type is not a torch.Tensor. Got {}".format(type(input))
@@ -85,13 +88,15 @@ class DiceLoss(nn.Module):
         # create the labels one hot tensort
         target_one_hot = target.clone()
         target_one_hot[target_one_hot == self.ignore_index] = input.shape[1]
-        target_one_hot = F.one_hot(target_one_hot, num_classes=input.shape[1] + 1).permute(
-            0, 3, 1, 2
-        )
+        target_one_hot = F.one_hot(
+            target_one_hot, num_classes=input.shape[1] + 1
+        ).permute(0, 3, 1, 2)
         target_one_hot = target_one_hot[:, :-1, ::]
 
         if self.average == "macro":
-            return self._macro_forward(input_soft, target_one_hot)
+            return self._macro_forward(
+                input_soft, target_one_hot, class_weights=class_weights
+            )
         # compute the actual dice score
         dice_score = self._calc_dice(input_soft, target_one_hot)
         return self.reduction(1.0 - dice_score)
@@ -104,13 +109,13 @@ class DiceLoss(nn.Module):
         dice_score = (2.0 * intersection + self.eps) / (cardinality + self.eps)
         return dice_score
 
-    def _macro_forward(self, input, target):
+    def _macro_forward(self, input, target, class_weights=None):
         flat_input = rearrange(input, "b (c bin) h w -> (b c) bin h w", bin=1)
         flat_target = rearrange(target, "b (c bin) h w -> (b c) bin h w", bin=1)
 
         dice = 1.0 - self._calc_dice(flat_input, flat_target)  # (B X C)
         dice = rearrange(dice, "(b c) -> b c", c=input.shape[1])
-        if self.weight is not None:
-            dice = dice * self.weight.to(input.device)
+        if class_weights is not None:
+            dice = dice * class_weights
         dice = dice.mean(dim=1)
         return self.reduction(dice)

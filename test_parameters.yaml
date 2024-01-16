@@ -5,6 +5,8 @@ experiment:
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
+  search: optim
+  n_trials: 5
 
 parameters:
   # Contains the parameters to build the grid.
@@ -22,15 +24,18 @@ parameters:
 
   train_params:
     loss:
-      focal:
-        weight: [0.3333333333333333] 
-        params:
-      dice:
-        weight: [0.3333333333333333]
-        params:
-      rmi:
-        weight: [0.3333333333333333]
-        params:
+      class_weighting: [True]
+      components:
+        - 
+          focal:
+            weight: 0.45
+          dice: 
+            weight: 0.1
+          rmi:
+            weight: 0.45
+        -
+          focal: 
+          dice: 
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution

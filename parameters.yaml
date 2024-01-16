@@ -23,15 +23,12 @@ parameters:
 
   train_params:
     loss:
-      focal:
-        weight: [0.3333333333333333] 
-        params:
-      dice:
-        weight: [0.3333333333333333]
-        params:
-      rmi:
-        weight: [0.3333333333333333]
-        params:
+      class_weighting: [True]
+      weights: [[0.33333, 0.33333, 0.33333]]
+      components:
+        focal:
+        dice:
+        rmi:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
