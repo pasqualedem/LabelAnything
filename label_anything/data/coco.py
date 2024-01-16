@@ -219,7 +219,7 @@ class CocoLVISDataset(Dataset):
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
-    def __load_safe(self, img_data):
+    def _load_safe(self, img_data):
         f = load_file(f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors")
         embedding, gt = None, None
         if self.load_embeddings:
@@ -342,7 +342,7 @@ class CocoLVISDataset(Dataset):
     def _get_images_or_embeddings(self, image_ids):
         if self.load_embeddings:
             embeddings_gts = [
-                self.__load_safe(image_data)
+                self._load_safe(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
             ]
             embeddings, gts = zip(*embeddings_gts)
@@ -357,7 +357,7 @@ class CocoLVISDataset(Dataset):
             gts = None
             if self.load_gts:
                 gts = [
-                    self.__load_safe(image_data)[1]
+                    self._load_safe(image_data)[1]
                     for image_data in [self.images[image_id] for image_id in image_ids]
                 ]
             return torch.stack(images), "images", gts
@@ -577,7 +577,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
     def _get_images_or_embeddings(self, image_ids):
         if self.load_embeddings:
             embeddings_gts = [
-                self.__load_safe(data)
+                self._load_safe(data)
                 for data in image_ids
             ]
             embeddings, gts = zip(*embeddings_gts)
@@ -591,7 +591,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         gts = None
         if self.load_gts:
             gts = [
-                self.__load_safe(image_data)[1]
+                self._load_safe(image_data)[1]
                 for image_data in image_ids
             ]
         return torch.stack(images), "images", gts
