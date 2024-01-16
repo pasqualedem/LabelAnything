@@ -2,7 +2,7 @@ import itertools
 import os
 import random
 import warnings
-from enum import IntEnum, Enum
+from enum import Enum, IntEnum
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
@@ -92,6 +92,12 @@ class CocoLVISDataset(Dataset):
         self.img_dir = img_dir
         self.log_images = False
 
+        # seeds
+        self.seed = seed
+        self.rng = random.Random(self.seed)
+        self.np_rng = np.random.default_rng(self.seed)
+        self.torch_rng = torch.Generator().manual_seed(self.seed)
+
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
@@ -124,7 +130,7 @@ class CocoLVISDataset(Dataset):
 
         # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
-            categories_to_imgs=self.cat2img
+            categories_to_imgs=self.cat2img, generator=self.torch_rng
         )
 
         # max number of examples for each image
@@ -140,20 +146,8 @@ class CocoLVISDataset(Dataset):
             long_side_length=1024, masks_side_length=256
         )
 
-        self.seed = seed
-        self.random_generator = random.Random(self.seed)
-        self.np_random_generator = np.random.default_rng(self.seed)
-
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
-        self.__set_all_seeds()
-
-    def __set_all_seeds(self):
-        """Enable reproducibility."""
-        random.seed(self.seed)
-        np.random.seed(int(self.seed))
-        torch.manual_seed(self.seed)
-
         self.log_images = True
 
     def __prepare_benchmark(self):
@@ -247,7 +241,7 @@ class CocoLVISDataset(Dataset):
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert(
             "RGB"
         )
-        
+
     def load_and_preprocess_images(self, imgs_id: list[int]) -> list[Image.Image]:
         """Load images from disk or from url.
 
@@ -258,8 +252,7 @@ class CocoLVISDataset(Dataset):
             list[PIL.Image]: The loaded images.
         """
         return [
-            self._load_and_preprocess_image(self.images[img_id])
-            for img_id in imgs_id
+            self._load_and_preprocess_image(self.images[img_id]) for img_id in imgs_id
         ]
 
     def _extract_examples(self, img_data: dict, num_examples: int) -> (list, list):
@@ -313,10 +306,12 @@ class CocoLVISDataset(Dataset):
                     # if there are too many annotations, sample a mask
                     prompt_types = [PromptType.MASK] * number_of_annotations
                 else:
-                    prompt_types = self.random_generator.choices(
+                    prompt_types = self.rng.choices(
                         list(PromptType), k=number_of_annotations
                     )
-                for ann, prompt_type in zip(self.img2cat_annotations[img_id][cat_id], prompt_types):
+                for ann, prompt_type in zip(
+                    self.img2cat_annotations[img_id][cat_id], prompt_types
+                ):
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -390,9 +385,9 @@ class CocoLVISDataset(Dataset):
             cat_ids.insert(0, -1)  # add the background class
         else:
             # take a random category (use numpy)
-            cat_id = self.np_random_generator.choice(list(self.categories.keys()))
+            cat_id = self.np_rng.choice(list(self.categories.keys()))
             # take two random images from that category
-            image_ids = self.np_random_generator.choice(
+            image_ids = self.np_rng.choice(
                 list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
             )
             cat_ids = [-1, cat_id]
@@ -554,18 +549,22 @@ class CocoLVISDataset(Dataset):
 
 class CocoLVISTestDataset(CocoLVISDataset):
     def __init__(
-            self,
-            instances_path,  # Path
-            img_dir=None,  # directory (only if images have to be loaded from disk)
-            max_num_examples=10,  # number of max examples to be given for the target image
-            preprocess=ToTensor(),  # preprocess step
-            j_index_value=0.5,  # threshold for extracting examples
-            seed=42,  # for reproducibility
-            max_mum_coords=10,  # max number of coords for each example for each class
+        self,
+        instances_path,  # Path
+        img_dir=None,  # directory (only if images have to be loaded from disk)
+        max_num_examples=10,  # number of max examples to be given for the target image
+        preprocess=ToTensor(),  # preprocess step
+        j_index_value=0.5,  # threshold for extracting examples
+        seed=42,  # for reproducibility
+        max_mum_coords=10,  # max number of coords for each example for each class
     ):
-        super(CocoLVISTestDataset, self).__init__(instances_path=instances_path, img_dir=img_dir,
-                                                  max_num_examples=max_num_examples, preprocess=preprocess,
-                                                  seed=seed)
+        super(CocoLVISTestDataset, self).__init__(
+            instances_path=instances_path,
+            img_dir=img_dir,
+            max_num_examples=max_num_examples,
+            preprocess=preprocess,
+            seed=seed,
+        )
 
     def _extract_examples(self):
         prompt_images = set()
@@ -580,11 +579,19 @@ class CocoLVISTestDataset(CocoLVISDataset):
     def extract_prompts(self):
         image_ids = self._extract_examples()
         cat_ids = list(self.categories.keys())
-        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids)
+        bboxes, masks, points, _, image_sizes = self._get_annotations(
+            image_ids, cat_ids
+        )
 
-        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
-        masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
-        points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
+        bboxes, flag_bboxes = self.annotations_to_tensor(
+            bboxes, image_sizes, PromptType.BBOX
+        )
+        masks, flag_masks = self.annotations_to_tensor(
+            masks, image_sizes, PromptType.MASK
+        )
+        points, flag_points = self.annotations_to_tensor(
+            points, image_sizes, PromptType.POINT
+        )
         return bboxes, masks, points
 
     def __getitem__(self, item):
@@ -592,7 +599,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         image = self._load_image(base_image_data)
         if self.preprocess:
             image = self.preprocess(image)
-        img_id = base_image_data['id']
+        img_id = base_image_data["id"]
         gt = self.get_ground_truths([img_id], self.img2cat[img_id])
         gt = torch.tensor(gt[0])
         dim = torch.as_tensor(gt.size())
