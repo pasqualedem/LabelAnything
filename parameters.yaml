@@ -24,7 +24,13 @@ parameters:
   train_params:
     loss:
       focal:
-        weight: [1.0] 
+        weight: [0.3333333333333333] 
+        params:
+      dice:
+        weight: [0.3333333333333333]
+        params:
+      rmi:
+        weight: [0.3333333333333333]
         params:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
