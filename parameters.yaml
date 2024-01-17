@@ -79,7 +79,7 @@ parameters:
       load_gts: [True]
   dataloader:
     batch_size: [4]
-    num_workers: [64]
+    num_workers: [48]
     prefetch_factor: [2]
 
 other_grids:
