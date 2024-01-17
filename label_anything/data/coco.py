@@ -717,6 +717,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         dims = torch.stack([x["dim"] for x in batched_input])
 
         max_dims = torch.max(dims, 0).values.tolist()
+        print(max_dims)
         gt = torch.stack([utils.collate_gts(x["gt"], max_dims) for x in batched_input])
 
         data_dict = {
