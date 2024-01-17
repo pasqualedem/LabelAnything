@@ -699,12 +699,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
 
     def __getitem__(self, item):
         data, data_key, gt = self._get_images_or_embeddings([self.images[self.image_ids[item]]])
-        print(gt)
-        print(type(gt))
-        print(len(gt))
-        exit()
-        gt = torch.as_tensor(gt)
-        dim = torch.as_tensor(gt.size())
+        gt = torch.stack(gt)
+        dim = torch.stack(gt.size())
         data_dict = {
             data_key: data,
             "dim": dim,
