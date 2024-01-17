@@ -315,6 +315,7 @@ def set_class_embeddings(
             passed = True
         except RuntimeError as e:
             if "out of memory" in str(e):
+                torch.cuda.empty_cache()
                 logger.warning(f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}")
                 message = str(e)
             else:

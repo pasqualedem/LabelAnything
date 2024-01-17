@@ -128,8 +128,8 @@ class Lam(nn.Module):
             images = batched_input["images"]
             B, N = images.shape[0:2]
             images = rearrange(images, "b n c h w -> (b n) c h w")
-            # embeddings = self.image_encoder(images)
-            embeddings = torch.rand((B*N, 256, 64, 64))
+            embeddings = self.image_encoder(images)
+            # embeddings = torch.rand((B*N, 256, 64, 64))
             embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
