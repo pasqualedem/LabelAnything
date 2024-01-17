@@ -73,6 +73,8 @@ parameters:
         img_dir: *img_dir
         seed: *seed
         add_box_noise: [ False ]
+        load_embeddings: [ False ]
+        load_gts: [ False ]
     common:
       do_subsample: [True]
       add_box_noise: [True]

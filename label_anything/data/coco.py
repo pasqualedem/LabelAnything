@@ -566,7 +566,9 @@ class CocoLVISTestDataset(CocoLVISDataset):
             img2cat: dict
     ) -> list[int]:
         prompt_images = set()
-        for cat_id in self.categories.keys():
+        categories = list(self.categories.keys())
+        random.shuffle(categories)
+        for cat_id in categories:
             if cat_id not in cat2img:
                 continue
             cat_images = cat2img[cat_id]
@@ -609,7 +611,6 @@ class CocoLVISTestDataset(CocoLVISDataset):
         prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(prompt_images)
 
         cat_ids = list(self.categories.keys())
-        random.shuffle(cat_ids)
         bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
                                                                       images, img2cat_annotations)
 
@@ -698,8 +699,10 @@ class CocoLVISTestDataset(CocoLVISDataset):
         return bboxes, masks, points, classes, img_sizes
 
     def __getitem__(self, item):
-        data, data_key, gt = self._get_images_or_embeddings([self.images[self.image_ids[item]]])
-        gt = torch.stack(gt)
+        image_id = self.image_ids[item]
+        data, data_key, _ = self._get_images_or_embeddings([self.images[image_id]])
+        gt = self.get_ground_truths([image_id], self.img2cat[image_id])[0]
+
         dim = torch.as_tensor(gt.size())
         data_dict = {
             data_key: data,
@@ -717,7 +720,6 @@ class CocoLVISTestDataset(CocoLVISDataset):
         dims = torch.stack([x["dim"] for x in batched_input])
 
         max_dims = torch.max(dims, 0).values.tolist()
-        print(f"Max dims: {max_dims}")
         gt = torch.stack([utils.collate_gts(x["gt"], max_dims) for x in batched_input])
 
         data_dict = {
