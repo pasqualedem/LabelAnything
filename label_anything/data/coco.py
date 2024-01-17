@@ -698,16 +698,12 @@ class CocoLVISTestDataset(CocoLVISDataset):
         return bboxes, masks, points, classes, img_sizes
 
     def __getitem__(self, item):
-        base_image_data = self.images[self.image_ids[item]]
-        image = self._load_image(base_image_data)
-        if self.preprocess:
-            image = self.preprocess(image)
-        img_id = base_image_data['id']
-        gt = self.get_ground_truths([img_id], self.img2cat[img_id])
-        gt = torch.tensor(gt[0])
+        data, data_key, gt = self._get_images_or_embeddings([self.image_ids[item]])
+        data = data.squeeze()
+        gt = gt.squeeze()
         dim = torch.as_tensor(gt.size())
         data_dict = {
-            "image": image,
+            data_key: data,
             "dim": dim,
             "gt": gt,
         }
