@@ -311,7 +311,7 @@ def set_class_embeddings(
     i = 0
     while not passed and i < len(chunk_sizes):
         try:
-            with torch.no_grad:
+            with torch.no_grad():
                 class_embeddings = model.generate_class_embeddings(examples, chunk_size=chunk_sizes[i])
             passed = True
         except RuntimeError as e:
