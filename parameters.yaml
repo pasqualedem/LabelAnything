@@ -45,7 +45,7 @@ parameters:
     initial_lr: [0.0001, 0.00005, 0.00001, 0.000005]
     optimizer: [AdamW]
     scheduler:
-      type: [constant]
+      type: [constant_with_warmup]
       warmup_steps: [500]
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
