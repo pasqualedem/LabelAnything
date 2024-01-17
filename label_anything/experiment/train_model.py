@@ -1,23 +1,25 @@
 import gc
-from tqdm import tqdm
-import torch
 
 import lovely_tensors as lt
-from torch.optim import AdamW
-from label_anything.logger.text_logger import get_logger
-from label_anything.logger.image_logger import Logger
-from label_anything.experiment.substitution import Substitutor
-from label_anything.utils.utils import find_divisor_pairs, RunningAverage
-from label_anything.data.utils import random_batch
-from label_anything.loss import LabelAnythingLoss
-from torchmetrics.functional.classification import (
-    multiclass_jaccard_index,
-    binary_jaccard_index,
-)
-from .save import save_model
+import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
-from label_anything.utils.metrics import jaccard, fbiou
+from torch.optim import AdamW
+from torchmetrics.functional.classification import (
+    binary_jaccard_index,
+    multiclass_jaccard_index,
+)
+from tqdm import tqdm
 from transformers import get_scheduler
+
+from label_anything.data.utils import random_batch
+from label_anything.experiment.substitution import Substitutor
+from label_anything.logger.image_logger import Logger
+from label_anything.logger.text_logger import get_logger
+from label_anything.loss import LabelAnythingLoss
+from label_anything.utils.metrics import fbiou, jaccard
+from label_anything.utils.utils import RunningAverage, find_divisor_pairs
+
+from .save import save_model
 
 logger = get_logger(__name__)
 
@@ -269,9 +271,13 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     avg_loss = RunningAverage()
     avg_jaccard = RunningAverage()
     avg_fbiou = RunningAverage()
+    metrics = {
+        "mIoU": multiclass_jaccard_index,
+        "FBIoU": binary_jaccard_index,
+    }
 
     dataloader = accelerator.prepare(dataloader)
-    
+
     tot_steps = 0
     tot_images = 0
     bar = tqdm(
@@ -288,19 +294,34 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             cur_batch_size = get_batch_size(batch_dict)
             image_dict, gt = batch_dict
 
-            output = model(image_dict)
-            jaccard_value = jaccard(output, gt, num_classes=output.shape[1])
-            fbiou_value = fbiou(output, gt)
-            loss = criterion(output, gt)  # sum up batch loss
-            # TODO Log validation images
+            outputs = model(image_dict)
+            preds = outputs.argmax(dim=1)
+            binary_preds = preds.clone()
+            binary_preds[binary_preds != 0] = 1
+            binary_gt = gt.clone()
+            binary_gt[binary_gt != 0] = 1
+
+            miou_value = torch.mean(
+                accelerator.gather(
+                    metrics["mIoU"](
+                        preds, gt, num_classes=outputs.shape[1], ignore_index=-100
+                    )
+                )
+            )
+            fbiou_value = torch.mean(
+                accelerator.gather(
+                    metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
+                )
+            )
+            loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
 
             avg_loss.update(loss.item())
-            avg_jaccard.update(jaccard_value.item())
+            avg_jaccard.update(miou_value.item())
             avg_fbiou.update(fbiou_value.item())
             bar.set_postfix(
                 {
-                    "jac/miou": jaccard_value.item(),
-                    "fbiou": fbiou_value.item(),
+                    "mIoU": miou_value.item(),
+                    "FBIoU": fbiou_value.item(),
                     "loss": loss.item(),
                 }
             )
@@ -313,7 +334,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                 substitution_step=0,
                 input_dict=image_dict,
                 gt=gt,
-                pred=output,
+                pred=outputs,
                 dataset=dataloader.dataset,
                 dataset_names=dataset_names,
                 phase="val",
@@ -323,14 +344,14 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
 
         comet_logger.log_metrics(
             {
-                "jaccard": avg_jaccard.compute(),
+                "mIoU": avg_jaccard.compute(),
+                "FBIoU": avg_fbiou.compute(),
                 "loss": avg_loss.compute(),
-                "fbiou": avg_fbiou.compute(),
             },
             epoch=epoch,
         )
     logger.info(f"Validation Epoch {epoch} finished")
-    logger.info(f"Jaccard: {avg_jaccard.compute()}")
+    logger.info(f"mIoU: {avg_jaccard.compute()}")
     logger.info(f"Loss: {avg_loss.compute()}")
     logger.info(f"FBIoU: {avg_fbiou.compute()}")
 
