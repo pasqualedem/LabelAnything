@@ -36,7 +36,7 @@ def uniform_sampling(elem_set, sampled_elems, generator, *args, **kwargs):
 
 
 def sample_over_inverse_frequency(
-    class_set, sampled, frequencies, generator, inverse=True
+    class_set, sampled, generator, frequencies, inverse=True
 ):
     frequencies = {k: v for k, v in frequencies.items() if k not in sampled}
     probs = {k: v + 1 for k, v in frequencies.items()}
