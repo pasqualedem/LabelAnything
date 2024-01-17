@@ -311,12 +311,14 @@ def set_class_embeddings(
     i = 0
     while not passed and i < len(chunk_sizes):
         try:
-            class_embeddings = model.generate_class_embeddings(examples, chunk_size=chunk_sizes[i])
+            with torch.no_grad:
+                class_embeddings = model.generate_class_embeddings(examples, chunk_size=chunk_sizes[i])
             passed = True
         except RuntimeError as e:
             if "out of memory" in str(e):
                 torch.cuda.empty_cache()
                 logger.warning(f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}")
+                print(torch.cuda.memory_summary())
                 message = str(e)
             else:
                 raise e
