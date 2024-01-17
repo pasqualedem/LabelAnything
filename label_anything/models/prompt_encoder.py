@@ -456,6 +456,7 @@ class PromptImageEncoder(PromptEncoder):
             return rearrange(
                 self.transformer(src, pos_src, sparse_embeddings)[1],
                 "b (h w) d  -> b d h w",
+                h=h,
             )  # src: (BMC, HW, D)
         for i in range(0, src.shape[1], chunk_size):
             _, attn_out = self.transformer(
