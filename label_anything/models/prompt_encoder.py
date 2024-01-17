@@ -400,7 +400,8 @@ class PromptImageEncoder(PromptEncoder):
         if chunk_size is None:
             return self.transformer(src, pos_src, sparse_embeddings)[1] # src: (BMC, HW, D)
         for i in range(0, src.shape[1], chunk_size):
-            _, src[i:i+chunk_size] = self.transformer(src[i:i+chunk_size], pos_src[i: i+chunk_size], sparse_embeddings[i:i+chunk_size])
+            _, attn_out = self.transformer(src[i:i+chunk_size], pos_src[i: i+chunk_size], sparse_embeddings[i:i+chunk_size])
+            src[i:i+chunk_size] = rearrange(attn_out, "b (h w) d  -> b d h w", h=src.shape[2])
         return src
 
     def forward(
