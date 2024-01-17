@@ -93,10 +93,7 @@ class CocoLVISDataset(Dataset):
         self.log_images = False
 
         # seeds
-        self.seed = seed
-        self.rng = random.Random(self.seed)
-        self.np_rng = np.random.default_rng(self.seed)
-        self.torch_rng = torch.Generator().manual_seed(self.seed)
+        self.reset_seed(seed)
 
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
@@ -143,12 +140,18 @@ class CocoLVISDataset(Dataset):
         self.preprocess = preprocess
         # prompt preprocessing
         self.prompts_processor = PromptsProcessor(
-            long_side_length=1024, masks_side_length=256
+            long_side_length=1024, masks_side_length=256, np_rng=self.np_rng
         )
 
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.log_images = True
+
+    def reset_seed(self, seed):
+        self.seed = seed
+        self.rng = random.Random(self.seed)
+        self.np_rng = np.random.default_rng(self.seed)
+        self.torch_rng = torch.Generator().manual_seed(self.seed)
 
     def __prepare_benchmark(self):
         """Prepare the dataset for benchmark training."""
