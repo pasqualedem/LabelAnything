@@ -46,9 +46,12 @@ class CustomNormalize(object):
 
 
 class PromptsProcessor:
-    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256):
+    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256, np_rng: np.random.Generator = None):
         self.long_side_length = long_side_length
         self.masks_side_length = masks_side_length
+        self.np_rng = np_rng
+        if self.np_rng is None:
+            self.np_rng = np.random.default_rng()
 
     def __ann_to_rle(self, ann, h, w):
         """Convert annotation which can be polygons, to RLE.
@@ -75,10 +78,10 @@ class PromptsProcessor:
     def __add_bbox_noise(self, bbox, hb, wb, h, w):
         x1, y1, x2, y2 = bbox
         # take random number from normal distribution with mean 0 and std 0.1 * l
-        noise_x1 = np.clip(np.random.normal(0, 0.1 * wb), -20, 20)
-        noise_y1 = np.clip(np.random.normal(0, 0.1 * hb), -20, 20)
-        noise_x2 = np.clip(np.random.normal(0, 0.1 * wb), -20, 20)
-        noise_y2 = np.clip(np.random.normal(0, 0.1 * hb), -20, 20)
+        noise_x1 = np.clip(self.np_rng.normal(0, 0.1 * wb), -20, 20)
+        noise_y1 = np.clip(self.np_rng.normal(0, 0.1 * hb), -20, 20)
+        noise_x2 = np.clip(self.np_rng.normal(0, 0.1 * wb), -20, 20)
+        noise_y2 = np.clip(self.np_rng.normal(0, 0.1 * hb), -20, 20)
 
         x1 = float(np.clip(x1 + noise_x1, 0, w))
         y1 = float(np.clip(y1 + noise_y1, 0, h))
@@ -132,7 +135,7 @@ class PromptsProcessor:
         # make a list of positive (row, col) coordinates
         positive_coords = np.argwhere(mask)
         # choose one at random
-        row, col = positive_coords[np.random.choice(len(positive_coords))]
+        row, col = positive_coords[self.np_rng.choice(len(positive_coords))]
         return col, row
 
     def apply_coords(
