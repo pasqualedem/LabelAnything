@@ -68,7 +68,8 @@ def get_dataloaders(dataset_args, dataloader_args):
         dataset=train_dataset,
         **dataloader_args,
         collate_fn=train_dataset.collate_fn,
-        batch_sampler=train_batch_sampler
+        batch_sampler=train_batch_sampler,
+        shuffle=True
     )
     if val_datasets_params:
         val_dataset = LabelAnythingDataset(
