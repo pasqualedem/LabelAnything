@@ -19,7 +19,7 @@ def get_weight_matrix_from_labels(labels, num_classes, ignore_index=-100):
     if there_is_ignore:
         weight_labels = labels.clone()
         weight_labels += 1
-        weight_labels[weight_labels == self.ignore_index + 1] = 0
+        weight_labels[weight_labels == ignore_index + 1] = 0
         weight_num_classes = num_classes + 1
     else:
         weight_labels = labels
