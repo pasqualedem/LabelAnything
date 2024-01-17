@@ -644,7 +644,7 @@ def collate_gts(gt, dims):
     """Collate ground truths for a single sample (query + support).
     """
     out = torch.zeros(dims)
-    print(gt.size())
+    print(f"size: {gt.size()}")
     exit()
     dim0, dim1 = gt.size()
     out[:dim0, :dim1] = gt
