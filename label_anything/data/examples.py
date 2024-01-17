@@ -103,8 +103,8 @@ class ExampleGenerator:
                 sampled_class = sample_function(
                     class_list,
                     sampled_classes,
+                    self.generator,
                     frequencies,
-                    generator=self.generator,
                     inverse=False,
                 )
                 sampled_classes.append(sampled_class)
@@ -112,7 +112,7 @@ class ExampleGenerator:
         else:
             for _ in range(n_elements):
                 sampled_class = sample_function(
-                    class_list, sampled_classes, frequencies, generator=self.generator
+                    class_list, sampled_classes, self.generator, frequencies
                 )
                 sampled_classes.append(sampled_class)
 
