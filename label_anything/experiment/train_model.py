@@ -345,6 +345,8 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
 
     with torch.no_grad():
         for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+            print(batch_dict)
+            exit()
             image_dict, gt = batch_dict
 
             output = model.predict(image_dict)
