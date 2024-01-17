@@ -233,12 +233,15 @@ class VariableBatchSampler(BatchSampler):
             # Process the batch
     """
 
-    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False):
+    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False, shuffle=False):
         self.data_source = data_source
         self.batch_sizes = batch_sizes
         self.num_examples = num_examples
         self.drop_last = drop_last
-        self.sampler = torch.utils.data.sampler.RandomSampler(data_source)
+        if shuffle:
+            self.sampler = torch.utils.data.RandomSampler(data_source)
+        else:
+            self.sampler = torch.utils.data.SequentialSampler(data_source)
 
         if len(batch_sizes) == 0:
             raise ValueError("At least one batch size should be provided.")
