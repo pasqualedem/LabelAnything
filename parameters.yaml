@@ -40,13 +40,13 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [5]
+    max_epochs: [4]
     compile: [False]
-    initial_lr: [0.00001]
+    initial_lr: [0.0001, 0.00005, 0.00001, 0.000005]
     optimizer: [AdamW]
     scheduler:
-      type: [cosine]
-      warmup_steps: [2500]
+      type: [constant]
+      warmup_steps: [500]
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     check_nan: [1] # check for nan every n batches
@@ -79,7 +79,7 @@ parameters:
       load_gts: [True]
   dataloader:
     batch_size: [4]
-    num_workers: [32]
+    num_workers: [64]
     prefetch_factor: [2]
 
 other_grids:
