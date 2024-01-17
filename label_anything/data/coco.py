@@ -711,7 +711,8 @@ class CocoLVISTestDataset(CocoLVISDataset):
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
     ) -> (Dict[str, Any], torch.Tensor):
-        images = torch.stack([x["image"] for x in batched_input])
+        data_key = 'images' if 'images' in batched_input[0].keys() else 'embeddings'
+        images = torch.stack([x[data_key] for x in batched_input])
 
         dims = torch.stack([x["dim"] for x in batched_input])
 
@@ -719,7 +720,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         gt = torch.stack([utils.collate_gts(x["gt"], max_dims) for x in batched_input])
 
         data_dict = {
-            "images": images,
+            data_key: images,
             "dims": dims,
         }
 
