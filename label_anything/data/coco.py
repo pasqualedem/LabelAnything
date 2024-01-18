@@ -700,8 +700,21 @@ class CocoLVISTestDataset(CocoLVISDataset):
 
     def __getitem__(self, item):
         image_id = self.image_ids[item]
-        data, data_key, _ = self._get_images_or_embeddings([self.images[image_id]])
-        gt = self.get_ground_truths([image_id], self.img2cat[image_id])[0]
+        data, data_key, gt = self._get_images_or_embeddings([self.images[image_id]])
+        cat_ids = list(self.cat2img.keys())
+        if gt is None:
+            gt = self.get_ground_truths([image_id], cat_ids)[0]
+        else:
+            gt = gt[0]
+            # convert the ground truths to the right format
+            ground_truths_copy = gt.clone()
+            # set ground_truths to all 0s
+            gt = torch.zeros_like(gt)
+            for i, cat_id in enumerate(cat_ids):
+                if cat_id == -1:
+                    continue
+                gt[ground_truths_copy == cat_id] = i
+
 
         dim = torch.as_tensor(gt.size())
         data_dict = {
