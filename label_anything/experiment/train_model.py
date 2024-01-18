@@ -133,8 +133,6 @@ def train_epoch(
     dataloader.dataset.log_images = True # Logs the first batch
 
     for batch_idx, batch_tuple in bar:
-        if batch_idx == 3:
-            break
         batch_tuple, dataset_names = batch_tuple
         cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
@@ -244,8 +242,6 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
-            if batch_idx == 3:
-                break
             batch_dict, dataset_names = batch_tuple
             batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
             cur_batch_size = get_batch_size(batch_dict)
