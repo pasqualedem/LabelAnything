@@ -125,10 +125,6 @@ def train_epoch(
         "mIoU": multiclass_jaccard_index,
         "FBIoU": binary_jaccard_index,
     }
-
-    model, optimizer, dataloader, scheduler = accelerator.prepare(
-        model, optimizer, dataloader, scheduler
-    )
     # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
     bar = tqdm(
@@ -144,6 +140,8 @@ def train_epoch(
     cur_lr = train_params["initial_lr"]
 
     for batch_idx, batch_tuple in bar:
+        if batch_idx == 5:
+            break
         batch_tuple, dataset_names = batch_tuple
         cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
@@ -277,8 +275,6 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
         "FBIoU": binary_jaccard_index,
     }
 
-    dataloader = accelerator.prepare(dataloader)
-
     tot_steps = 0
     tot_images = 0
     bar = tqdm(
@@ -290,6 +286,8 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
+            if batch_idx == 5:
+                break
             batch_dict, dataset_names = batch_tuple
             batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
             cur_batch_size = get_batch_size(batch_dict)
@@ -414,6 +412,14 @@ def train_and_test(
 
     if train_params.get("compile", False):
         model = torch.compile(model)
+
+    model, optimizer, train_loader, scheduler = accelerator.prepare(
+        model, optimizer, train_loader, scheduler
+    )
+    if val_loader:
+        val_loader = accelerator.prepare(val_loader)
+    if test_loader:
+        test_loader = accelerator.prepare(test_loader)
 
     # Train the Model
     with comet_logger.experiment.train():
