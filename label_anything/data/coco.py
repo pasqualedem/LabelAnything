@@ -741,7 +741,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "dims": dims,
         }
 
-        return data_dict, gt
+        return data_dict, gt.long()
 
 
 class LabelAnyThingOnlyImageDataset(Dataset):
