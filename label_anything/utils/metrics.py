@@ -120,21 +120,12 @@ class ConfMat(ConfusionMatrix):
         return super().compute()
 
 
-def get_binary_tensor(t):
-    copied = t.clone()
-    t = torch.zeros_like(t)
-    t[copied > 0] = 1
-    return t
-
-
 class FBIoU(BinaryJaccardIndex):
     def __init__(self):
         super().__init__()
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        preds = get_binary_tensor(preds)
-        target = get_binary_tensor(target)
-        return self.update(preds, target)
+        return self.update((preds != 0).long, (target != 0).long)
 
 
 def metric_instance(name: str, params: dict) -> dict:
