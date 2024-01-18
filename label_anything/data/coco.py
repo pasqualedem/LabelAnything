@@ -487,6 +487,7 @@ class CocoLVISDataset(Dataset):
         return ground_truths
 
     def __len__(self):
+        return 32
         return len(self.images) if self.split == "train" else 1000
 
     def annotations_to_tensor(

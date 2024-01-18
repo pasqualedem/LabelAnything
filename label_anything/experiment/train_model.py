@@ -140,8 +140,6 @@ def train_epoch(
     cur_lr = train_params["initial_lr"]
 
     for batch_idx, batch_tuple in bar:
-        if batch_idx == 5:
-            break
         batch_tuple, dataset_names = batch_tuple
         cur_batch_size = get_batch_size(batch_tuple)
         substitutor = Substitutor(
@@ -292,8 +290,6 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
 
     with torch.no_grad():
         for batch_idx, batch_tuple in bar:
-            if batch_idx == 5:
-                break
             batch_dict, dataset_names = batch_tuple
             batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
             cur_batch_size = get_batch_size(batch_dict)
@@ -320,14 +316,14 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             )
             # loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
 
-            avg_loss.update(loss.item())
+            # avg_loss.update(loss.item())
             avg_jaccard.update(miou_value.item())
             avg_fbiou.update(fbiou_value.item())
             bar.set_postfix(
                 {
                     "mIoU": miou_value.item(),
                     "FBIoU": fbiou_value.item(),
-                    "loss": loss.item(),
+                    # "loss": loss.item(),
                 }
             )
             comet_logger.log_batch(
