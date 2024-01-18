@@ -206,6 +206,10 @@ class LabelAnythingDataset(Dataset):
             data_dict["images"] = log_images
 
         return (data_dict, ground_truths), dataset_names
+    
+    def reset_seed(self, seed):
+        for dataset in self.datasets.values():
+            dataset.reset_seed(seed)
 
 
 class VariableBatchSampler(BatchSampler):

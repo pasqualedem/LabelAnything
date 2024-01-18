@@ -273,7 +273,7 @@ def train_epoch(
 
 
 def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
-    dataloader.reset_seed(42)
+    dataloader.dataset.reset_seed(42)
     model.eval()
     avg_loss = RunningAverage()
     avg_jaccard = RunningAverage()
