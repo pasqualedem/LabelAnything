@@ -2,7 +2,7 @@ import itertools
 import os
 import random
 import warnings
-from enum import IntEnum, Enum
+from enum import Enum, IntEnum
 from io import BytesIO
 from typing import Any, Dict, List, Tuple
 
@@ -92,6 +92,9 @@ class CocoLVISDataset(Dataset):
         self.img_dir = img_dir
         self.log_images = False
 
+        # seeds
+        self.reset_seed(seed)
+
         # id to annotation
         self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
@@ -124,7 +127,7 @@ class CocoLVISDataset(Dataset):
 
         # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
-            categories_to_imgs=self.cat2img
+            categories_to_imgs=self.cat2img, generator=self.torch_rng
         )
 
         # max number of examples for each image
@@ -137,21 +140,18 @@ class CocoLVISDataset(Dataset):
         self.preprocess = preprocess
         # prompt preprocessing
         self.prompts_processor = PromptsProcessor(
-            long_side_length=1024, masks_side_length=256
+            long_side_length=1024, masks_side_length=256, np_rng=self.np_rng
         )
 
-        self.seed = seed
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
-        self.__set_all_seeds()
-
-    def __set_all_seeds(self):
-        """Enable reproducibility."""
-        random.seed(self.seed)
-        np.random.seed(int(self.seed))
-        torch.manual_seed(self.seed)
-
         self.log_images = True
+
+    def reset_seed(self, seed):
+        self.seed = seed
+        self.rng = random.Random(self.seed)
+        self.np_rng = np.random.default_rng(self.seed)
+        self.torch_rng = torch.Generator().manual_seed(self.seed)
 
     def __prepare_benchmark(self):
         """Prepare the dataset for benchmark training."""
@@ -245,6 +245,19 @@ class CocoLVISDataset(Dataset):
             "RGB"
         )
 
+    def load_and_preprocess_images(self, imgs_id: list[int]) -> list[Image.Image]:
+        """Load images from disk or from url.
+
+        Args:
+            imgs_id (list[int]): A list of image ids.
+
+        Returns:
+            list[PIL.Image]: The loaded images.
+        """
+        return [
+            self._load_and_preprocess_image(self.images[img_id]) for img_id in imgs_id
+        ]
+
     def _extract_examples(self, img_data: dict, num_examples: int) -> (list, list):
         """Chooses examples (and categories) for the query image.
 
@@ -296,10 +309,12 @@ class CocoLVISDataset(Dataset):
                     # if there are too many annotations, sample a mask
                     prompt_types = [PromptType.MASK] * number_of_annotations
                 else:
-                    prompt_types = random.choices(
+                    prompt_types = self.rng.choices(
                         list(PromptType), k=number_of_annotations
                     )
-                for ann, prompt_type in zip(self.img2cat_annotations[img_id][cat_id], prompt_types):
+                for ann, prompt_type in zip(
+                    self.img2cat_annotations[img_id][cat_id], prompt_types
+                ):
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -373,9 +388,9 @@ class CocoLVISDataset(Dataset):
             cat_ids.insert(0, -1)  # add the background class
         else:
             # take a random category (use numpy)
-            cat_id = np.random.choice(list(self.categories.keys()))
+            cat_id = self.np_rng.choice(list(self.categories.keys()))
             # take two random images from that category
-            image_ids = np.random.choice(
+            image_ids = self.np_rng.choice(
                 list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
             )
             cat_ids = [-1, cat_id]

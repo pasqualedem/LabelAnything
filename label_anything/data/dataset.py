@@ -62,16 +62,9 @@ class LabelAnythingDataset(Dataset):
         idx, num_examples = idx_num_examples
         dataset_name, dataset_index = self.index[idx]
         return self.datasets[dataset_name][(dataset_index, num_examples)], dataset_name
-
-    @property
-    def log_images(self):
-        return self._log_images
-
-    @log_images.setter
-    def log_images(self, value):
-        self._log_images = value
-        for dataset in self.datasets.values():
-            dataset.log_images = value
+    
+    def load_and_preprocess_images(self, dataset_name, image_ids):
+        return self.datasets[dataset_name].load_and_preprocess_images(image_ids)
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
@@ -213,6 +206,10 @@ class LabelAnythingDataset(Dataset):
             data_dict["images"] = log_images
 
         return (data_dict, ground_truths), dataset_names
+    
+    def reset_seed(self, seed):
+        for dataset in self.datasets.values():
+            dataset.reset_seed(seed)
 
 
 class VariableBatchSampler(BatchSampler):
@@ -240,12 +237,15 @@ class VariableBatchSampler(BatchSampler):
             # Process the batch
     """
 
-    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False):
+    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False, shuffle=False):
         self.data_source = data_source
         self.batch_sizes = batch_sizes
         self.num_examples = num_examples
         self.drop_last = drop_last
-        self.sampler = torch.utils.data.sampler.RandomSampler(data_source)
+        if shuffle:
+            self.sampler = torch.utils.data.RandomSampler(data_source)
+        else:
+            self.sampler = torch.utils.data.SequentialSampler(data_source)
 
         if len(batch_sizes) == 0:
             raise ValueError("At least one batch size should be provided.")

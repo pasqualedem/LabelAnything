@@ -3,7 +3,7 @@ from label_anything.preprocess import (
     preprocess_images_to_embeddings,
     generate_ground_truths,
 )
-from label_anything.experiment.experiment import experiment as run_experiment
+from label_anything.experiment.experiment import experiment as run_experiment, run as run_single
 
 import click
 
@@ -17,8 +17,19 @@ def main():
 @click.option(
     "--parameters", default="parameters.yaml", help="Path to the parameters file"
 )
-def experiment(parameters):
-    run_experiment(param_path=parameters)
+@click.option(
+    "--parallel", default=False, help="Run the experiments in parallel", is_flag=True
+)
+def experiment(parameters, parallel):
+        run_experiment(param_path=parameters, parallel=parallel)
+        
+
+@main.command("run")
+@click.option(
+    "--parameters", default="parameters.yaml", help="Path to the parameters file"
+)
+def run(parameters):
+        run_single(param_path=parameters)
 
 
 @main.command("preprocess")

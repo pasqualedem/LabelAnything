@@ -20,6 +20,16 @@ def load_yaml(file_path):
         print(f"File '{file_path}' not found.")
     except yaml.YAMLError as e:
         print(f"Error parsing YAML file: {e}")
+        
+
+def write_yaml(data, file_path):
+    try:
+        with open(file_path, "w") as yaml_file:
+            yaml.dump(data, yaml_file)
+    except FileNotFoundError:
+        print(f"File '{file_path}' not found.")
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}")
 
 
 def unwrap_model_from_parallel(model, return_was_wrapped=False):
@@ -134,12 +144,10 @@ def convert_commentedmap_to_dict(data):
         return data
 
 
-def log_every_n(image_idx: int, batch_size: int, n: int):
+def log_every_n(image_idx: int, n: int):
     if n is None:
         return False
-    cur_step = image_idx % n
-    next_step = (image_idx + batch_size) % n
-    return cur_step > next_step
+    return image_idx % n == 0
 
 
 def dict_to_yaml_string(mapping: Mapping) -> str:

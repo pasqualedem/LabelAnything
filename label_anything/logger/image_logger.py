@@ -35,7 +35,7 @@ class Logger:
         train_image_log_frequency: int = 1000,
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
-        experiment_save_delta: int = None
+        experiment_save_delta: int = None,
     ):
         self.experiment = experiment
         self.tmp_dir = tmp_dir
@@ -76,10 +76,15 @@ class Logger:
         dataset_names,
         phase,
     ):
-        if log_every_n(image_idx, batch_size, self.prefix_frequency_dict[phase]):
-            dataset.log_images = True
-            return
-        if dataset.log_images:
+        if log_every_n(image_idx, self.prefix_frequency_dict[phase]):
+            query_images = [
+                dataset.load_and_preprocess_images(dataset_name, [ids[0]])[0]
+                for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
+            ]
+            example_images = [
+                dataset.load_and_preprocess_images(dataset_name, ids[1:]) 
+                for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
+            ]
             categories = dataset.categories
             self.log_prompts(
                 batch_idx=batch_idx,
@@ -88,6 +93,7 @@ class Logger:
                 image_idx=image_idx,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
+                images=example_images,
                 categories=categories,
                 dataset_names=dataset_names,
                 prefix=phase,
@@ -99,13 +105,13 @@ class Logger:
                 step=step,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
+                images=query_images,
                 gt=gt,
                 pred=pred,
                 categories=categories,
                 dataset_names=dataset_names,
                 prefix=phase,
             )
-            dataset.log_images = False
 
     def log_gt_pred(
         self,
@@ -115,21 +121,20 @@ class Logger:
         step,
         substitution_step,
         input_dict,
+        images,
         gt,
         pred,
         categories,
         dataset_names,
-        prefix
+        prefix,
     ):
-        images = input_dict["images"]
         dims = input_dict["dims"]
         classes = self.__get_class_ids(input_dict["classes"])
 
         for b in range(gt.shape[0]):
             data_gt = []
             data_pred = []
-            img = take_image(images[b, 0], dims[b, 0])
-            image = get_image(img)
+            image = get_image(take_image(images[b], dims[b, 0]))
             cur_dataset_categories = categories[dataset_names[b]]
 
             sample_gt = gt[b, : dims[b, 0, 0], : dims[b, 0, 1]]
@@ -196,11 +201,11 @@ class Logger:
         step,
         substitution_step,
         input_dict,
+        images,
         categories,
         dataset_names,
-        prefix
+        prefix,
     ):
-        images = input_dict["images"]
         all_masks = input_dict["prompt_masks"]
         all_boxes = input_dict["prompt_bboxes"]
         all_points = input_dict["prompt_points"]
@@ -209,11 +214,11 @@ class Logger:
         flags_points = input_dict["flag_points"]
         classes = self.__get_class_ids(input_dict["classes"])
 
-        for i in range(images.shape[0]):
+        for i in range(len(images)):
             cur_dataset_categories = categories[dataset_names[i]]
             sample_images = images[i]
             for j in range(all_masks.shape[1]):
-                image = get_image(sample_images[j + 1])
+                image = get_image(sample_images[j])
                 data = []
                 annotations = [{"name": "Ground truth", "data": data}]
 
@@ -326,6 +331,7 @@ class Logger:
             name,
             parameter,
         )
+
     def save_experiment_timed(self):
         """
         Save the experiment every `self.time_delta` seconds
@@ -335,10 +341,12 @@ class Logger:
         if type(self.experiment) != OfflineExperiment:
             return
         if time.time() - self.start_time > self.experiment_save_delta:
-            logger.info(f"Saving partial experiment as it has been running for more than {self.experiment_save_delta} seconds")
+            logger.info(
+                f"Saving partial experiment as it has been running for more than {self.experiment_save_delta} seconds"
+            )
             self.save_experiment()
             self.start_time = time.time()
-        
+
     def save_experiment(self):
         if type(self.experiment) != OfflineExperiment:
             return
@@ -355,13 +363,12 @@ class Logger:
         # Display the full command to upload the offline experiment
         logger.info(f"Partial experiment saved at time {local_timestamp()}")
         logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
-        
+
     def end(self):
         if "Partial" in self.experiment.tags:
             logger.info("Removing partial tag from experiment")
             self.experiment.tags.remove("Partial")
         self.experiment.end()
-        
 
 
 """
