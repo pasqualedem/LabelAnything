@@ -317,7 +317,7 @@ class Logger:
             annotations=annotations,
             step=step,
         )
-        os.remove(tmp_path)
+        # os.remove(tmp_path)
 
     def log_metric(self, name, metric, epoch=None):
         self.experiment.log_metric(name, metric, epoch)
