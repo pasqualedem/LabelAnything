@@ -225,7 +225,7 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
-        
+
     def get_learnable_params(self, training_params: dict) -> list:
         """
 
@@ -235,7 +235,7 @@ class Lam(nn.Module):
         def f(x):
             return not "image_encoder" in x[0]
 
-        freeze_pretrained = training_params.get('freeze_backbone', False)
+        freeze_pretrained = training_params.get("freeze_backbone", False)
         if freeze_pretrained:
             for param in self.image_encoder.parameters():
                 param.requires_grad = False
@@ -259,7 +259,9 @@ class Lam(nn.Module):
             return self.forward(batched_input)
         if class_embeddings is None and self.class_embeddings is not None:
             class_embeddings = self.class_embeddings
-        query_embeddings = self.prepare_embeddings(batched_input)
+        query_embeddings = self.prepare_embeddings(batched_input)[
+            :, 0
+        ]  # There is only query image
 
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
@@ -267,7 +269,9 @@ class Lam(nn.Module):
             class_embeddings=class_embeddings,
         )
 
-        return self.postprocess_masks(seg, batched_input["dims"])
+        return self.postprocess_masks(
+            seg, batched_input["dims"].unsqueeze(1)  # Add example dimension to uniform
+        )
 
     def postprocess_masks(
         self,
@@ -328,5 +332,7 @@ class Lam(nn.Module):
                 for i, mask in enumerate(masks)
             ]
         )
-        masks[:, 0, :, :][masks[:, 0, :, :] == float("-inf")] = 0 # background class for padding
+        masks[:, 0, :, :][
+            masks[:, 0, :, :] == float("-inf")
+        ] = 0  # background class for padding
         return masks
