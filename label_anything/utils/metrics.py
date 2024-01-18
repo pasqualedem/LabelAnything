@@ -125,7 +125,7 @@ class FBIoU(BinaryJaccardIndex):
         super().__init__()
 
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
-        return self.update((preds != 0).long, (target != 0).long)
+        return self.update((preds != 0).long(), (target != 0).long())
 
 
 def metric_instance(name: str, params: dict) -> dict:
