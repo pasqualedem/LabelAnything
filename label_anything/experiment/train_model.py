@@ -347,7 +347,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             {
                 "mIoU": avg_jaccard.compute(),
                 "FBIoU": avg_fbiou.compute(),
-                "loss": avg_loss.compute(),
+                # "loss": avg_loss.compute(), 
             },
             epoch=epoch,
         )
