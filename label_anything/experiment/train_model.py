@@ -335,6 +335,8 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
     jaccard_index = JaccardIndex(task='multiclass', num_classes=dataloader.dataset.num_classes)
     fbiou = FBIoU()
 
+    jaccard_index, fbiou = accelerator.prepare(jaccard_index, fbiou)
+
     examples = dataloader.dataset.extract_prompts(
         train_dataset.cat2img,
         train_dataset.img2cat,
