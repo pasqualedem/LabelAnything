@@ -353,7 +353,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
         )
     logger.info(f"Validation Epoch {epoch} finished")
     logger.info(f"mIoU: {avg_jaccard.compute()}")
-    logger.info(f"Loss: {avg_loss.compute()}")
+    # logger.info(f"Loss: {avg_loss.compute()}") 
     logger.info(f"FBIoU: {avg_fbiou.compute()}")
 
 
