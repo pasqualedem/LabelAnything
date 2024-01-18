@@ -251,15 +251,21 @@ def train_epoch(
         comet_logger.save_experiment_timed()
         tot_images += cur_batch_size
 
+    logger.info(f"Finished Epoch {epoch}")
+    logger.info(f"Metrics")
+    metric_dict = {
+        "avg_loss": avg_loss.compute(),
+        "avg_jaccard": avg_miou.compute(),
+        "avg_fbiou": avg_fbiou.compute(),
+        "avg_first_step_loss": first_step_loss.compute(),
+        "avg_first_step_mIoU": first_step_miou.compute(),
+        "avg_first_step_FBIoU": first_step_fbiou.compute(),
+    }
+    for k, v in metric_dict.items():
+        logger.info(f"{k}: {v}")
+
     comet_logger.log_metrics(
-        {
-            "avg_loss": avg_loss.compute(),
-            "avg_jaccard": avg_miou.compute(),
-            "avg_fbiou": avg_fbiou.compute(),
-            "avg_first_step_loss": first_step_loss.compute(),
-            "avg_first_step_mIoU": first_step_miou.compute(),
-            "avg_first_step_FBIoU": first_step_fbiou.compute(),
-        },
+        metrics=metric_dict,
         epoch=epoch,
     )
 
@@ -437,9 +443,8 @@ def train_and_test(
                 accelerator,
                 train_params,
             )
-            logger.info(f"Finished Epoch {epoch}")
 
-            # save_model(comet_logger.experiment, model, model._get_name())
+            save_model(comet_logger.experiment, model, model._get_name())
             if val_loader:
                 with comet_logger.experiment.validate():
                     logger.info(f"Running Model Validation")
