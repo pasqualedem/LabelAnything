@@ -350,10 +350,10 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
             image_dict, gt = batch_dict
 
             output = model.predict(image_dict)
+            total_loss += criterion(output, gt).item()  # sum up batch loss
             output = torch.argmax(output, dim=1)
             jaccard_index.update(output, gt)
             fbiou.update(output, gt)
-            total_loss += criterion(output, gt).item()  # sum up batch loss
 
         total_loss /= len(dataloader)
         jaccard_value = jaccard_index.compute()
