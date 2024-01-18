@@ -559,6 +559,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
                                                   emb_dir=emb_dir,
                                                   load_embeddings=load_embeddings,
                                                   load_gts=load_gts,)
+        self.num_classes = len(list(self.cat2img.keys()))
 
     def _extract_examples(
             self,

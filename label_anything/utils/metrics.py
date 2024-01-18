@@ -1,10 +1,11 @@
 import torch
+import torchmetrics
 from torch import Tensor
 from torchmetrics import JaccardIndex, AUROC, F1Score, ConfusionMatrix
 from torchmetrics import Precision as TPrecision
 from torchmetrics import Recall as TRecall
-from torchmetrics import JaccardIndex as TJaccardIndex
 from torchmetrics.functional.classification import multiclass_jaccard_index, binary_jaccard_index
+from torchmetrics.classification import BinaryJaccardIndex
 from ..models import ComposedOutput
 
 from copy import deepcopy
@@ -117,6 +118,23 @@ class ConfMat(ConfusionMatrix):
 
     def get_cf(self):
         return super().compute()
+
+
+def get_binary_tensor(t):
+    copied = t.clone()
+    t = torch.zeros_like(t)
+    t[copied > 0] = 1
+    return t
+
+
+class FBIoU(BinaryJaccardIndex):
+    def __init__(self):
+        super().__init__()
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        preds = get_binary_tensor(preds)
+        target = get_binary_tensor(target)
+        return self.update(preds, target)
 
 
 def metric_instance(name: str, params: dict) -> dict:

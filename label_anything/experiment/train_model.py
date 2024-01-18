@@ -11,8 +11,9 @@ from label_anything.data.utils import random_batch
 from label_anything.loss import LabelAnythingLoss
 from .save import save_model
 from accelerate import Accelerator
-from label_anything.utils.metrics import jaccard, fbiou
+from label_anything.utils.metrics import jaccard, fbiou, FBIoU
 from transformers import get_scheduler
+from torchmetrics import JaccardIndex
 
 logger = get_logger(__name__)
 
@@ -331,8 +332,8 @@ def set_class_embeddings(
 def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator):
     model.eval()
     total_loss = 0
-    jaccard_value = 0
-    fbiou_value = 0
+    jaccard_index = JaccardIndex(task='multiclass', num_classes=dataloader.dataset.num_classes)
+    fbiou = FBIoU()
 
     examples = dataloader.dataset.extract_prompts(
         train_dataset.cat2img,
@@ -347,13 +348,13 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
             image_dict, gt = batch_dict
 
             output = model.predict(image_dict)
-            jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
-            fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
+            jaccard_index.update(output, gt)
+            fbiou.update(output, gt)
             total_loss += criterion(output, gt).item()  # sum up batch loss
 
         total_loss /= len(dataloader)
-        jaccard_value /= len(dataloader)
-        fbiou_value /= len(dataloader)
+        jaccard_value = jaccard_index.compute()
+        fbiou_value = fbiou.compute()
 
         comet_logger.log_metrics(
             {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
