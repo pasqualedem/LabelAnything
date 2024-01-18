@@ -318,7 +318,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                     metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
                 )
             )
-            loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
+            # loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
 
             avg_loss.update(loss.item())
             avg_jaccard.update(miou_value.item())
