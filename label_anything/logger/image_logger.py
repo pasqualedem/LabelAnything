@@ -332,7 +332,7 @@ class Logger:
             parameter,
         )
 
-    def save_experiment_timed(self):
+    def save_experiment_timed(self, accelerator):
         """
         Save the experiment every `self.time_delta` seconds
         """
@@ -344,12 +344,13 @@ class Logger:
             logger.info(
                 f"Saving partial experiment as it has been running for more than {self.experiment_save_delta} seconds"
             )
-            self.save_experiment()
+            self.save_experiment(accelerator)
             self.start_time = time.time()
 
-    def save_experiment(self):
+    def save_experiment(self, accelerator):
         if type(self.experiment) != OfflineExperiment:
             return
+        accelerator.wait_for_everyone()
         self.experiment._write_experiment_meta_file()
         self.experiment.add_tag("Partial")
 
