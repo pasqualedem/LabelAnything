@@ -96,6 +96,10 @@ class Run:
         ) = parse_params(self.params)
 
     def init(self, params: dict):
+        # set torch, numpy, random seeds
+        torch.manual_seed(42)
+        np.random.seed(42)
+        random.seed(42)
         self.seg_trainer = None
         self.parse_params(params)
         (
@@ -111,27 +115,21 @@ class Run:
             "project_name": self.params["experiment"]["name"],
             **comet_params,
         }
-        
         kwargs = [
             DistributedDataParallelKwargs(find_unused_parameters=True),
             ]
-        self.accelerator = Accelerator(even_batches=False, kwargs_handlers=kwargs, split_batches=True)
+        self.accelerator = Accelerator(even_batches=False, kwargs_handlers=kwargs, split_batches=False)
         self.comet_logger = comet_experiment(comet_information, self.accelerator, self.params)
         self.url = self.comet_logger.experiment.url
         self.name = self.comet_logger.experiment.name
-
+        
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
-            self.dataset_params, self.dataloader_params
+            self.dataset_params, self.dataloader_params, self.accelerator.num_processes
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
 
     def launch(self):
-        # set torch, numpy, random seeds
-        torch.manual_seed(42)
-        np.random.seed(42)
-        random.seed(42)
-
         train_and_test(
             self.params,
             self.accelerator,
