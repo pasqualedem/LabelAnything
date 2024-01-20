@@ -10,6 +10,8 @@ import comet_ml
 import numpy as np
 import torch
 
+from accelerate import Accelerator, DistributedDataParallelKwargs
+
 from label_anything.data import get_dataloaders
 from label_anything.experiment.train_model import train_and_test
 from label_anything.logger.image_logger import Logger
@@ -29,7 +31,7 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
-def comet_experiment(comet_information: dict, params: dict):
+def comet_experiment(comet_information: dict, accelerator: Accelerator, params: dict):
     global logger
     logger_params = deepcopy(params.get("logger", {}))
     logger_params.pop("comet", None)
@@ -67,7 +69,7 @@ def comet_experiment(comet_information: dict, params: dict):
     experiment.add_tags(tags)
     experiment.log_parameters(params)
 
-    return Logger(experiment, **logger_params)
+    return Logger(experiment, accelerator, **logger_params)
 
 
 class Run:
@@ -109,8 +111,12 @@ class Run:
             "project_name": self.params["experiment"]["name"],
             **comet_params,
         }
-
-        self.comet_logger = comet_experiment(comet_information, self.params)
+        
+        kwargs = [
+            DistributedDataParallelKwargs(find_unused_parameters=True),
+            ]
+        self.accelerator = Accelerator(even_batches=False, kwargs_handlers=kwargs, split_batches=True)
+        self.comet_logger = comet_experiment(comet_information, self.accelerator, self.params)
         self.url = self.comet_logger.experiment.url
         self.name = self.comet_logger.experiment.name
 
@@ -128,6 +134,7 @@ class Run:
 
         train_and_test(
             self.params,
+            self.accelerator,
             self.model,
             self.train_loader,
             self.val_loader,

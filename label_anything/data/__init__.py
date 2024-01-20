@@ -21,7 +21,8 @@ def get_example_num_list(dataset_len, batch_size, max_num_examples):
     remaining_images = dataset_len
     while remaining_images > 0:
         examples_num = random.choice(possible_target_examples_len)
-        cur_batch_size = target_examples_num // examples_num
+        # cur_batch_size = target_examples_num // examples_num
+        cur_batch_size = batch_size
         if cur_batch_size > remaining_images:
             cur_batch_size = remaining_images
         examples_nums.append(examples_num)
@@ -71,6 +72,7 @@ def get_dataloaders(dataset_args, dataloader_args):
         collate_fn=train_dataset.collate_fn,
         batch_sampler=train_batch_sampler,
     )
+    train_dataloader.batch_size = batch_size
     if val_datasets_params:
         val_dataset = LabelAnythingDataset(
             datasets_params=val_datasets_params,

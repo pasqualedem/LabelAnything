@@ -119,7 +119,6 @@ def train_epoch(
     accelerator: Accelerator,
     train_params,
 ):
-    lt.monkey_patch()
     model.train()
     avg_loss = RunningAverage()
     avg_miou = RunningAverage()
@@ -137,8 +136,7 @@ def train_epoch(
         enumerate(dataloader),
         total=len(dataloader),
         postfix={"loss": 0},
-        desc=f"Train Epoch {epoch}/{train_params['max_epochs']}",
-        disable=not accelerator.is_local_main_process,
+        desc=f"Train Epoch {epoch}/{train_params['max_epochs']-1}",
     )
     tot_steps = 0
     tot_images = 0
@@ -209,9 +207,8 @@ def train_epoch(
                     )
                 )
 
-                # if accelerator.is_local_main_process:
-                #     comet_logger.log_metric("batch_mIoU", miou_value.item())
-                #     comet_logger.log_metric("batch_FBIoU", fbiou_value.item())
+                comet_logger.log_metric("batch_mIoU", miou_value.item())
+                comet_logger.log_metric("batch_FBIoU", fbiou_value.item())
 
                 avg_miou.update(miou_value.item())
                 avg_fbiou.update(fbiou_value.item())
@@ -220,50 +217,45 @@ def train_epoch(
                 )
 
             avg_loss.update(loss.item())
-            # if i == 0:
-            #     first_step_loss.update(loss.item())
-            #     if accelerator.is_local_main_process:
-            #         comet_logger.log_metric("first_step_loss", loss.item())
-            #     if tot_steps % comet_logger.log_frequency == 0:
-            #         first_step_miou.update(miou_value.item())
-            #         first_step_fbiou.update(fbiou_value.item())
-            #         if accelerator.is_local_main_process:
-            #             comet_logger.log_metric("first_step_mIoU", miou_value.item())
-            #             comet_logger.log_metric("first_step_FBIoU", fbiou_value.item())
-            #             comet_logger.log_metric("lr", cur_lr)
+            if i == 0:
+                first_step_loss.update(loss.item())
+                comet_logger.log_metric("first_step_loss", loss.item())
+                if tot_steps % comet_logger.log_frequency == 0:
+                    first_step_miou.update(miou_value.item())
+                    first_step_fbiou.update(fbiou_value.item())
+                    comet_logger.log_metric("first_step_mIoU", miou_value.item())
+                    comet_logger.log_metric("first_step_FBIoU", fbiou_value.item())
+                    comet_logger.log_metric("lr", cur_lr)
 
-            # comet_logger.log_batch(
-            #     batch_idx=batch_idx,
-            #     image_idx=tot_images,
-            #     batch_size=cur_batch_size,
-            #     epoch=epoch,
-            #     step=tot_steps,
-            #     substitution_step=i,
-            #     input_dict=input_dict,
-            #     gt=gt,
-            #     pred=outputs,
-            #     dataset=dataloader.dataset,
-            #     dataset_names=dataset_names,
-            #     phase="train",
-            # )
+            comet_logger.log_batch(
+                batch_idx=batch_idx,
+                image_idx=tot_images,
+                batch_size=cur_batch_size,
+                epoch=epoch,
+                step=tot_steps,
+                substitution_step=i,
+                input_dict=input_dict,
+                gt=gt,
+                pred=outputs,
+                dataset=dataloader.dataset,
+                dataset_names=dataset_names,
+                phase="train",
+            )
             substitutor.generate_new_points(outputs, gt)
-            if accelerator.is_local_main_process:
-                bar.set_postfix(
-                    {
-                        "loss": loss.item(),
-                        "mIoU": miou_value.item(),
-                        "FBIoU": fbiou_value.item(),
-                        "lr": cur_lr,
-                    }
-                )
+            bar.set_postfix(
+                {
+                    "loss": loss.item(),
+                    "mIoU": miou_value.item(),
+                    "FBIoU": fbiou_value.item(),
+                    "lr": cur_lr,
+                }
+            )
             tot_steps += 1
-        # if accelerator.is_local_main_process:
-        #     comet_logger.save_experiment_timed(accelerator)
+        comet_logger.save_experiment_timed()
         tot_images += cur_batch_size
-        logger.info(f"Batch {batch_idx} finished")
+
     logger.info(f"Waiting for everyone")
     accelerator.wait_for_everyone()
-    
     logger.info(f"Finished Epoch {epoch}")
     logger.info(f"Metrics")
     metric_dict = {
@@ -275,13 +267,12 @@ def train_epoch(
         "avg_first_step_FBIoU": first_step_fbiou.compute(),
     }
     for k, v in metric_dict.items():
-        logger.info(f"Train epoch {epoch} - {k}: {v}")
+        logger.info(f"{k}: {v}")
 
-    # if accelerator.is_local_main_process:
-    #     comet_logger.log_metrics(
-    #         metrics=metric_dict,
-    #         epoch=epoch,
-    #     )
+    comet_logger.log_metrics(
+        metrics=metric_dict,
+        epoch=epoch,
+    )
 
 
 def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
@@ -331,8 +322,6 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
                   metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
               )
             )
-            accelerator.print(f"epoch {epoch} - batch {batch_idx} fbiou_value: {fbiou_value}")
-            accelerator.print(f"epoch {epoch} - batch {batch_idx} miou_value: {miou_value}")
             loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
 
             avg_loss.update(loss.item())
@@ -363,15 +352,15 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             tot_steps += 1
             tot_images += cur_batch_size
 
-        if accelerator.is_local_main_process:
-            comet_logger.log_metrics(
-                {
-                    "mIoU": avg_jaccard.compute(),
-                    "FBIoU": avg_fbiou.compute(),
-                    "loss": avg_loss.compute(), 
-                },
-                epoch=epoch,
-            )
+
+        comet_logger.log_metrics(
+            {
+                "mIoU": avg_jaccard.compute(),
+                "FBIoU": avg_fbiou.compute(),
+                "loss": avg_loss.compute(), 
+            },
+            epoch=epoch,
+        )
     accelerator.wait_for_everyone() 
     logger.info(f"Validation epoch {epoch} finished")
     logger.info(f"Validation epoch {epoch} - mIoU: {avg_jaccard.compute()}")
@@ -404,23 +393,11 @@ def test(model, criterion, dataloader, comet_logger):
         comet_logger.log_metrics(
             {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
         )
-        
-
-@dataclass
-class InitProcessGroupKwargs(accelerate.utils.KwargsHandler):
-    """
-    Use this object in your [`Accelerator`] to customize the initialization of the distributed processes. Please refer
-    to the documentation of this
-    [method](https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
-    information on each argument.
-    """
-
-    init_method: Optional[str] = None
-    timeout: timedelta = timedelta(seconds=30)
 
 
 def train_and_test(
     args,
+    accelerator: Accelerator,
     model,
     train_loader,
     val_loader,
@@ -429,11 +406,6 @@ def train_and_test(
     train_params,
 ):
     global logger
-    kwargs = [
-        DistributedDataParallelKwargs(find_unused_parameters=True),
-        InitProcessGroupKwargs(),
-        ]
-    accelerator = Accelerator(even_batches=False, kwargs_handlers=kwargs)
     
     logger = get_logger(__name__, log_level="INFO")
     logger.info("Start training loop...")
@@ -481,14 +453,14 @@ def train_and_test(
                 train_params,
             )
 
-            # save_model(comet_logger.experiment, model, model._get_name())
+            comet_logger.log_training_state(epoch=epoch)
             if val_loader:
                 with comet_logger.experiment.validate():
                     logger.info(f"Running Model Validation")
                     validate(
                         model, criterion, val_loader, epoch, comet_logger, accelerator
                     )
-            # comet_logger.save_experiment(accelerator) 
+            comet_logger.save_experiment() 
 
     if test_loader:
         with comet_logger.experiment.test():
