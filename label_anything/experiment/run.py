@@ -11,7 +11,6 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
-from torchmetrics import JaccardIndex
 from tqdm import tqdm
 from transformers import get_scheduler
 
@@ -23,6 +22,7 @@ from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
     AverageMetricCollection,
+    MetricCollection,
     FBIoU,
     JaccardIndex,
     fbiou,
@@ -473,10 +473,16 @@ class Run:
     def test(self, dataloader, train_dataset):
         self.model.eval()
         total_loss = 0
-        jaccard_index = JaccardIndex(
-            task="multiclass", num_classes=dataloader.dataset.num_classes, ignore_index=-100
+        metrics = MetricCollection(
+            metrics=[
+                JaccardIndex(
+                    task="multiclass",
+                    num_classes=dataloader.dataset.num_classes,
+                    ignore_index=-100,
+                ),
+                FBIoU(ignore_index=-100),
+            ]
         )
-        fbiou = FBIoU(ignore_index=-100)
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
             self.model.generate_class_embeddings = (
                 self.model.module.generate_class_embeddings
@@ -508,18 +514,14 @@ class Run:
                 output = self.model.predict(image_dict)
                 total_loss += self.criterion(output, gt).item()  # sum up batch loss
                 output = torch.argmax(output, dim=1)
-                jaccard_index.update(output, gt)
-                fbiou.update(output, gt)
+                metrics.update(output, gt)
 
             total_loss /= len(dataloader)
-            jaccard_value = jaccard_index.compute()
-            fbiou_value = fbiou.compute()
+            metrics_values = metrics.compute()
 
-            self.comet_logger.log_metrics(
-                {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
-            )
-            logger.info(f"Test - mIoU: {jaccard_value}")
-            logger.info(f"Test - FBIoU: {fbiou_value}")
+            self.comet_logger.log_metrics(metrics=metrics_values)
+            for k, v in metrics_values.items():
+                logger.info(f"Test - {k}: {v}")
             logger.info(f"Test - Loss: {total_loss}")
 
 

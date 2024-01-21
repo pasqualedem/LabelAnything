@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 from torchmetrics.classification import BinaryJaccardIndex, JaccardIndex
+from torchmetrics import MetricCollection
 from torchmetrics.functional.classification import binary_jaccard_index, multiclass_jaccard_index
 
 from label_anything.utils.utils import RunningAverage
@@ -13,6 +14,7 @@ __all__ = [
     "fbiou",
     "binary_jaccard_index",
     "multiclass_jaccard_index"
+    "MetricCollection"
 ]
 
 class FBIoU(BinaryJaccardIndex):
