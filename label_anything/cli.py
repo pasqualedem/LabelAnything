@@ -20,8 +20,11 @@ def main():
 @click.option(
     "--parallel", default=False, help="Run the experiments in parallel", is_flag=True
 )
-def experiment(parameters, parallel):
-        run_experiment(param_path=parameters, parallel=parallel)
+@click.option(
+    "--only-create", default=False, help="Creates params files with running them", is_flag=True
+)
+def experiment(parameters, parallel, only_create):
+        run_experiment(param_path=parameters, parallel=parallel, only_create=only_create)
         
 
 @main.command("run")

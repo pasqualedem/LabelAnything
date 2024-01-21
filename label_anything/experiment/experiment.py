@@ -338,7 +338,7 @@ class Experimenter:
                         raise ex
                     yield status_manager.crash_run(ex)
 
-    def execute_runs(self):
+    def execute_runs(self, only_create=False):
         for _ in self.execute_runs_generator():
             pass
 
@@ -369,7 +369,7 @@ class ParallelExperimenter(Experimenter):
     def __init__(self):
         super().__init__()
 
-    def execute_runs_generator(self):
+    def execute_runs_generator(self, only_create=False):
         exp_log = ExpLog(
             self.exp_settings["tracking_dir"],
             self.exp_settings.name,
@@ -377,7 +377,9 @@ class ParallelExperimenter(Experimenter):
         )
         starting_run = self.exp_settings.start_from_run
         self.exp_settings.uuid = self.exp_settings.uuid or str(uuid.uuid4())[:8]
-        status_manager = StatusManager(len(self.grids), self.exp_settings.max_parallel_runs)
+        status_manager = StatusManager(
+            len(self.grids), self.exp_settings.max_parallel_runs
+        )
         if self.exp_settings.resume_last and self.exp_settings.search == "grid":
             logger.info("+ another run to finish!")
             grid_list = [
@@ -412,7 +414,7 @@ class ParallelExperimenter(Experimenter):
                 logger.info(
                     f"Running run {sr - 1} out of {grid_len} ({sum(len(self.grids[k]) for k in range(sg)) + sr} / {self.gs.total_runs - 1})"
                 )
-                run.launch()
+                run.launch(only_create=only_create)
                 print(self.EXP_FINISH_SEP)
                 exp_log.finish_run(sg, sr)
                 yield status_manager.finish_run()
@@ -436,8 +438,11 @@ class ParallelExperimenter(Experimenter):
                     logger.info(
                         f"Running run {j} out of {len(grid) - 1} ({sum(len(self.grids[k]) for k in range(i)) + j} / {self.gs.total_runs - 1})"
                     )
-                    run = ParallelRun(experiment_uuid=self.exp_settings.uuid, params={"experiment": {**self.exp_settings}, **params})
-                    metric = run.launch()
+                    run = ParallelRun(
+                        experiment_uuid=self.exp_settings.uuid,
+                        params={"experiment": {**self.exp_settings}, **params},
+                    )
+                    metric = run.launch(only_create=only_create)
                     print(self.EXP_FINISH_SEP)
                     exp_log.finish_run(i, j)
                     if self.exp_settings.search == "optim":
@@ -452,19 +457,25 @@ class ParallelExperimenter(Experimenter):
                         raise ex
                     yield status_manager.crash_run(ex)
 
-    def execute_runs(self):
-        for _ in self.execute_runs_generator():
+    def execute_runs(self, only_create=False):
+        for _ in self.execute_runs_generator(only_create=only_create):
             pass
 
 
-def experiment(param_path: str = "parameters.yaml", parallel: bool = False):
+def experiment(
+    param_path: str = "parameters.yaml",
+    parallel: bool = False,
+    only_create: bool = False,
+    preview: bool = False,
+):
     logger.info("Running experiment")
     settings = load_yaml(param_path)
     logger.info(f"Loaded parameters from {param_path}")
 
-    experimenter = ParallelExperimenter() if parallel else Experimenter()
+    experimenter = ParallelExperimenter() if parallel or only_create else Experimenter()
     experimenter.calculate_runs(settings)
-    experimenter.execute_runs()    
+    if not preview:
+        experimenter.execute_runs(only_create=only_create)
 
 
 def run(param_path: str = "parameters.yaml"):
@@ -474,7 +485,7 @@ def run(param_path: str = "parameters.yaml"):
     single_run = Run()
     single_run.init(settings)
     single_run.launch()
-    
+
 
 def preview(settings: Mapping, param_path: str = "local variable"):
     print(f"Loaded parameters from {param_path}")

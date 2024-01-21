@@ -283,12 +283,21 @@ class PromptImageEncoder(PromptEncoder):
         )  # For classes/examples with missing masks
 
     def _embed_masks(
-        self, masks: torch.Tensor, masks_flags: torch.Tensor
+        self, masks: torch.Tensor, masks_flags: torch.Tensor, chunk_size=None
     ) -> torch.Tensor:
         """Embeds mask inputs. (B, C, H, W)"""
-        B, M, C, _, _ = masks.shape
+        B, M, C, H, W = masks.shape
         masks = rearrange(masks, "b m c h w -> (b m c) 1 h w")
-        mask_embedding = self.mask_downscaling(masks)
+        if chunk_size is None:
+            mask_embedding = self.mask_downscaling(masks)
+        else:
+            for i in range(0, masks.shape[0], chunk_size):
+                mask_embedding = torch.zeros(
+                    B*M*C, self.embed_dim, H // 4, W // 4, device=self._get_device()
+                )
+                mask_embedding[i : i + chunk_size] = self.mask_downscaling(
+                    masks[i : i + chunk_size]
+                )
         mask_embedding = rearrange(
             mask_embedding, "(b m c) d h w -> b m c d h w", b=B, m=M
         )
@@ -324,6 +333,7 @@ class PromptImageEncoder(PromptEncoder):
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[Tuple[torch.Tensor, torch.Tensor]],
         masks: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        chunk_size: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense
@@ -387,7 +397,7 @@ class PromptImageEncoder(PromptEncoder):
 
         if masks is not None:
             mask_inputs, mask_flags = masks
-            dense_embeddings = self._embed_masks(mask_inputs, mask_flags)
+            dense_embeddings = self._embed_masks(mask_inputs, mask_flags, chunk_size)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(
                 1, 1, 1, -1, 1, 1
@@ -493,7 +503,7 @@ class PromptImageEncoder(PromptEncoder):
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
         sparse_embeddings, dense_embeddings = self.embed_points_masks(
-            points, boxes, masks
+            points, boxes, masks, chunk_size=chunk_size
         )
         sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m c) n d")
 

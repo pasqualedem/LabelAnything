@@ -1,9 +1,11 @@
 import copy
 from datetime import timedelta
 import gc
+import re
+import subprocess
 from typing import Optional
 from dataclasses import dataclass
-import accelerate
+import traceback
 
 import lovely_tensors as lt
 import torch
@@ -384,18 +386,18 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
     logger.info(f"Validation epoch {epoch} - mIoU: {avg_jaccard.compute()}")
     logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}") 
     logger.info(f"Validation epoch {epoch} - FBIoU: {avg_fbiou.compute()}")
-
+    
 
 def set_class_embeddings(
         model,
         accelerator,
         examples,
 ):
-    tmp_device = 'cuda:0' if torch.cuda.device_count() > 0 else 'cpu'
-    model.to(tmp_device)
-    examples = {k: v.unsqueeze(dim=0).to(tmp_device) for k, v in examples.items()}
+    model.to(model.device)
+    examples = {k: v.unsqueeze(dim=0).to(model.device) for k, v in examples.items()}
     example_size, num_classes = get_example_class_size(examples)
     chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
+    chunk_sizes = [1]
     passed = False
     i = 0
     while not passed and i < len(chunk_sizes):
@@ -405,16 +407,21 @@ def set_class_embeddings(
             passed = True
         except RuntimeError as e:
             if "out of memory" in str(e):
+                gc.collect()
                 torch.cuda.empty_cache()
                 logger.warning(f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}")
-                message = str(e)
+                exc = e
             else:
                 raise e
         i += 1
     if not passed:
-        raise RuntimeError(message)
-    model.class_embeddings = class_embeddings
-    return accelerator.prepare(model)
+        logger.error(f"Out of memory while generating class embeddings, raising exception")
+        raise exc
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.module.class_embeddings = class_embeddings
+    else:
+        model.class_embeddings = class_embeddings
+    return model
 
 
 def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator):
@@ -422,6 +429,9 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
     total_loss = 0
     jaccard_index = JaccardIndex(task='multiclass', num_classes=dataloader.dataset.num_classes)
     fbiou = FBIoU()
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.generate_class_embeddings = model.module.generate_class_embeddings
+        model.predict = model.module.predict
 
     jaccard_index, fbiou = accelerator.prepare(jaccard_index, fbiou)
 
@@ -432,9 +442,17 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
         train_dataset.img2cat_annotations,
     )
     model = set_class_embeddings(model, accelerator, examples)
+    
+    bar = tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        postfix={"loss": 0},
+        desc=f"Test: ",
+        disable=not accelerator.is_local_main_process,
+    )
 
     with torch.no_grad():
-        for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+        for batch_idx, batch_dict in bar:
             image_dict, gt = batch_dict
 
             output = model.predict(image_dict)
@@ -450,7 +468,10 @@ def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator)
         comet_logger.log_metrics(
             {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
         )
-
+        logger.info(f"Test - mIoU: {jaccard_value}")
+        logger.info(f"Test - FBIoU: {fbiou_value}")
+        logger.info(f"Test - Loss: {total_loss}")
+        
 
 def train_and_test(
     args,

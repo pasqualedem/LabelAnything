@@ -157,7 +157,7 @@ class ParallelRun:
         if "." not in sys.path:
             sys.path.extend(".")
 
-    def launch(self):
+    def launch(self, only_create=False):
         os.makedirs("out", exist_ok=True)
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         write_yaml(self.params, tmp_parameters_file.name)
@@ -172,5 +172,8 @@ class ParallelRun:
             self.slurm_script,
             self.slurm_script_first_parameter + tmp_parameters_file.name,
         ]
-        logger.info(f"Launching command: {' '.join(command)}")
-        subprocess.run(command)
+        if only_create:
+            logger.info(f"Creating command: {' '.join(command)}")
+        else:
+            logger.info(f"Launching command: {' '.join(command)}")
+            subprocess.run(command)
