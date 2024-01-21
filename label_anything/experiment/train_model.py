@@ -490,8 +490,6 @@ def train_and_test(
     )
     if val_loader:
         val_loader = accelerator.prepare(val_loader)
-    if test_loader:
-        test_loader = accelerator.prepare(test_loader)
 
     # Train the Model
     with comet_logger.experiment.train():
