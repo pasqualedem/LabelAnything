@@ -169,6 +169,7 @@ class Run:
 
         logger.info("Ending run")
         self.comet_logger.end()
+        logger.info("Run ended")
 
     def _get_lr(self):
         return (
@@ -475,12 +476,14 @@ class Run:
         total_loss = 0
         metrics = MetricCollection(
             metrics=[
-                JaccardIndex(
-                    task="multiclass",
-                    num_classes=dataloader.dataset.num_classes,
-                    ignore_index=-100,
+                self.accelerator.prepare(
+                    JaccardIndex(
+                        task="multiclass",
+                        num_classes=dataloader.dataset.num_classes,
+                        ignore_index=-100,
+                    )
                 ),
-                FBIoU(ignore_index=-100),
+                self.accelerator.prepare(FBIoU(ignore_index=-100)),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -488,8 +491,6 @@ class Run:
                 self.model.module.generate_class_embeddings
             )
             self.model.predict = self.model.module.predict
-
-        jaccard_index, fbiou = self.accelerator.prepare(jaccard_index, fbiou)
 
         examples = dataloader.dataset.extract_prompts(
             train_dataset.cat2img,
