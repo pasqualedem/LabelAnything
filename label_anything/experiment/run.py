@@ -38,6 +38,7 @@ from .utils import (
     set_class_embeddings,
     parse_params,
     comet_experiment,
+    nosync_accumulation
 )
 
 logger = get_logger(__name__)
@@ -321,58 +322,60 @@ class Run:
             )
             substitutor.reset(batch=batch_tuple)
             for i, (input_dict, gt) in enumerate(substitutor):
-                outputs = self._forward(batch_tuple, input_dict, gt, epoch, batch_idx)
-                if isinstance(outputs, RuntimeError):
-                    break
-                loss = self._backward(
-                    batch_idx, input_dict, outputs, gt, loss_normalizer
-                )
-                preds = outputs.argmax(dim=1)
+                accumulating = accumulate_substitution and i != loss_normalizer - 1
+                with nosync_accumulation(accumulating, self.accelerator, self.model):
+                    outputs = self._forward(batch_tuple, input_dict, gt, epoch, batch_idx)
+                    if isinstance(outputs, RuntimeError):
+                        break
+                    loss = self._backward(
+                        batch_idx, input_dict, outputs, gt, loss_normalizer
+                    )
+                    preds = outputs.argmax(dim=1)
 
-                if not accumulate_substitution or i == loss_normalizer - 1:
-                    self.optimizer.step()
-                    if self.scheduler is not None:
-                        self.scheduler.step()
-                    self.optimizer.zero_grad()
+                    if not accumulating:
+                        self.optimizer.step()
+                        if self.scheduler is not None:
+                            self.scheduler.step()
+                        self.optimizer.zero_grad()
 
-                loss_avg.update(loss.item())
-                self.comet_logger.log_metric("loss", loss.item())
+                    loss_avg.update(loss.item())
+                    self.comet_logger.log_metric("loss", loss.item())
 
-                metric_values = self._update_train_metrics(
-                    metrics,
-                    first_step_metrics,
-                    metric_values,
-                    preds,
-                    gt,
-                    outputs,
-                    tot_steps,
-                    i,
-                    loss,
-                    first_step_loss_avg,
-                )
-                self.comet_logger.log_batch(
-                    batch_idx=batch_idx,
-                    image_idx=tot_images,
-                    batch_size=cur_batch_size,
-                    epoch=epoch,
-                    step=tot_steps,
-                    substitution_step=i,
-                    input_dict=input_dict,
-                    gt=gt,
-                    pred=outputs,
-                    dataset=self.train_loader.dataset,
-                    dataset_names=dataset_names,
-                    phase="train",
-                )
-                substitutor.generate_new_points(outputs, gt)
-                bar.set_postfix(
-                    {
-                        **metric_values,
-                        "loss": loss.item(),
-                        "lr": self._get_lr(),
-                    }
-                )
-                tot_steps += 1
+                    metric_values = self._update_train_metrics(
+                        metrics,
+                        first_step_metrics,
+                        metric_values,
+                        preds,
+                        gt,
+                        outputs,
+                        tot_steps,
+                        i,
+                        loss,
+                        first_step_loss_avg,
+                    )
+                    self.comet_logger.log_batch(
+                        batch_idx=batch_idx,
+                        image_idx=tot_images,
+                        batch_size=cur_batch_size,
+                        epoch=epoch,
+                        step=tot_steps,
+                        substitution_step=i,
+                        input_dict=input_dict,
+                        gt=gt,
+                        pred=outputs,
+                        dataset=self.train_loader.dataset,
+                        dataset_names=dataset_names,
+                        phase="train",
+                    )
+                    substitutor.generate_new_points(outputs, gt)
+                    bar.set_postfix(
+                        {
+                            **metric_values,
+                            "loss": loss.item(),
+                            "lr": self._get_lr(),
+                        }
+                    )
+                    tot_steps += 1
             self.comet_logger.save_experiment_timed()
             tot_images += cur_batch_size
 

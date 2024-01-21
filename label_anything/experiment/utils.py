@@ -1,5 +1,6 @@
 import gc
 import os
+import contextlib
 from copy import deepcopy
 
 import comet_ml
@@ -199,3 +200,13 @@ def set_class_embeddings(
     else:
         model.class_embeddings = class_embeddings
     return model
+
+
+@contextlib.contextmanager
+def nosync_accumulation(accumulate=False, accelerator=None, model=None):
+    if accumulate:
+        with accelerator.no_sync(model):
+            yield
+    else:
+        with contextlib.nullcontext():
+            yield
