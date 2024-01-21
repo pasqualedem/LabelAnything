@@ -100,3 +100,4 @@ target/
 exp_log.csv
 /label_anything/data/raw/annotations
 label_anything/data/annotations/instances_voc12.json
+tmp
