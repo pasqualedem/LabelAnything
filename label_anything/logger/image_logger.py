@@ -12,11 +12,12 @@ import torch
 import tempfile
 import torch.nn.functional as F
 
+from datetime import datetime as dt
 from PIL import Image
-from comet_ml import OfflineExperiment
-from comet_ml.utils import local_timestamp
+from comet_ml import OfflineExperiment, Experiment
 from comet_ml.offline_utils import create_experiment_archive
 from comet_ml.offline import OFFLINE_EXPERIMENT_END
+from accelerate import Accelerator
 
 
 logger = get_logger(__name__)
@@ -29,7 +30,8 @@ def validate_polygon(polygon):
 class Logger:
     def __init__(
         self,
-        experiment,
+        experiment: Experiment,
+        accelerator: Accelerator,
         tmp_dir: str,
         log_frequency: int = 100,
         train_image_log_frequency: int = 1000,
@@ -38,6 +40,7 @@ class Logger:
         experiment_save_delta: int = None,
     ):
         self.experiment = experiment
+        self.accelerator = accelerator
         self.tmp_dir = tmp_dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
@@ -82,7 +85,7 @@ class Logger:
                 for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
             ]
             example_images = [
-                dataset.load_and_preprocess_images(dataset_name, ids[1:]) 
+                dataset.load_and_preprocess_images(dataset_name, ids[1:])
                 for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
             ]
             categories = dataset.categories
@@ -320,7 +323,8 @@ class Logger:
         # os.remove(tmp_path)
 
     def log_metric(self, name, metric, epoch=None):
-        self.experiment.log_metric(name, metric, epoch)
+        if self.accelerator.is_local_main_process:
+            self.experiment.log_metric(name, metric, epoch)
 
     def log_metrics(self, metrics, epoch=None):
         for name, metric in metrics.items():
@@ -331,6 +335,14 @@ class Logger:
             name,
             parameter,
         )
+
+    def log_training_state(self, epoch):
+        logger.info("Waiting for all processes to finish for saving training state")
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            tmp_dir = tempfile.mkdtemp(dir=self.tmp_dir)
+            self.accelerator.save_state(output_dir=tmp_dir)
+            self.experiment.log_asset_folder(tmp_dir, step=epoch)
 
     def save_experiment_timed(self):
         """
@@ -350,19 +362,26 @@ class Logger:
     def save_experiment(self):
         if type(self.experiment) != OfflineExperiment:
             return
-        self.experiment._write_experiment_meta_file()
-        self.experiment.add_tag("Partial")
+        logger.info("Waiting for all processes to finish for saving partial experiment")
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            self.experiment._write_experiment_meta_file()
+            self.experiment.add_tag("Partial")
 
-        zip_file_filename, _ = create_experiment_archive(
-            offline_directory=self.experiment.offline_directory,
-            offline_archive_file_name=self.experiment._get_offline_archive_file_name(),
-            data_dir=self.experiment.tmpdir,
-            logger=logger,
-        )
-
-        # Display the full command to upload the offline experiment
-        logger.info(f"Partial experiment saved at time {local_timestamp()}")
-        logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
+            zip_file_filename, _ = create_experiment_archive(
+                offline_directory=self.experiment.offline_directory,
+                offline_archive_file_name=self.experiment._get_offline_archive_file_name(),
+                data_dir=self.experiment.tmpdir,
+                logger=logger,
+            )
+            # Display the full command to upload the offline experiment
+            logger.info(
+                f"Partial experiment saved at time {dt.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            )
+            logger.info(OFFLINE_EXPERIMENT_END, zip_file_filename)
+        logger.info("Waiting for main process to finish saving partial experiment")
+        self.accelerator.wait_for_everyone()
+        logger.info("Finished saving partial experiment")
 
     def end(self):
         if "Partial" in self.experiment.tags:

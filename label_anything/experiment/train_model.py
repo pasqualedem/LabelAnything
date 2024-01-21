@@ -1,27 +1,44 @@
+import copy
+from datetime import timedelta
 import gc
+import re
+import subprocess
+from typing import Optional
+from dataclasses import dataclass
+import traceback
 
 import lovely_tensors as lt
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
+from label_anything.logger.text_logger import get_logger
+from label_anything.logger.image_logger import Logger
+from label_anything.experiment.substitution import Substitutor
+from label_anything.utils.utils import get_divisors, find_divisor_pairs, RunningAverage
+from label_anything.data.utils import random_batch
+from label_anything.loss import LabelAnythingLoss
+from .save import save_model
+from accelerate import Accelerator
+from label_anything.utils.metrics import FBIoU
 from torchmetrics.functional.classification import (
     binary_jaccard_index,
     multiclass_jaccard_index,
 )
 from tqdm import tqdm
 from transformers import get_scheduler
+from torchmetrics import JaccardIndex
 
 from label_anything.data.utils import random_batch
 from label_anything.experiment.substitution import Substitutor
 from label_anything.logger.image_logger import Logger
-from label_anything.logger.text_logger import get_logger
+# from label_anything.logger.text_logger import get_logger
+from accelerate.logging import get_logger
 from label_anything.loss import LabelAnythingLoss
-from label_anything.utils.metrics import fbiou, jaccard
 from label_anything.utils.utils import RunningAverage, find_divisor_pairs
 
 from .save import save_model
 
-logger = get_logger(__name__)
+logger = None
 
 
 def get_batch_size(batch_tuple):
@@ -29,8 +46,17 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
-
-
+    
+    
+def get_example_class_size(batch_input):
+    if batch_input.get("prompt_points") is not None:
+        return batch_input["prompt_points"].shape[1], batch_input["prompt_points"].shape[2]
+    if batch_input.get("prompt_bboxes") is not None:
+        return batch_input["prompt_bboxes"].shape[1], batch_input["prompt_bboxes"].shape[2]
+    if batch_input.get("prompt_masks") is not None:
+        return batch_input["prompt_masks"].shape[1], batch_input["prompt_masks"].shape[2]
+    
+    
 def check_nan(model, input_dict, output, gt, loss, step, train_params):
     if not train_params.get("check_nan", False):
         return
@@ -113,7 +139,6 @@ def train_epoch(
     accelerator: Accelerator,
     train_params,
 ):
-    lt.monkey_patch()
     model.train()
     avg_loss = RunningAverage()
     avg_miou = RunningAverage()
@@ -249,6 +274,8 @@ def train_epoch(
         comet_logger.save_experiment_timed()
         tot_images += cur_batch_size
 
+    logger.info(f"Waiting for everyone")
+    accelerator.wait_for_everyone()
     logger.info(f"Finished Epoch {epoch}")
     logger.info(f"Metrics")
     metric_dict = {
@@ -286,6 +313,7 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
         total=len(dataloader),
         postfix={"loss": 0},
         desc=f"Validation Epoch {epoch}",
+        disable=not accelerator.is_local_main_process,
     )
 
     with torch.no_grad():
@@ -303,29 +331,30 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             binary_gt[binary_gt != 0] = 1
 
             miou_value = torch.mean(
-                accelerator.gather(
-                    metrics["mIoU"](
-                        preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-                    )
+              accelerator.gather(
+                metrics["mIoU"](
+                  preds, gt, num_classes=outputs.shape[1], ignore_index=-100
                 )
+              )
             )
             fbiou_value = torch.mean(
-                accelerator.gather(
-                    metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
-                )
+              accelerator.gather(
+                  metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
+              )
             )
-            # loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
+            loss = torch.mean(accelerator.gather(criterion(outputs, gt)))
 
-            # avg_loss.update(loss.item())
+            avg_loss.update(loss.item())
             avg_jaccard.update(miou_value.item())
             avg_fbiou.update(fbiou_value.item())
-            bar.set_postfix(
-                {
-                    "mIoU": miou_value.item(),
-                    "FBIoU": fbiou_value.item(),
-                    # "loss": loss.item(),
-                }
-            )
+            if accelerator.is_local_main_process:
+                bar.set_postfix(
+                    {
+                        "mIoU": miou_value.item(),
+                        "FBIoU": fbiou_value.item(),
+                        "loss": loss.item(),
+                    }
+                )
             comet_logger.log_batch(
                 batch_idx=batch_idx,
                 image_idx=tot_images,
@@ -343,49 +372,110 @@ def validate(model, criterion, dataloader, epoch, comet_logger, accelerator):
             tot_steps += 1
             tot_images += cur_batch_size
 
+
         comet_logger.log_metrics(
             {
                 "mIoU": avg_jaccard.compute(),
                 "FBIoU": avg_fbiou.compute(),
-                # "loss": avg_loss.compute(), 
+                "loss": avg_loss.compute(), 
             },
             epoch=epoch,
         )
-    logger.info(f"Validation Epoch {epoch} finished")
-    logger.info(f"mIoU: {avg_jaccard.compute()}")
-    # logger.info(f"Loss: {avg_loss.compute()}") 
-    logger.info(f"FBIoU: {avg_fbiou.compute()}")
+    accelerator.wait_for_everyone() 
+    logger.info(f"Validation epoch {epoch} finished")
+    logger.info(f"Validation epoch {epoch} - mIoU: {avg_jaccard.compute()}")
+    logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}") 
+    logger.info(f"Validation epoch {epoch} - FBIoU: {avg_fbiou.compute()}")
+    
+
+def set_class_embeddings(
+        model,
+        accelerator,
+        examples,
+):
+    model.to(model.device)
+    examples = {k: v.unsqueeze(dim=0).to(model.device) for k, v in examples.items()}
+    example_size, num_classes = get_example_class_size(examples)
+    chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
+    chunk_sizes = [1]
+    passed = False
+    i = 0
+    while not passed and i < len(chunk_sizes):
+        try:
+            with torch.no_grad():
+                class_embeddings = model.generate_class_embeddings(examples, chunk_size=chunk_sizes[i])
+            passed = True
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                gc.collect()
+                torch.cuda.empty_cache()
+                logger.warning(f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}")
+                exc = e
+            else:
+                raise e
+        i += 1
+    if not passed:
+        logger.error(f"Out of memory while generating class embeddings, raising exception")
+        raise exc
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.module.class_embeddings = class_embeddings
+    else:
+        model.class_embeddings = class_embeddings
+    return model
 
 
-def test(model, criterion, dataloader, comet_logger):
+def test(model, criterion, dataloader, train_dataset, comet_logger, accelerator):
     model.eval()
     total_loss = 0
-    jaccard_value = 0
-    fbiou_value = 0
+    jaccard_index = JaccardIndex(task='multiclass', num_classes=dataloader.dataset.num_classes)
+    fbiou = FBIoU()
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model.generate_class_embeddings = model.module.generate_class_embeddings
+        model.predict = model.module.predict
 
-    examples = dataloader.dataset.get_examples()
-    class_embeddings = model.get_class_embeddings(examples)
+    jaccard_index, fbiou = accelerator.prepare(jaccard_index, fbiou)
+
+    examples = dataloader.dataset.extract_prompts(
+        train_dataset.cat2img,
+        train_dataset.img2cat,
+        train_dataset.images,
+        train_dataset.img2cat_annotations,
+    )
+    model = set_class_embeddings(model, accelerator, examples)
+    
+    bar = tqdm(
+        enumerate(dataloader),
+        total=len(dataloader),
+        postfix={"loss": 0},
+        desc=f"Test: ",
+        disable=not accelerator.is_local_main_process,
+    )
 
     with torch.no_grad():
-        for batch_idx, batch_dict in tqdm(enumerate(dataloader)):
+        for batch_idx, batch_dict in bar:
             image_dict, gt = batch_dict
 
-            output = model.predict(image_dict, class_embeddings)
-            jaccard_value += jaccard(output, gt, num_classes=output.shape[1])
-            fbiou_value += fbiou(output, gt, num_classes=output.shape[1])
+            output = model.predict(image_dict)
             total_loss += criterion(output, gt).item()  # sum up batch loss
+            output = torch.argmax(output, dim=1)
+            jaccard_index.update(output, gt)
+            fbiou.update(output, gt)
 
         total_loss /= len(dataloader)
-        jaccard_value /= len(dataloader)
-        fbiou_value /= len(dataloader)
+        jaccard_value = jaccard_index.compute()
+        fbiou_value = fbiou.compute()
 
         comet_logger.log_metrics(
             {"jaccard": jaccard_value, "loss": total_loss, "fbiou": fbiou_value},
         )
-
+        logger.info(f"Test - mIoU: {jaccard_value}")
+        logger.info(f"Test - FBIoU: {fbiou_value}")
+        logger.info(f"Test - Loss: {total_loss}")
+        
 
 def train_and_test(
     args,
+    accelerator: Accelerator,
     model,
     train_loader,
     val_loader,
@@ -393,9 +483,10 @@ def train_and_test(
     comet_logger: Logger,
     train_params,
 ):
+    global logger
+    
+    logger = get_logger(__name__, log_level="INFO")
     logger.info("Start training loop...")
-    kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-    accelerator = Accelerator(even_batches=False, kwargs_handlers=[kwargs])
 
     criterion = LabelAnythingLoss(**train_params["loss"])
     optimizer = AdamW(
@@ -420,8 +511,6 @@ def train_and_test(
     )
     if val_loader:
         val_loader = accelerator.prepare(val_loader)
-    if test_loader:
-        test_loader = accelerator.prepare(test_loader)
 
     # Train the Model
     with comet_logger.experiment.train():
@@ -440,18 +529,22 @@ def train_and_test(
                 train_params,
             )
 
-            save_model(comet_logger.experiment, model, model._get_name())
+            comet_logger.log_training_state(epoch=epoch)
             if val_loader:
                 with comet_logger.experiment.validate():
                     logger.info(f"Running Model Validation")
                     validate(
                         model, criterion, val_loader, epoch, comet_logger, accelerator
                     )
-            comet_logger.save_experiment()
+            comet_logger.save_experiment() 
 
     if test_loader:
         with comet_logger.experiment.test():
-            logger.info(f"Running Model Testing {args.name}")
-            test(model, criterion, test_loader, comet_logger)
+            for dataloader, support_dataset in test_loader:
+                dataloader = accelerator.prepare(dataloader)
+                test(model=model, criterion=criterion, dataloader=dataloader,
+                     train_dataset=support_dataset, comet_logger=comet_logger,
+                     accelerator=accelerator)
 
+    logger.info("Ending run")
     comet_logger.end()

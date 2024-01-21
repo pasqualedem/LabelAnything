@@ -10,6 +10,8 @@ import comet_ml
 import numpy as np
 import torch
 
+from accelerate import Accelerator, DistributedDataParallelKwargs
+
 from label_anything.data import get_dataloaders
 from label_anything.experiment.train_model import train_and_test
 from label_anything.logger.image_logger import Logger
@@ -29,7 +31,7 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
-def comet_experiment(comet_information: dict, params: dict):
+def comet_experiment(comet_information: dict, accelerator: Accelerator, params: dict):
     global logger
     logger_params = deepcopy(params.get("logger", {}))
     logger_params.pop("comet", None)
@@ -67,7 +69,7 @@ def comet_experiment(comet_information: dict, params: dict):
     experiment.add_tags(tags)
     experiment.log_parameters(params)
 
-    return Logger(experiment, **logger_params)
+    return Logger(experiment, accelerator, **logger_params)
 
 
 class Run:
@@ -94,6 +96,10 @@ class Run:
         ) = parse_params(self.params)
 
     def init(self, params: dict):
+        # set torch, numpy, random seeds
+        torch.manual_seed(42)
+        np.random.seed(42)
+        random.seed(42)
         self.seg_trainer = None
         self.parse_params(params)
         (
@@ -109,25 +115,24 @@ class Run:
             "project_name": self.params["experiment"]["name"],
             **comet_params,
         }
-
-        self.comet_logger = comet_experiment(comet_information, self.params)
+        kwargs = [
+            DistributedDataParallelKwargs(find_unused_parameters=True),
+            ]
+        self.accelerator = Accelerator(even_batches=False, kwargs_handlers=kwargs, split_batches=False)
+        self.comet_logger = comet_experiment(comet_information, self.accelerator, self.params)
         self.url = self.comet_logger.experiment.url
         self.name = self.comet_logger.experiment.name
-
+        
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
-            self.dataset_params, self.dataloader_params
+            self.dataset_params, self.dataloader_params, self.accelerator.num_processes
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
 
     def launch(self):
-        # set torch, numpy, random seeds
-        torch.manual_seed(42)
-        np.random.seed(42)
-        random.seed(42)
-
         train_and_test(
             self.params,
+            self.accelerator,
             self.model,
             self.train_loader,
             self.val_loader,
@@ -152,7 +157,7 @@ class ParallelRun:
         if "." not in sys.path:
             sys.path.extend(".")
 
-    def launch(self):
+    def launch(self, only_create=False):
         os.makedirs("out", exist_ok=True)
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         write_yaml(self.params, tmp_parameters_file.name)
@@ -167,5 +172,8 @@ class ParallelRun:
             self.slurm_script,
             self.slurm_script_first_parameter + tmp_parameters_file.name,
         ]
-        logger.info(f"Launching command: {' '.join(command)}")
-        subprocess.run(command)
+        if only_create:
+            logger.info(f"Creating command: {' '.join(command)}")
+        else:
+            logger.info(f"Launching command: {' '.join(command)}")
+            subprocess.run(command)
