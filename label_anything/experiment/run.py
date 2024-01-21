@@ -7,14 +7,11 @@ import tempfile
 import uuid
 from copy import deepcopy
 
-import comet_ml
 import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
 from torchmetrics import JaccardIndex
-from torchmetrics.functional.classification import (binary_jaccard_index,
-                                                    multiclass_jaccard_index)
 from tqdm import tqdm
 from transformers import get_scheduler
 
@@ -24,11 +21,24 @@ from label_anything.logger.image_logger import Logger
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
-from label_anything.utils.metrics import FBIoU
+from label_anything.utils.metrics import (
+    AverageMetricCollection,
+    FBIoU,
+    JaccardIndex,
+    fbiou,
+    multiclass_jaccard_index,
+)
 from label_anything.utils.utils import RunningAverage, write_yaml
 
-from .utils import (allocate_memory, check_nan, get_batch_size, handle_oom,
-                    set_class_embeddings, parse_params, comet_experiment)
+from .utils import (
+    allocate_memory,
+    check_nan,
+    get_batch_size,
+    handle_oom,
+    set_class_embeddings,
+    parse_params,
+    comet_experiment,
+)
 
 logger = get_logger(__name__)
 
@@ -45,10 +55,11 @@ class Run:
         self.model = None
         self.scheduler = None
         self.criterion = None
+        self.oom = None
         if "." not in sys.path:
             sys.path.extend(".")
 
-    def parse_params(self, params):
+    def parse_params(self, params: dict):
         self.params = deepcopy(params)
 
         (
@@ -95,7 +106,6 @@ class Run:
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
-        
 
     def launch(self):
         logger.info("Start training loop...")
@@ -159,22 +169,133 @@ class Run:
 
         logger.info("Ending run")
         self.comet_logger.end()
-        
+
+    def _get_lr(self):
+        return (
+            self.scheduler.get_lr()[0]
+            if self.scheduler
+            else self.train_params["initial_lr"]
+        )
+
+    def _forward(
+        self,
+        batch_tuple: tuple[dict, torch.tensor],
+        input_dict: dict,
+        gt: torch.tensor,
+        epoch: int,
+        batch_idx: int,
+    ):
+        try:
+            pass
+            outputs = self.model(input_dict)
+        except RuntimeError as e:
+            if "out of memory" in str(e):
+                handle_oom(
+                    self.model,
+                    input_dict,
+                    batch_tuple,
+                    self.optimizer,
+                    gt,
+                    epoch,
+                    batch_idx,
+                )
+                if self.oom:
+                    raise e
+                self.oom = True
+                return e
+            else:
+                raise e
+        self.oom = False
+        return outputs
+
+    def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
+        loss = self.criterion(outputs, gt) / loss_normalizer
+        self.accelerator.backward(loss)
+        check_nan(
+            self.model,
+            input_dict,
+            outputs,
+            gt,
+            loss,
+            batch_idx,
+            self.train_params,
+        )
+        return loss
+
+    def _update_metrics(
+        self,
+        metrics: AverageMetricCollection,
+        preds: torch.tensor,
+        gt: torch.tensor,
+        outputs,
+        tot_steps,
+    ):
+        metrics_dict = metrics.update(
+            preds, gt, num_classes=outputs.shape[1], ignore_index=-100
+        )
+        if tot_steps % self.comet_logger.log_frequency == 0:
+            for metric_name, metric_value in metrics_dict.items():
+                self.comet_logger.log_metric(metric_name, metric_value)
+        return metrics_dict
+
+    def _update_train_metrics(
+        self,
+        metrics: AverageMetricCollection,
+        first_step_metrics: AverageMetricCollection,
+        previous_metric_values: dict,
+        preds: torch.tensor,
+        gt: torch,
+        outputs: torch.tensor,
+        tot_steps: int,
+        i: int,
+        loss: torch.tensor,
+        first_step_loss_avg: RunningAverage,
+    ):
+        if tot_steps % self.comet_logger.log_frequency == 0:
+            metric_values = self._update_metrics(metrics, preds, gt, outputs, tot_steps)
+            if i == 0:
+                first_step_loss_avg.update(loss.item())
+                self.comet_logger.log_metric("first_step_loss", loss.item())
+                if tot_steps % self.comet_logger.log_frequency == 0:
+                    self._update_metrics(
+                        first_step_metrics, preds, gt, outputs, tot_steps
+                    )
+                    self.comet_logger.log_metric("lr", self._get_lr())
+        else:
+            metric_values = previous_metric_values
+        return metric_values
+
     def train_epoch(
         self,
-        epoch,
+        epoch: int,
     ):
         self.model.train()
-        avg_loss = RunningAverage()
-        avg_miou = RunningAverage()
-        avg_fbiou = RunningAverage()
-        first_step_loss = RunningAverage()
-        first_step_miou = RunningAverage()
-        first_step_fbiou = RunningAverage()
-        metrics = {
-            "mIoU": multiclass_jaccard_index,
-            "FBIoU": binary_jaccard_index,
-        }
+        accumulate_substitution = self.train_params.get(
+            "accumulate_substitution", False
+        )
+        metrics = AverageMetricCollection(
+            prefix="batch_",
+            metrics={
+                "mIoU": multiclass_jaccard_index,
+                "FBIoU": fbiou,
+            },
+            accelerator=self.accelerator,
+        )
+        first_step_metrics = AverageMetricCollection(
+            prefix="first_step_",
+            metrics={
+                "mIoU": multiclass_jaccard_index,
+                "FBIoU": fbiou,
+            },
+            accelerator=self.accelerator,
+        )
+        substitutor = Substitutor(
+            threshold=self.train_params.get("substitution_threshold", None),
+            num_points=self.train_params.get("num_points", 1),
+            substitute=self.train_params.get("substitute", True),
+        )
+        loss_avg = RunningAverage()
+        first_step_loss_avg = RunningAverage()
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
         bar = tqdm(
@@ -186,92 +307,48 @@ class Run:
         tot_steps = 0
         tot_images = 0
         loss_normalizer = 1
-        oom = False
-        cur_lr = self.train_params["initial_lr"]
+        self.oom = False
+        metric_values = None
 
         for batch_idx, batch_tuple in bar:
             batch_tuple, dataset_names = batch_tuple
             cur_batch_size = get_batch_size(batch_tuple)
-            substitutor = Substitutor(
-                batch_tuple,
-                threshold=self.train_params.get("substitution_threshold", None),
-                num_points=self.train_params.get("num_points", 1),
-                substitute=self.train_params.get("substitute", True),
-            )
             loss_normalizer = (
                 batch_tuple[1].shape[1] + 1
                 if self.train_params.get("accumulate_substitution", True)
                 else 1
             )
+            substitutor.reset(batch=batch_tuple)
             for i, (input_dict, gt) in enumerate(substitutor):
-                try:
-                    pass
-                    outputs = self.model(input_dict)
-                except RuntimeError as e:
-                    if "out of memory" in str(e):
-                        handle_oom(
-                            self.model, input_dict, batch_tuple, self.optimizer, gt, epoch, batch_idx
-                        )
-                        if oom:
-                            raise e
-                        oom = True
-                        break
-                    else:
-                        raise e
-                loss = self.criterion(outputs, gt) / loss_normalizer
-                self.accelerator.backward(loss)
-                check_nan(self.model, input_dict, outputs, gt, loss, batch_idx, self.train_params)
-                oom = False
-
+                outputs = self._forward(batch_tuple, input_dict, gt, epoch, batch_idx)
+                if isinstance(outputs, RuntimeError):
+                    break
+                loss = self._backward(
+                    batch_idx, input_dict, outputs, gt, loss_normalizer
+                )
                 preds = outputs.argmax(dim=1)
-                binary_preds = preds.clone()
-                binary_preds[binary_preds != 0] = 1
-                binary_gt = gt.clone()
-                binary_gt[binary_gt != 0] = 1
 
-                if (
-                    not self.train_params.get("accumulate_substitution", False)
-                    or i == loss_normalizer - 1
-                ):
+                if not accumulate_substitution or i == loss_normalizer - 1:
                     self.optimizer.step()
                     if self.scheduler is not None:
                         self.scheduler.step()
                     self.optimizer.zero_grad()
 
-                if tot_steps % self.comet_logger.log_frequency == 0:
-                    miou_value = torch.mean(
-                        self.accelerator.gather(
-                            metrics["mIoU"](
-                                preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-                            )
-                        )
-                    )
-                    fbiou_value = torch.mean(
-                        self.accelerator.gather(
-                            metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
-                        )
-                    )
+                loss_avg.update(loss.item())
+                self.comet_logger.log_metric("loss", loss.item())
 
-                    self.comet_logger.log_metric("batch_mIoU", miou_value.item())
-                    self.comet_logger.log_metric("batch_FBIoU", fbiou_value.item())
-
-                    avg_miou.update(miou_value.item())
-                    avg_fbiou.update(fbiou_value.item())
-                    cur_lr = (
-                        self.scheduler.get_lr()[0] if self.scheduler else self.train_params["initial_lr"]
-                    )
-
-                avg_loss.update(loss.item())
-                if i == 0:
-                    first_step_loss.update(loss.item())
-                    self.comet_logger.log_metric("first_step_loss", loss.item())
-                    if tot_steps % self.comet_logger.log_frequency == 0:
-                        first_step_miou.update(miou_value.item())
-                        first_step_fbiou.update(fbiou_value.item())
-                        self.comet_logger.log_metric("first_step_mIoU", miou_value.item())
-                        self.comet_logger.log_metric("first_step_FBIoU", fbiou_value.item())
-                        self.comet_logger.log_metric("lr", cur_lr)
-
+                metric_values = self._update_train_metrics(
+                    metrics,
+                    first_step_metrics,
+                    metric_values,
+                    preds,
+                    gt,
+                    outputs,
+                    tot_steps,
+                    i,
+                    loss,
+                    first_step_loss_avg,
+                )
                 self.comet_logger.log_batch(
                     batch_idx=batch_idx,
                     image_idx=tot_images,
@@ -289,10 +366,9 @@ class Run:
                 substitutor.generate_new_points(outputs, gt)
                 bar.set_postfix(
                     {
+                        **metric_values,
                         "loss": loss.item(),
-                        "mIoU": miou_value.item(),
-                        "FBIoU": fbiou_value.item(),
-                        "lr": cur_lr,
+                        "lr": self._get_lr(),
                     }
                 )
                 tot_steps += 1
@@ -304,12 +380,10 @@ class Run:
         logger.info(f"Finished Epoch {epoch}")
         logger.info(f"Metrics")
         metric_dict = {
-            "avg_loss": avg_loss.compute(),
-            "avg_jaccard": avg_miou.compute(),
-            "avg_fbiou": avg_fbiou.compute(),
-            "avg_first_step_loss": first_step_loss.compute(),
-            "avg_first_step_mIoU": first_step_miou.compute(),
-            "avg_first_step_FBIoU": first_step_fbiou.compute(),
+            **first_step_metrics.compute(),
+            **metrics.compute(),
+            "loss": loss_avg.compute(),
+            "first_step_loss": first_step_loss_avg.compute(),
         }
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
@@ -318,17 +392,19 @@ class Run:
             metrics=metric_dict,
             epoch=epoch,
         )
-        
+
     def validate(self, epoch):
         self.val_loader.dataset.reset_seed(42)
         self.model.eval()
         avg_loss = RunningAverage()
-        avg_jaccard = RunningAverage()
-        avg_fbiou = RunningAverage()
-        metrics = {
-            "mIoU": multiclass_jaccard_index,
-            "FBIoU": binary_jaccard_index,
-        }
+        metrics = AverageMetricCollection(
+            prefix="batch_",
+            metrics={
+                "mIoU": multiclass_jaccard_index,
+                "FBIoU": fbiou,
+            },
+            accelerator=self.accelerator,
+        )
 
         tot_steps = 0
         tot_images = 0
@@ -339,46 +415,31 @@ class Run:
             desc=f"Validation Epoch {epoch}",
             disable=not self.accelerator.is_local_main_process,
         )
+        substitutor = Substitutor(substitute=False)
 
         with torch.no_grad():
             for batch_idx, batch_tuple in bar:
                 batch_dict, dataset_names = batch_tuple
-                batch_dict = next(iter(Substitutor(batch_dict, substitute=False)))
+                substitutor.reset(batch=batch_dict)
+                batch_dict = next(iter(substitutor))
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
 
                 outputs = self.model(image_dict)
                 preds = outputs.argmax(dim=1)
-                binary_preds = preds.clone()
-                binary_preds[binary_preds != 0] = 1
-                binary_gt = gt.clone()
-                binary_gt[binary_gt != 0] = 1
 
-                miou_value = torch.mean(
-                self.accelerator.gather(
-                    metrics["mIoU"](
-                    preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-                    )
-                )
-                )
-                fbiou_value = torch.mean(
-                self.accelerator.gather(
-                    metrics["FBIoU"](binary_preds, binary_gt, ignore_index=-100)
-                )
+                metrics_value = self._update_metrics(
+                    metrics, preds, gt, outputs, tot_steps
                 )
                 loss = torch.mean(self.accelerator.gather(self.criterion(outputs, gt)))
 
                 avg_loss.update(loss.item())
-                avg_jaccard.update(miou_value.item())
-                avg_fbiou.update(fbiou_value.item())
-                if self.accelerator.is_local_main_process:
-                    bar.set_postfix(
-                        {
-                            "mIoU": miou_value.item(),
-                            "FBIoU": fbiou_value.item(),
-                            "loss": loss.item(),
-                        }
-                    )
+                bar.set_postfix(
+                    {
+                        **metrics_value,
+                        "loss": loss.item(),
+                    }
+                )
                 self.comet_logger.log_batch(
                     batch_idx=batch_idx,
                     image_idx=tot_images,
@@ -396,28 +457,30 @@ class Run:
                 tot_steps += 1
                 tot_images += cur_batch_size
 
-
             self.comet_logger.log_metrics(
                 {
-                    "mIoU": avg_jaccard.compute(),
-                    "FBIoU": avg_fbiou.compute(),
-                    "loss": avg_loss.compute(), 
+                    **metrics.compute(),
+                    "loss": avg_loss.compute(),
                 },
                 epoch=epoch,
             )
-        self.accelerator.wait_for_everyone() 
+        self.accelerator.wait_for_everyone()
         logger.info(f"Validation epoch {epoch} finished")
-        logger.info(f"Validation epoch {epoch} - mIoU: {avg_jaccard.compute()}")
-        logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}") 
-        logger.info(f"Validation epoch {epoch} - FBIoU: {avg_fbiou.compute()}")
-        
+        for k, v in metrics.compute().items():
+            logger.info(f"Validation epoch {epoch} - {k}: {v}")
+        logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
+
     def test(self, dataloader, train_dataset):
         self.model.eval()
         total_loss = 0
-        jaccard_index = JaccardIndex(task='multiclass', num_classes=dataloader.dataset.num_classes)
-        fbiou = FBIoU()
+        jaccard_index = JaccardIndex(
+            task="multiclass", num_classes=dataloader.dataset.num_classes, ignore_index=-100
+        )
+        fbiou = FBIoU(ignore_index=-100)
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            self.model.generate_class_embeddings = self.model.module.generate_class_embeddings
+            self.model.generate_class_embeddings = (
+                self.model.module.generate_class_embeddings
+            )
             self.model.predict = self.model.module.predict
 
         jaccard_index, fbiou = self.accelerator.prepare(jaccard_index, fbiou)
@@ -428,8 +491,8 @@ class Run:
             train_dataset.images,
             train_dataset.img2cat_annotations,
         )
-        self.model = set_class_embeddings(self.model, self.accelerator, examples)
-        
+        self.model = set_class_embeddings(self.model, examples)
+
         bar = tqdm(
             enumerate(dataloader),
             total=len(dataloader),

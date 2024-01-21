@@ -116,15 +116,19 @@ class Substitutor:
     list_keys_to_separate = []
 
     def __init__(
-        self, batch: dict, threshold: float = None, num_points: int = 1, substitute=True
+        self, threshold: float = None, num_points: int = 1, substitute=True
     ) -> None:
-        self.batch, self.ground_truths = batch
-        self.example_classes = self.batch["classes"]
+        self.example_classes = None
         self.threshold = threshold
         self.num_points = num_points
         self.substitute = self.calculate_if_substitute() and substitute
         self.it = 0
         self.prompt_processor = PromptsProcessor()
+        
+    def reset(self, batch: dict) -> None:
+        self.it = 0
+        self.batch, self.ground_truths = batch
+        self.example_classes = self.batch["classes"]
 
     def calculate_if_substitute(self):
         if self.threshold is None:
