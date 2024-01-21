@@ -219,7 +219,7 @@ class CocoLVISDataset(Dataset):
 
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
-    def __load_safe(self, img_data):
+    def _load_safe(self, img_data):
         f = load_file(f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors")
         embedding, gt = None, None
         if self.load_embeddings:
@@ -357,7 +357,7 @@ class CocoLVISDataset(Dataset):
     def _get_images_or_embeddings(self, image_ids):
         if self.load_embeddings:
             embeddings_gts = [
-                self.__load_safe(image_data)
+                self._load_safe(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
             ]
             embeddings, gts = zip(*embeddings_gts)
@@ -372,7 +372,7 @@ class CocoLVISDataset(Dataset):
             gts = None
             if self.load_gts:
                 gts = [
-                    self.__load_safe(image_data)[1]
+                    self._load_safe(image_data)[1]
                     for image_data in [self.images[image_id] for image_id in image_ids]
                 ]
             return torch.stack(images), "images", gts
@@ -552,62 +552,189 @@ class CocoLVISDataset(Dataset):
 
 class CocoLVISTestDataset(CocoLVISDataset):
     def __init__(
-        self,
-        instances_path,  # Path
-        img_dir=None,  # directory (only if images have to be loaded from disk)
-        max_num_examples=10,  # number of max examples to be given for the target image
-        preprocess=ToTensor(),  # preprocess step
-        j_index_value=0.5,  # threshold for extracting examples
-        seed=42,  # for reproducibility
-        max_mum_coords=10,  # max number of coords for each example for each class
+            self,
+            name,
+            instances_path,  # Path
+            img_dir=None,  # directory (only if images have to be loaded from disk)
+            max_num_examples=10,  # number of max examples to be given for the target image
+            preprocess=ToTensor(),  # preprocess step
+            emb_dir=None,
+            seed=42,  # for reproducibility
+            load_embeddings=False,  # max number of coords for each example for each class
+            load_gts=False,
+            add_box_noise=False,
     ):
-        super(CocoLVISTestDataset, self).__init__(
-            instances_path=instances_path,
-            img_dir=img_dir,
-            max_num_examples=max_num_examples,
-            preprocess=preprocess,
-            seed=seed,
-        )
+        super(CocoLVISTestDataset, self).__init__(name=name,
+                                                  instances_path=instances_path,
+                                                  img_dir=img_dir,
+                                                  max_num_examples=max_num_examples,
+                                                  preprocess=preprocess,
+                                                  seed=seed,
+                                                  add_box_noise=add_box_noise,
+                                                  emb_dir=emb_dir,
+                                                  load_embeddings=load_embeddings,
+                                                  load_gts=load_gts,)
+        self.num_classes = len(list(self.cat2img.keys()))
 
-    def _extract_examples(self):
+    def _extract_examples(
+            self,
+            cat2img: dict,
+            img2cat: dict
+    ) -> list[int]:
         prompt_images = set()
-        for cat_id in self.categories.keys():
-            if cat_id not in self.cat2img:
+        categories = list(self.categories.keys())
+        random.shuffle(categories)
+        for cat_id in categories:
+            if cat_id not in cat2img:
                 continue
-            cat_images = self.cat2img[cat_id]
-            _, img = max(map(lambda x: (len(self.img2cat[x]), x), cat_images))
+            cat_images = cat2img[cat_id]
+            _, img = max(map(lambda x: (len(img2cat[x]), x), cat_images))
             prompt_images.add(img)
         return prompt_images
 
-    def extract_prompts(self):
-        image_ids = self._extract_examples()
-        cat_ids = list(self.categories.keys())
-        bboxes, masks, points, _, image_sizes = self._get_annotations(
-            image_ids, cat_ids
-        )
+    def _get_images_or_embeddings(self, image_ids):
+        if self.load_embeddings:
+            embeddings_gts = [
+                self._load_safe(data)
+                for data in image_ids
+            ]
+            embeddings, gts = zip(*embeddings_gts)
+            if not self.load_gts:
+                gts = None
+            return torch.stack(embeddings), "embeddings", gts
+        images = [
+            self._load_and_preprocess_image(image_data)
+            for image_data in image_ids
+        ]
+        gts = None
+        if self.load_gts:
+            gts = [
+                self._load_safe(image_data)[1]
+                for image_data in image_ids
+            ]
+        return torch.stack(images), "images", gts
 
-        bboxes, flag_bboxes = self.annotations_to_tensor(
-            bboxes, image_sizes, PromptType.BBOX
-        )
-        masks, flag_masks = self.annotations_to_tensor(
-            masks, image_sizes, PromptType.MASK
-        )
-        points, flag_points = self.annotations_to_tensor(
-            points, image_sizes, PromptType.POINT
-        )
-        return bboxes, masks, points
+    def extract_prompts(
+            self,
+            cat2img: dict,
+            img2cat: dict,
+            images: dict,
+            img2cat_annotations: dict,
+    ) -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor):
+        image_ids = self._extract_examples(cat2img, img2cat)
+        prompt_images = [images[x] for x in image_ids]
+
+        prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(prompt_images)
+
+        cat_ids = list(self.categories.keys())
+        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
+                                                                      images, img2cat_annotations)
+
+        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
+        masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
+        points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
+        return {
+            prompt_images_key: prompt_images,
+            "prompt_masks": masks,
+            "flag_masks": flag_masks,
+            "prompt_points": points,
+            "flag_points": flag_points,
+            "prompt_bboxes": bboxes,
+            "flag_bboxes": flag_bboxes,
+            "dims": torch.as_tensor(image_sizes),
+        }
+
+    def _get_annotations(
+        self,
+        image_ids: list,
+        cat_ids: list,
+        images: dict,
+        img2cat_annotations: dict,
+    ) -> (list, list, list, list, list):
+        bboxes = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+        points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
+
+        # get prompts from annotations
+        classes = [list() for _ in image_ids]
+        img_sizes = [
+            (images[img_id]["height"], images[img_id]["width"])
+            for img_id in image_ids
+        ]
+
+        for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
+            for cat_id in cat_ids:
+                # for each pair (image img_id and category cat_id)
+                if cat_id not in img2cat_annotations[img_id]:
+                    # the chosen category is not in the iamge
+                    continue
+
+                classes[i].append(cat_id)
+                number_of_annotations = len(img2cat_annotations[img_id][cat_id])
+                if number_of_annotations > self.max_points_annotations:
+                    # if there are too many annotations, sample a mask
+                    prompt_types = [PromptType.MASK] * number_of_annotations
+                else:
+                    prompt_types = random.choices(
+                        list(PromptType), k=number_of_annotations
+                    )
+                for ann, prompt_type in zip(img2cat_annotations[img_id][cat_id], prompt_types):
+                    if prompt_type == PromptType.BBOX:
+                        # take the bbox
+                        bboxes[i][cat_id].append(
+                            self.prompts_processor.convert_bbox(
+                                ann["bbox"],
+                                *img_size,
+                                noise=self.add_box_noise,
+                            ),
+                        )
+                    elif prompt_type == PromptType.MASK:
+                        # take the mask
+                        masks[i][cat_id].append(
+                            self.prompts_processor.convert_mask(
+                                ann["segmentation"],
+                                *img_size,
+                            )
+                        )
+                    elif prompt_type == PromptType.POINT:
+                        # take the point
+                        mask = self.prompts_processor.convert_mask(
+                            ann["segmentation"],
+                            *img_size,
+                        )
+                        points[i][cat_id].append(
+                            self.prompts_processor.sample_point(mask)
+                        )
+
+        # convert the lists of prompts to arrays
+        for i in range(len(image_ids)):
+            for cat_id in cat_ids:
+                bboxes[i][cat_id] = np.array((bboxes[i][cat_id]))
+                masks[i][cat_id] = np.array((masks[i][cat_id]))
+                points[i][cat_id] = np.array((points[i][cat_id]))
+        return bboxes, masks, points, classes, img_sizes
 
     def __getitem__(self, item):
-        base_image_data = self.images[self.image_ids[item]]
-        image = self._load_image(base_image_data)
-        if self.preprocess:
-            image = self.preprocess(image)
-        img_id = base_image_data["id"]
-        gt = self.get_ground_truths([img_id], self.img2cat[img_id])
-        gt = torch.tensor(gt[0])
+        image_id = self.image_ids[item]
+        data, data_key, gt = self._get_images_or_embeddings([self.images[image_id]])
+        cat_ids = list(self.cat2img.keys())
+        if gt is None:
+            gt = self.get_ground_truths([image_id], cat_ids)[0]
+        else:
+            gt = gt[0]
+            # convert the ground truths to the right format
+            ground_truths_copy = gt.clone()
+            # set ground_truths to all 0s
+            gt = torch.zeros_like(gt)
+            for i, cat_id in enumerate(cat_ids):
+                if cat_id == -1:
+                    continue
+                gt[ground_truths_copy == cat_id] = i
+
+
         dim = torch.as_tensor(gt.size())
         data_dict = {
-            "image": image,
+            data_key: data,
             "dim": dim,
             "gt": gt,
         }
@@ -615,8 +742,9 @@ class CocoLVISTestDataset(CocoLVISDataset):
 
     def collate_fn(
         self, batched_input: List[Dict[str, Any]]
-    ) -> Tuple[Dict[str, Any], torch.Tensor]:
-        images = torch.stack([x["image"] for x in batched_input])
+    ) -> (Dict[str, Any], torch.Tensor):
+        data_key = 'images' if 'images' in batched_input[0].keys() else 'embeddings'
+        images = torch.stack([x[data_key] for x in batched_input])
 
         dims = torch.stack([x["dim"] for x in batched_input])
 
@@ -624,11 +752,11 @@ class CocoLVISTestDataset(CocoLVISDataset):
         gt = torch.stack([utils.collate_gts(x["gt"], max_dims) for x in batched_input])
 
         data_dict = {
-            "images": images,
+            data_key: images,
             "dims": dims,
         }
 
-        return data_dict, gt
+        return data_dict, gt.long()
 
 
 class LabelAnyThingOnlyImageDataset(Dataset):

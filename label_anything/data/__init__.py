@@ -2,6 +2,7 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, PILToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
+from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 
 
@@ -61,8 +62,32 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         )
     else:
         val_dataloader = None
+    if test_datasets_params:
+        test_datasets = []
+        for v in test_datasets_params.values():
+            support = v.pop("support")
+            support_dataset_params = datasets_params.get(support)
+            test_datasets.append(
+                (
+                    CocoLVISTestDataset(preprocess=preprocess, **v),
+                    CocoLVISDataset(**support_dataset_params),
+                )
+            )
+        test_dataloaders = [
+            (
+                DataLoader(
+                    dataset=data,
+                    **dataloader_args,
+                    collate_fn=data.collate_fn,
+                ),
+                support,
+            )
+            for data, support in test_datasets
+        ]
+    else:
+        test_dataloaders = None
     return (
         train_dataloader,
         val_dataloader,
-        None,
-    )  # placeholder for val and test loaders until Raffaele implements them
+        test_dataloaders,
+    )

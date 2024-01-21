@@ -5,58 +5,42 @@ experiment:
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
-  search: grid
-  # n_trials: 5 
 
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-
   logger:
     log_frequency: [10]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [1000]
-    experiment_save_delta: [3600] # save experiment every n seconds
     tmp_dir: [tmp]
+    experiment_save_delta: [3600] # save experiment every n seconds
     comet:
       tags: [[Test]] # list of tags to attach to the run in logger platform
-      offline: [False]
+      offline: [True]
 
   train_params:
     loss:
-      class_weighting: [True]
-      components:
-        - 
-          focal:
-            weight: 0.485
-          dice: 
-            weight: 0.05
-          rmi:
-            weight: 0.485
-        -
-          focal:
-            weight: 0.95
-          dice: 
-            weight: 0.05
+      rmi:
+        weight: [1.0]
+        params:
+          weight: [True]
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
     max_epochs: [1]
     compile: [False]
-    initial_lr: [0.00001]
+    initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
-    scheduler:
-      type: [cosine]
-      warmup_steps: [2500]
-    substitute: [False]
-    accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    substitute: [True]
+    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
 
   model:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    #checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    #use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -89,6 +73,8 @@ parameters:
         img_dir: *img_dir
         seed: *seed
         add_box_noise: [ False ]
+        load_embeddings: [ False ]
+        load_gts: [ False ]
     common:
       do_subsample: [True]
       add_box_noise: [True]

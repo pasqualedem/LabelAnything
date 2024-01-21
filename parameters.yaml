@@ -65,12 +65,22 @@ parameters:
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
       val_coco:
         name: [coco]
-        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json]
+        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json]
         emb_dir: *emb_dir
         img_dir: *img_dir
         seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
+      test_coco:
+        support: [coco]
+        name: [ coco ]
+        instances_path: *instance_dir
+        img_dir: *img_dir
+        emb_dir: *emb_dir
+        seed: *seed
+        add_box_noise: [ False ]
+        load_embeddings: [True]
+        load_gts: [True]
     common:
       do_subsample: [True]
       add_box_noise: [True]

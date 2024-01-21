@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
 import os
-from shapely.geometry import Polygon
+from pycocotools import mask as mask_utils
 import xml.etree.ElementTree as ET
 import pathlib
+from scipy.ndimage import label, binary_dilation
 from PIL import Image
 import json
 
@@ -62,18 +63,27 @@ def _get_images(root, image_id):
 
 def _get_masks(root, image_id):
     mask_file = os.path.join(root, "SegmentationClass", image_id + ".png")
-    mask = np.array(Image.open(mask_file).convert("P"))
+    mask_array = np.array(Image.open(mask_file))
+    unique_values = np.unique(mask_array)
+    masks = {}
 
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    for value in unique_values:
+        if value in [0, 255]:
+            # If the value is 0 or 255, add it to the mask for 0
+            _ = masks.get(0, np.zeros_like(mask_array)) | (mask_array == value)
+        else:
+            # Apply binary dilation before finding connected components
+            dilated_mask = binary_dilation(mask_array == value)
+            labeled_array, num_features = label(dilated_mask)
+            for i in range(1, num_features + 1):
+                masks[f"{value}_{i}"] = np.where(labeled_array == i, 1, 0)
 
-    polygons = []
-    for contour in contours:
-        contour = np.squeeze(contour, axis=1)
-        if len(contour) >= 4:
-            polygon = Polygon(contour)
-            polygons.append(polygon)
+    rle_masks = {}
+    for key, value in masks.items():
+        rle = mask_utils.encode(np.asfortranarray(value.astype(np.uint8)))
+        rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
 
-    return polygons
+    return rle_masks
 
 
 def _get_annotations(root, image_id):
@@ -95,8 +105,7 @@ def _get_annotations(root, image_id):
     return (np.array(boxes, dtype=np.float32), np.array(labels))
 
 
-def create_lvis_style_annotation(ids, images, boxes, polygons, labels, annotations):
-    print("Creating annotations...")
+def create_lvis_style_annotation(ids, images, boxes, rle_masks, labels, annotations):
     # generate set of categories
     annotations_images = []
     annotations_segmentations = []
@@ -120,11 +129,11 @@ def create_lvis_style_annotation(ids, images, boxes, polygons, labels, annotatio
         annotations_images.append(image)
 
     i = 0
-    for enum, (box, polygon, label) in enumerate(zip(boxes, polygons, labels)):
-        for b, p, l in zip(box, polygon, label):
+    for enum, (box, rle, label) in enumerate(zip(boxes, rle_masks, labels)):
+        for b, (_, rle_value), l in zip(box, rle.items(), label):
             annotation = {
-                "segmentation": [list(p.exterior.coords)],
-                "area": p.area,
+                "segmentation": rle_value["counts"],
+                "area": int(mask_utils.area(rle_value)),
                 "image_id": enum,
                 "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
                 "category_id": category_to_id[l],
@@ -136,7 +145,6 @@ def create_lvis_style_annotation(ids, images, boxes, polygons, labels, annotatio
     annotations["images"] = annotations_images
     annotations["annotations"] = annotations_segmentations
     annotations["categories"] = annotations_categories
-    print("Generate instances.json file")
     return annotations
 
 
@@ -157,11 +165,15 @@ if __name__ == "__main__":
         print("Downloading VOC2012 dataset...")
         os.system(download_command)
         os.system(tar_command)
+    else:
+        print("VOC2012 dataset already exists!")
 
     # generate dataset.txt
     if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
         print("Generating dataset.txt...")
         generate_dataset_file(VOC2012)
+    else:
+        print("dataset.txt already exists!")
 
     # path dataset.txt
     images_file = os.path.join(
