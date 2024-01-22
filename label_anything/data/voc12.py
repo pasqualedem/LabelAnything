@@ -148,6 +148,24 @@ def create_lvis_style_annotation(ids, images, boxes, rle_masks, labels, annotati
     return annotations
 
 
+def gen(file):
+    ids = _read_image_ids(file)
+    images, boxes, polygons, labels = get_items(VOC2012, ids)
+
+    # generate file, if you want to use it in the future
+    annotations = create_lvis_style_annotation(
+        ids,
+        images,
+        boxes,
+        polygons,
+        labels,
+        instances_voc12,
+    )
+
+    with open(f"instances_voc12_{os.path.basename(file).split('.')[0]}.json", "w") as f:
+        json.dump(annotations, f)
+
+
 def generate_dataset_file(voc_folder):
     files = os.listdir(os.path.join(voc_folder, "ImageSets/Segmentation/"))
     contents = ""
@@ -168,32 +186,10 @@ if __name__ == "__main__":
     else:
         print("VOC2012 dataset already exists!")
 
-    # generate dataset.txt
-    if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
-        print("Generating dataset.txt...")
-        generate_dataset_file(VOC2012)
-    else:
-        print("dataset.txt already exists!")
+    train = os.path.join(VOC2012, "ImageSets/Segmentation/train.txt")
+    val = os.path.join(VOC2012, "ImageSets/Segmentation/val.txt")
 
-    # path dataset.txt
-    images_file = os.path.join(
-        os.path.join(VOC2012, "ImageSets", "Segmentation", "dataset.txt")
-    )
-
-    ids = _read_image_ids(images_file)
-    images, boxes, polygons, labels = get_items(VOC2012, ids)
-
-    # generate file, if you want to use it in the future
-    annotations = create_lvis_style_annotation(
-        ids,
-        images,
-        boxes,
-        polygons,
-        labels,
-        instances_voc12,
-    )
-
-    with open("instances_voc12.json", "w") as file:
-        json.dump(annotations, file)
+    gen(train)
+    gen(val)
 
     print("Done!")
