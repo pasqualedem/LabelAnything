@@ -70,11 +70,8 @@ class CocoLVISDataset(Dataset):
         preprocess=ToTensor(),  # preprocess step
         seed=42,  # for reproducibility
         emb_dir=None,
-        n_folds=-1,  # for fss benchmark (coco20i)
-        val_fold=-1,  # for fss benchmark (coco20i)
         load_embeddings=False,
         load_gts=False,  # gts are in emb_dir files
-        split="train",  # for fss benchmark (coco20i)
         do_subsample=True,
         add_box_noise=True,
     ):
@@ -99,14 +96,6 @@ class CocoLVISDataset(Dataset):
         self.annotations = {x["id"]: x for x in instances["annotations"]}
         # id to category
         self.categories = {x["id"]: x for x in instances["categories"]}
-
-        # to use with FSS benchmarks
-        self.n_folds = n_folds
-        self.val_fold = val_fold
-        self.split = split
-        if self.val_fold > -1:
-            assert self.n_folds > 0
-            self.__prepare_benchmark()
 
         # useful dicts
         (
@@ -152,31 +141,6 @@ class CocoLVISDataset(Dataset):
         self.rng = random.Random(self.seed)
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_rng = torch.Generator().manual_seed(self.seed)
-
-    def __prepare_benchmark(self):
-        """Prepare the dataset for benchmark training."""
-        n_categories = len(self.categories)
-        n_val_categories = n_categories // self.n_folds
-        val_categories_idxs = set(
-            self.val_fold + self.n_folds * v for v in range(n_val_categories)
-        )
-        train_categories_idxs = (
-            set(x for x in range(n_categories)) - val_categories_idxs
-        )
-        categories_idxs = (
-            val_categories_idxs if self.split == "val" else train_categories_idxs
-        )
-        self.categories = {
-            k: v
-            for i, (k, v) in enumerate(self.categories.items())
-            if i in categories_idxs
-        }
-        category_ids = set(self.categories.keys())
-        self.annotations = {
-            k: v
-            for k, v in self.annotations.items()
-            if v["category_id"] in category_ids
-        }
 
     def __load_annotation_dicts(self) -> (dict, dict):
         """Prepares dictionaries for fast access to annotations.
@@ -379,21 +343,12 @@ class CocoLVISDataset(Dataset):
 
     def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
         idx, num_examples = idx_num_examples
-        if self.split == "train":
-            base_image_data = self.images[self.image_ids[idx]]
-            image_ids, aux_cat_ids = self._extract_examples(
-                base_image_data, num_examples
-            )
-            cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-            cat_ids.insert(0, -1)  # add the background class
-        else:
-            # take a random category (use numpy)
-            cat_id = self.np_rng.choice(list(self.categories.keys()))
-            # take two random images from that category
-            image_ids = self.np_rng.choice(
-                list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
-            )
-            cat_ids = [-1, cat_id]
+        base_image_data = self.images[self.image_ids[idx]]
+        image_ids, aux_cat_ids = self._extract_examples(
+            base_image_data, num_examples
+        )
+        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids.insert(0, -1)  # add the background class
 
         # load, stack and preprocess the images
         images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
