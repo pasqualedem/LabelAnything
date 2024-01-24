@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #SBATCH -A IscrC_PENELOPE
 #SBATCH -p boost_usr_prod
 #SBATCH --qos boost_qos_lprod
