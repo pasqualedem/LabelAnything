@@ -15,6 +15,7 @@ datasets = {
     "val_coco": CocoLVISDataset,
     "val_lvis": CocoLVISDataset,
     "ade20k": None,
+    "voc": CocoLVISDataset,
 }
 
 
@@ -265,6 +266,7 @@ class VariableBatchSampler(BatchSampler):
         Iterator: An iterator that yields variable-sized batches.
 
     """
+
     def __init__(
         self,
         data_source,

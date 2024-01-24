@@ -6,7 +6,7 @@ experiment:
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
   search: grid
-  # n_trials: 5 
+  # n_trials: 5
 
 parameters:
   # Contains the parameters to build the grid.
@@ -26,17 +26,15 @@ parameters:
     loss:
       class_weighting: [True]
       components:
-        - 
-          focal:
+        - focal:
             weight: 0.485
-          dice: 
+          dice:
             weight: 0.05
           rmi:
             weight: 0.485
-        -
-          focal:
+        - focal:
             weight: 0.95
-          dice: 
+          dice:
             weight: 0.05
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
@@ -60,6 +58,10 @@ parameters:
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
+      voc:
+        name: [voc] #voc
+        instances_path: [data/raw/instances_voc12train.json]
+        img_dir: [data/raw/VOCdevkit/VOC2012/JPEGImages]
       lvis:
         name: [lvis]
         instances_path: [data/annotations/lvis_v1_train.json]
@@ -84,11 +86,11 @@ parameters:
         add_box_noise: [False]
       test_coco:
         support: [coco]
-        name: [ coco ]
-        instances_path: [ data/annotations/instances_val2017.json ]
+        name: [coco]
+        instances_path: [data/annotations/instances_val2017.json]
         img_dir: *img_dir
         seed: *seed
-        add_box_noise: [ False ]
+        add_box_noise: [False]
     common:
       do_subsample: [True]
       add_box_noise: [True]
