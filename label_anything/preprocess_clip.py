@@ -10,6 +10,7 @@ import logging
 from safetensors.torch import save_file
 from ruamel.yaml import YAML
 from pathlib import Path
+from safetensors.torch import load_file
 
 
 def load_ruamel(path, typ='safe'):
@@ -21,6 +22,12 @@ def parse_args():
     argparser = ArgumentParser()
     argparser.add_argument("--parameters")
     return argparser.parse_args()
+
+
+def safe_load(path):
+    if os.path.exists(path):
+        return load_file(path)
+    return {}
 
 
 @torch.no_grad
@@ -46,16 +53,19 @@ def extract_and_save_embeddings(
         img = img.to(device)
         out = model.enode_image(img).cpu()
         for i in range(out.shape[0]):
+            # safe load previous embeddings
+            emb_dict = safe_load(os.path.join(out_dir, f"{image_id[i]}.safetensors"))
+            emb_dict['clip_embedding'] = out[i]
             save_file(
-                {"clip_embedding": out[i]},
+                emb_dict,
                 os.path.join(out_dir, f"{image_id[i]}.safetensors"),
             )
         if ix % 10 == 0:
             logging.info(f"Step {ix}/{tot_steps}")
 
 
-def main():
-    params = load_ruamel(parse_args().parameters)
+def main(params_path):
+    params = load_ruamel(params_path)
     model, _, preprocess = open_clip.create_model_and_transforms(**params['model'])
     dataset = LabelAnyThingOnlyImageDataset(preprocess=preprocess, **params['dataset'])
     dataloader = DataLoader(dataset=dataset, **params['dataloader'])
@@ -66,6 +76,4 @@ def main():
         **params['general'],
     )
 
-if __name__ == '__main__':
-    main()
 

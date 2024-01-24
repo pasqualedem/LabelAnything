@@ -4,7 +4,7 @@ from label_anything.preprocess import (
     generate_ground_truths,
 )
 from label_anything.experiment.experiment import experiment as run_experiment, run as run_single
-
+from label_anything.preprocess_clip import main as exe_clip_preprocess
 import click
 
 
@@ -158,3 +158,13 @@ def benchmark():
     average_time = (end_time - start_time) / num_iterations
 
     print(f"Average time per iteration: {average_time:.5f} seconds")
+
+
+@main.command("preprocess_clip")
+@click.option(
+    "--parameters",
+    default="extract_params.yaml",
+    help="Path to yaml file"
+)
+def preprocess_clip(parameters):
+    exe_clip_preprocess(params_path=parameters)
