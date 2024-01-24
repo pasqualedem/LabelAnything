@@ -1,5 +1,6 @@
 #!/bin/bash
 
 source ../../LabelAnything/.venv/bin/activate
+pip install -r requirements.txt
 export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
 python main.py  preprocess_clip
