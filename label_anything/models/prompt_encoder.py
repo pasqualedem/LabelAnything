@@ -14,7 +14,7 @@ from typing import Any, Optional, Tuple, Type
 from .common import LayerNorm2d, MLPBlock
 from .transformer import TwoWayTransformer, Attention
 
-from label_anything.data.coco import Label
+from label_anything.data.utils import Label
 
 
 class PromptEncoder(nn.Module):

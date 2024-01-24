@@ -2,9 +2,8 @@ import itertools
 import os
 import random
 import warnings
-from enum import Enum, IntEnum
 from io import BytesIO
-from typing import Any, Dict, List, Tuple
+from typing import Any, Optional
 
 import numpy as np
 import requests
@@ -24,89 +23,80 @@ from label_anything.data.transforms import (
     CustomResize,
     PromptsProcessor,
 )
+from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
 
 warnings.filterwarnings("ignore")
 
 
-class PromptType(Enum):
-    BBOX = 0
-    MASK = 1
-    POINT = 2
-
-
-class Label(IntEnum):
-    POSITIVE = 1
-    NULL = 0
-    NEGATIVE = -1
-
-
 class CocoLVISDataset(Dataset):
-    """
-    Dataset for the COCO dataset.
-
-    Args:
-        name (str): Name of the dataset (coco or lvis).
-        instances_path (str): Path to the COCO instances file.
-        img_dir (str): Path to the directory containing the images.
-        max_num_examples (int): Maximum number of examples for each image.
-        preprocess (torchvision.transforms.Compose): Preprocess step.
-        seed (int): Seed for reproducibility.
-        emb_dir (str): Path to the directory containing the embeddings.
-        n_folds (int): Number of folds for the FSS benchmark.
-        val_fold (int): Validation fold for the FSS benchmark.
-        load_embeddings (bool): Whether to load embeddings or images.
-        split (str): Split for the FSS benchmark.
-        do_subsample (bool): Whether to subsample the categories (True for train).
-        add_box_noise (bool): Whether to add noise to the bounding boxes (True for train).
-    """
+    """Dataset class for COCO and LVIS datasets."""
 
     def __init__(
         self,
-        name,  # dataset name (coco or lvis)
-        instances_path,  # Path
-        img_dir=None,  # directory (only if images have to be loaded from disk)
-        max_num_examples=10,  # number of max examples to be given for the target image
-        max_points_annotations=50,  # Max number of annotations for a class to be sampled as points or bboxes, if limit is reached it will be sampled as mask
-        preprocess=ToTensor(),  # preprocess step
-        seed=42,  # for reproducibility
-        emb_dir=None,
-        n_folds=-1,  # for fss benchmark (coco20i)
-        val_fold=-1,  # for fss benchmark (coco20i)
-        load_embeddings=False,
-        load_gts=False,  # gts are in emb_dir files
-        split="train",  # for fss benchmark (coco20i)
-        do_subsample=True,
-        add_box_noise=True,
+        name: str,
+        instances_path: str,
+        img_dir: Optional[str] = None,
+        emb_dir: Optional[str] = None,
+        max_points_annotations: int = 50,
+        preprocess=ToTensor(),
+        seed: int = 42,
+        load_gts: bool = False,
+        do_subsample: bool = True,
+        add_box_noise: bool = True,
+        prompt_types: list[PromptType] = [
+            PromptType.BBOX,
+            PromptType.MASK,
+            PromptType.POINT,
+        ],
     ):
+        """Initialize the dataset.
+
+        Args:
+            name (str): A name for the dataset (e.g. "coco", "lvis").
+            instances_path (str): Path to the instances json file.
+            img_dir (Optional[str], optional): Path to the directory containing the images. Defaults to None.
+            emb_dir (Optional[str], optional): Path to the directory containing the embeddings. Defaults to None.
+            max_num_examples (int, optional): Maximum number of examples for each image. Defaults to 10.
+            max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
+            preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
+            seed (int, optional): For reproducibility. Defaults to 42.
+            load_gts (bool, optional): Specify if ground truth masks are precomputed. Defaults to False.
+            do_subsample (bool, optional): Specify if classes should be randomly subsampled. Defaults to True.
+            add_box_noise (bool, optional): Add noise to the boxes (useful for training). Defaults to True.
+            prompt_types (list[PromptType], optional): List of prompt types to be used. Defaults to [PromptType.BBOX, PromptType.MASK, PromptType.POINT].
+        """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
 
-        self.name = name
-        instances = utils.load_instances(instances_path)
+        assert (
+            img_dir is not None or emb_dir is not None
+        ), "Either img_dir or emb_dir must be provided."
+        assert (
+            not load_gts or emb_dir is not None
+        ), "If load_gts is True, emb_dir must be provided."
+        assert len(prompt_types) > 0, "prompt_types must be a non-empty list."
 
+        self.name = name
+
+        self.img_dir = img_dir
         self.emb_dir = emb_dir
-        self.load_embeddings = load_embeddings
         self.load_gts = load_gts
         self.max_points_annotations = max_points_annotations
-        self.load_from_dir = img_dir is not None
-        self.img_dir = img_dir
-        self.log_images = False
+        self.do_subsample = do_subsample
+        self.add_box_noise = add_box_noise
+        self.prompt_types = prompt_types
 
         # seeds
         self.reset_seed(seed)
 
-        # id to annotation
-        self.annotations = {x["id"]: x for x in instances["annotations"]}
-        # id to category
-        self.categories = {x["id"]: x for x in instances["categories"]}
-
-        # to use with FSS benchmarks
-        self.n_folds = n_folds
-        self.val_fold = val_fold
-        self.split = split
-        if self.val_fold > -1:
-            assert self.n_folds > 0
-            self.__prepare_benchmark()
+        # load instances
+        instances = utils.load_instances(instances_path)
+        self.annotations = {
+            x[AnnFileKeys.ID]: x for x in instances[AnnFileKeys.ANNOTATIONS]
+        }
+        self.categories = {
+            x[AnnFileKeys.ID]: x for x in instances[AnnFileKeys.CATEGORIES]
+        }
 
         # useful dicts
         (
@@ -114,79 +104,48 @@ class CocoLVISDataset(Dataset):
             self.img2cat_annotations,
             self.cat2img,
             self.cat2img_annotations,
-        ) = self.__load_annotation_dicts()
+        ) = self._load_annotation_dicts()
 
-        # list of image ids for __getitem__
+        # load image ids and info
         img2cat_keys = set(self.img2cat.keys())
-        self.image_ids = [
-            x["id"] for x in instances["images"] if x["id"] in img2cat_keys
-        ]
         self.images = {
-            x["id"]: x for x in instances["images"] if x["id"] in img2cat_keys
+            x[AnnFileKeys.ID]: x
+            for x in instances[AnnFileKeys.IMAGES]
+            if x[AnnFileKeys.ID] in img2cat_keys
         }
+        self.image_ids = list(self.images.keys())
 
         # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
             categories_to_imgs=self.cat2img, generator=self.torch_rng
         )
 
-        # max number of examples for each image
-        self.max_num_examples = max_num_examples
-
-        # assert that they are positive
-        assert self.max_num_examples > 0
-
-        # image preprocessing
+        # processing
         self.preprocess = preprocess
-        # prompt preprocessing
         self.prompts_processor = PromptsProcessor(
             long_side_length=1024, masks_side_length=256, np_rng=self.np_rng
         )
 
-        self.do_subsample = do_subsample
-        self.add_box_noise = add_box_noise
-        self.log_images = True
+    def reset_seed(self, seed: int) -> None:
+        """Reset the seed of the dataset.
 
-    def reset_seed(self, seed):
+        Args:
+            seed (int): The new seed.
+        """
         self.seed = seed
         self.rng = random.Random(self.seed)
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_rng = torch.Generator().manual_seed(self.seed)
 
-    def __prepare_benchmark(self):
-        """Prepare the dataset for benchmark training."""
-        n_categories = len(self.categories)
-        n_val_categories = n_categories // self.n_folds
-        val_categories_idxs = set(
-            self.val_fold + self.n_folds * v for v in range(n_val_categories)
-        )
-        train_categories_idxs = (
-            set(x for x in range(n_categories)) - val_categories_idxs
-        )
-        categories_idxs = (
-            val_categories_idxs if self.split == "val" else train_categories_idxs
-        )
-        self.categories = {
-            k: v
-            for i, (k, v) in enumerate(self.categories.items())
-            if i in categories_idxs
-        }
-        category_ids = set(self.categories.keys())
-        self.annotations = {
-            k: v
-            for k, v in self.annotations.items()
-            if v["category_id"] in category_ids
-        }
-
-    def __load_annotation_dicts(self) -> (dict, dict):
-        """Prepares dictionaries for fast access to annotations.
+    def _load_annotation_dicts(self) -> (dict, dict, dict, dict):
+        """Load useful annotation dicts.
 
         Returns:
-            (dict, dict): Returns four dictionaries:
-                1. img2cat: A dictionary mapping image ids to the set of category ids of the annotations of that image.
-                2. img2cat_annotations: A dictionary mapping image ids to the annotations of that image.
-                3. cat2img: A dictionary mapping category ids to the set of image ids of the annotations of that category.
-                4. cat2img_annotations: A dictionary mapping category ids to the annotations of that category.
+            (dict, dict, dict, dict): Returns four dictionaries:
+                1. img2cat: A dictionary mapping image ids to sets of category ids.
+                2. img2cat_annotations: A dictionary mapping image ids to dictionaries mapping category ids to annotations.
+                3. cat2img: A dictionary mapping category ids to sets of image ids.
+                4. cat2img_annotations: A dictionary mapping category ids to dictionaries mapping image ids to annotations.
         """
         img2cat_annotations = {}
         cat2img_annotations = {}
@@ -195,35 +154,57 @@ class CocoLVISDataset(Dataset):
         cat2img = {}
 
         for ann in self.annotations.values():
-            if "iscrowd" in ann and ann["iscrowd"] == 1:
+            if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
                 continue
-            if ann["image_id"] not in img2cat_annotations:
-                img2cat_annotations[ann["image_id"]] = {}
-                img2cat[ann["image_id"]] = set()
 
-            if ann["category_id"] not in img2cat_annotations[ann["image_id"]]:
-                img2cat_annotations[ann["image_id"]][ann["category_id"]] = []
-                img2cat[ann["image_id"]].add(ann["category_id"])
+            if ann[AnnFileKeys.IMAGE_ID] not in img2cat_annotations:
+                img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]] = {}
+                img2cat[ann[AnnFileKeys.IMAGE_ID]] = set()
 
-            img2cat_annotations[ann["image_id"]][ann["category_id"]].append(ann)
+            if (
+                ann[AnnFileKeys.CATEGORY_ID]
+                not in img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]]
+            ):
+                img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]][
+                    ann[AnnFileKeys.CATEGORY_ID]
+                ] = []
+                img2cat[ann[AnnFileKeys.IMAGE_ID]].add(ann[AnnFileKeys.CATEGORY_ID])
 
-            if ann["category_id"] not in cat2img_annotations:
-                cat2img_annotations[ann["category_id"]] = {}
-                cat2img[ann["category_id"]] = set()
+            img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]][
+                ann[AnnFileKeys.CATEGORY_ID]
+            ].append(ann)
 
-            if ann["image_id"] not in cat2img_annotations[ann["category_id"]]:
-                cat2img_annotations[ann["category_id"]][ann["image_id"]] = []
-                cat2img[ann["category_id"]].add(ann["image_id"])
+            if ann[AnnFileKeys.CATEGORY_ID] not in cat2img_annotations:
+                cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]] = {}
+                cat2img[ann[AnnFileKeys.CATEGORY_ID]] = set()
 
-            cat2img_annotations[ann["category_id"]][ann["image_id"]].append(ann)
+            if ann["image_id"] not in cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]]:
+                cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]][
+                    ann[AnnFileKeys.IMAGE_ID]
+                ] = []
+                cat2img[ann[AnnFileKeys.CATEGORY_ID]].add(ann[AnnFileKeys.IMAGE_ID])
 
+            cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]][
+                ann[AnnFileKeys.IMAGE_ID]
+            ].append(ann)
         return img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
-    def _load_safe(self, img_data):
-        f = load_file(f"{self.emb_dir}/{str(img_data['id']).zfill(12)}.safetensors")
-        embedding, gt = None, None
-        if self.load_embeddings:
-            embedding = f["embedding"]
+    def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
+        """Open a safetensors file and load the embedding and the ground truth.
+
+        Args:
+            img_data (dict): A dictionary containing the image data, as in the coco dataset.
+
+        Returns:
+            (torch.Tensor, Optional[torch.Tensor]): Returns a tuple containing the embedding and the ground truth.
+        """
+        assert self.emb_dir is not None, "emb_dir must be provided."
+        gt = None
+
+        f = load_file(
+            f"{self.emb_dir}/{str(img_data[AnnFileKeys.ID]).zfill(12)}.safetensors"
+        )
+        embedding = f["embedding"]
         if self.load_gts:
             gt = f[f"{self.name}_gt"]
         return embedding, gt
@@ -237,7 +218,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             PIL.Image: The loaded image.
         """
-        if self.load_from_dir:
+        if self.img_dir is not None:
             return Image.open(
                 f'{self.img_dir}/{img_data["coco_url"].split("/")[-1]}'
             ).convert("RGB")
@@ -245,24 +226,38 @@ class CocoLVISDataset(Dataset):
             "RGB"
         )
 
-    def load_and_preprocess_images(self, imgs_id: list[int]) -> list[Image.Image]:
-        """Load images from disk or from url.
+    def _load_and_preprocess_image(self, img_data: dict) -> torch.Tensor:
+        """Load and preprocess an image.
 
         Args:
-            imgs_id (list[int]): A list of image ids.
+            img_data (dict): A dictionary containing the image data, as in the coco dataset.
 
         Returns:
-            list[PIL.Image]: The loaded images.
+            torch.Tensor: The preprocessed image.
+        """
+        image = self._load_image(img_data)
+        return image if not self.preprocess else self.preprocess(image)
+
+    def load_and_preprocess_images(self, img_ids: list[int]) -> torch.Tensor:
+        """Load and preprocess images.
+
+        Args:
+            img_ids (list[int]): A list of image ids.
+        Returns:
+            torch.Tensor: The preprocessed images.
         """
         return [
-            self._load_and_preprocess_image(self.images[img_id]) for img_id in imgs_id
+            self._load_and_preprocess_image(self.images[img_id]) for img_id in img_ids
         ]
 
-    def _extract_examples(self, img_data: dict, num_examples: int) -> (list, list):
+    def _extract_examples(
+        self, img_data: dict, num_examples: int
+    ) -> (list[int], list[int]):
         """Chooses examples (and categories) for the query image.
 
         Args:
             img_data (dict): A dictionary containing the image data, as in the coco dataset.
+            num_examples (int): The number of examples to be chosen.
 
         Returns:
             (list, list): Returns two lists:
@@ -282,36 +277,48 @@ class CocoLVISDataset(Dataset):
             num_examples=num_examples,
         )
 
-    def _get_annotations(
+    def _get_prompts(
         self, image_ids: list, cat_ids: list
     ) -> (list, list, list, list, list):
+        """Get the annotations for the chosen examples.
+
+        Args:
+            image_ids (list): A list of image ids of the examples.
+            cat_ids (list): A list of sets of category ids of the examples.
+
+        Returns:
+            (list, list, list, list, list): Returns five lists:
+                1. bboxes: A list of dictionaries mapping category ids to bounding boxes.
+                2. masks: A list of dictionaries mapping category ids to masks.
+                3. points: A list of dictionaries mapping category ids to points.
+                4. classes: A list of lists of category ids.
+                5. img_sizes: A list of tuples containing the image sizes.
+        """
         bboxes = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
 
-        # get prompts from annotations
-        classes = [list() for _ in image_ids]
+        classes = [list()] * len(image_ids)
         img_sizes = [
             (self.images[img_id]["height"], self.images[img_id]["width"])
             for img_id in image_ids
         ]
 
+        # process annotations
         for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
             for cat_id in cat_ids:
                 # for each pair (image img_id and category cat_id)
                 if cat_id not in self.img2cat_annotations[img_id]:
-                    # the chosen category is not in the iamge
                     continue
-
                 classes[i].append(cat_id)
-                number_of_annotations = len(self.img2cat_annotations[img_id][cat_id])
-                if number_of_annotations > self.max_points_annotations:
-                    # if there are too many annotations, sample a mask
-                    prompt_types = [PromptType.MASK] * number_of_annotations
+
+                # get the prompt type for each annotation
+                n_ann = len(self.img2cat_annotations[img_id][cat_id])
+                if n_ann > self.max_points_annotations:
+                    prompt_types = [PromptType.MASK] * n_ann
                 else:
-                    prompt_types = self.rng.choices(
-                        list(PromptType), k=number_of_annotations
-                    )
+                    prompt_types = self.rng.choices(self.prompt_types, k=n_ann)
+
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
                 ):
@@ -350,12 +357,18 @@ class CocoLVISDataset(Dataset):
                 points[i][cat_id] = np.array((points[i][cat_id]))
         return bboxes, masks, points, classes, img_sizes
 
-    def _load_and_preprocess_image(self, image_data):
-        image = self._load_image(image_data)
-        return image if not self.preprocess else self.preprocess(image)
+    def _get_images_or_embeddings(
+        self, image_ids: list[int]
+    ) -> (torch.Tensor, str, Optional[torch.Tensor]):
+        """Load, stack and preprocess the images or the embeddings.
 
-    def _get_images_or_embeddings(self, image_ids):
-        if self.load_embeddings:
+        Args:
+            image_ids (list[int]): A list of image ids.
+
+        Returns:
+            (torch.Tensor, str, Optional[torch.Tensor]): Returns a tuple containing the images or the embeddings, the key of the returned tensor and the ground truths.
+        """
+        if self.emb_dir is not None:
             embeddings_gts = [
                 self._load_safe(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
@@ -363,104 +376,28 @@ class CocoLVISDataset(Dataset):
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
-            return torch.stack(embeddings), "embeddings", gts
+            return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
         else:
             images = [
                 self._load_and_preprocess_image(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
             ]
             gts = None
-            if self.load_gts:
-                gts = [
-                    self._load_safe(image_data)[1]
-                    for image_data in [self.images[image_id] for image_id in image_ids]
-                ]
-            return torch.stack(images), "images", gts
+            return torch.stack(images), BatchKeys.IMAGES, gts
 
-    def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
-        idx, num_examples = idx_num_examples
-        if self.split == "train":
-            base_image_data = self.images[self.image_ids[idx]]
-            image_ids, aux_cat_ids = self._extract_examples(
-                base_image_data, num_examples
-            )
-            cat_ids = list(set(itertools.chain(*aux_cat_ids)))
-            cat_ids.insert(0, -1)  # add the background class
-        else:
-            # take a random category (use numpy)
-            cat_id = self.np_rng.choice(list(self.categories.keys()))
-            # take two random images from that category
-            image_ids = self.np_rng.choice(
-                list(self.cat2img_annotations[cat_id].keys()), 2, replace=False
-            )
-            cat_ids = [-1, cat_id]
+    def compute_ground_truths(
+        self, image_ids: list[int], cat_ids: list[int]
+    ) -> list[torch.Tensor]:
+        """Compute the ground truths for the given image ids and category ids.
 
-        # load, stack and preprocess the images
-        images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
+        Args:
+            image_ids (list[int]): Image ids.
+            cat_ids (list[int]): Category ids.
 
-        # create the prompt dicts
-        bboxes, masks, points, classes, img_sizes = self._get_annotations(
-            image_ids, cat_ids
-        )
-
-        # obtain padded tensors
-        bboxes, flag_bboxes = self.annotations_to_tensor(
-            bboxes, img_sizes, PromptType.BBOX
-        )
-        masks, flag_masks = self.annotations_to_tensor(
-            masks, img_sizes, PromptType.MASK
-        )
-        points, flag_points = self.annotations_to_tensor(
-            points, img_sizes, PromptType.POINT
-        )
-
-        # obtain ground truths
-        if ground_truths is None:
-            ground_truths = self.get_ground_truths(image_ids, cat_ids)
-
-        # stack ground truths
-        dims = torch.tensor(list(map(lambda x: x.size(), ground_truths)))
-        max_dims = torch.max(dims, 0).values.tolist()
-        ground_truths = torch.stack(
-            [utils.collate_gts(x, max_dims) for x in ground_truths]
-        )
-
-        if self.load_gts:
-            # convert the ground truths to the right format
-            ground_truths_copy = ground_truths.clone()
-            # set ground_truths to all 0s
-            ground_truths = torch.zeros_like(ground_truths)
-            for i, cat_id in enumerate(cat_ids):
-                if cat_id == -1:
-                    continue
-                ground_truths[ground_truths_copy == cat_id] = i
-
-        data_dict = {
-            image_key: images,
-            "prompt_masks": masks,
-            "flag_masks": flag_masks,
-            "prompt_points": points,
-            "flag_points": flag_points,
-            "prompt_bboxes": bboxes,
-            "flag_bboxes": flag_bboxes,
-            "dims": dims,
-            "classes": classes,
-            "image_ids": image_ids,
-            "ground_truths": ground_truths,
-        }
-
-        if self.log_images and self.load_embeddings:
-            log_images = [
-                self._load_and_preprocess_image(image_data)
-                for image_data in [self.images[image_id] for image_id in image_ids]
-            ]
-            data_dict["images"] = torch.stack(log_images)
-
-        return data_dict
-
-    def get_ground_truths(self, image_ids, cat_ids):
-        # initialization
-        ground_truths = [dict() for _ in image_ids]
+        Returns:
+            list[torch.Tensor]: A list of tensors containing the ground truths (per image).
+        """
+        ground_truths = [dict()] * len(image_ids)
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
@@ -486,20 +423,18 @@ class CocoLVISDataset(Dataset):
 
         return ground_truths
 
-    def __len__(self):
-        return len(self.images) if self.split == "train" else 1000
-
     def annotations_to_tensor(
         self, annotations: list, img_sizes: list, prompt_type: PromptType
     ) -> torch.Tensor:
-        """Transform a dict of annotations of prompt_type to a padded tensor.
+        """Convert a list of annotations to a tensor.
 
         Args:
-            annotations (dict): annotations (dict of dicts with np.ndarray as values)
-            prompt_type (PromptType): prompt type
+            annotations (list): A list of annotations.
+            img_sizes (list): A list of tuples containing the image sizes.
+            prompt_type (PromptType): The type of the prompt.
 
         Returns:
-            torch.Tensor: padded tensor
+            torch.Tensor: The tensor containing the annotations.
         """
         n = len(annotations)
         c = len(annotations[0])
@@ -549,38 +484,111 @@ class CocoLVISDataset(Dataset):
 
         return tensor, flag
 
+    def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
+        """Get an item from the dataset.
+
+        Args:
+            idx_num_examples (tuple[int, int]): A tuple containing the index of the image and the number of examples to be chosen.
+
+        Returns:
+            dict: A dictionary containing the data.
+        """
+        idx, num_examples = idx_num_examples
+        base_image_data = self.images[self.image_ids[idx]]
+        image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
+        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids.insert(0, -1)  # add the background class
+
+        # load, stack and preprocess the images
+        images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
+
+        # create the prompt dicts
+        bboxes, masks, points, classes, img_sizes = self._get_prompts(
+            image_ids, cat_ids
+        )
+
+        # obtain padded tensors
+        bboxes, flag_bboxes = self.annotations_to_tensor(
+            bboxes, img_sizes, PromptType.BBOX
+        )
+        masks, flag_masks = self.annotations_to_tensor(
+            masks, img_sizes, PromptType.MASK
+        )
+        points, flag_points = self.annotations_to_tensor(
+            points, img_sizes, PromptType.POINT
+        )
+
+        # obtain ground truths
+        if ground_truths is None:
+            ground_truths = self.compute_ground_truths(image_ids, cat_ids)
+
+        # stack ground truths
+        dims = torch.tensor(img_sizes)
+        max_dims = torch.max(dims, 0).values.tolist()
+        ground_truths = torch.stack(
+            [utils.collate_gts(x, max_dims) for x in ground_truths]
+        )
+
+        if self.load_gts:
+            # convert the ground truths to the right format
+            # by assigning 0 to n-1 to the classes
+            ground_truths_copy = ground_truths.clone()
+            # set ground_truths to all 0s
+            ground_truths = torch.zeros_like(ground_truths)
+            for i, cat_id in enumerate(cat_ids):
+                if cat_id == -1:
+                    continue
+                ground_truths[ground_truths_copy == cat_id] = i
+
+        data_dict = {
+            image_key: images,
+            BatchKeys.PROMPT_MASKS: masks,
+            BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.PROMPT_POINTS: points,
+            BatchKeys.FLAG_POINTS: flag_points,
+            BatchKeys.PROMPT_BBOXES: bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.DIMS: dims,
+            BatchKeys.CLASSES: classes,
+            BatchKeys.IMAGE_IDS: image_ids,
+            BatchKeys.GROUND_TRUTHS: ground_truths,
+        }
+
+        return data_dict
+
+    def __len__(self):
+        return len(self.images)
+
 
 class CocoLVISTestDataset(CocoLVISDataset):
     def __init__(
-            self,
-            name,
-            instances_path,  # Path
-            img_dir=None,  # directory (only if images have to be loaded from disk)
-            max_num_examples=10,  # number of max examples to be given for the target image
-            preprocess=ToTensor(),  # preprocess step
-            emb_dir=None,
-            seed=42,  # for reproducibility
-            load_embeddings=False,  # max number of coords for each example for each class
-            load_gts=False,
-            add_box_noise=False,
+        self,
+        name,
+        instances_path,  # Path
+        img_dir=None,  # directory (only if images have to be loaded from disk)
+        max_num_examples=10,  # number of max examples to be given for the target image
+        preprocess=ToTensor(),  # preprocess step
+        emb_dir=None,
+        seed=42,  # for reproducibility
+        load_embeddings=False,  # max number of coords for each example for each class
+        load_gts=False,
+        add_box_noise=False,
     ):
-        super(CocoLVISTestDataset, self).__init__(name=name,
-                                                  instances_path=instances_path,
-                                                  img_dir=img_dir,
-                                                  max_num_examples=max_num_examples,
-                                                  preprocess=preprocess,
-                                                  seed=seed,
-                                                  add_box_noise=add_box_noise,
-                                                  emb_dir=emb_dir,
-                                                  load_embeddings=load_embeddings,
-                                                  load_gts=load_gts,)
+        super(CocoLVISTestDataset, self).__init__(
+            name=name,
+            instances_path=instances_path,
+            img_dir=img_dir,
+            max_num_examples=max_num_examples,
+            preprocess=preprocess,
+            seed=seed,
+            add_box_noise=add_box_noise,
+            emb_dir=emb_dir,
+            load_embeddings=load_embeddings,
+            load_gts=load_gts,
+        )
         self.num_classes = len(list(self.cat2img.keys()))
 
-    def _extract_examples(
-            self,
-            cat2img: dict,
-            img2cat: dict
-    ) -> list[int]:
+    def _extract_examples(self, cat2img: dict, img2cat: dict) -> list[int]:
         prompt_images = set()
         categories = list(self.categories.keys())
         random.shuffle(categories)
@@ -594,45 +602,47 @@ class CocoLVISTestDataset(CocoLVISDataset):
 
     def _get_images_or_embeddings(self, image_ids):
         if self.load_embeddings:
-            embeddings_gts = [
-                self._load_safe(data)
-                for data in image_ids
-            ]
+            embeddings_gts = [self._load_safe(data) for data in image_ids]
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
             return torch.stack(embeddings), "embeddings", gts
         images = [
-            self._load_and_preprocess_image(image_data)
-            for image_data in image_ids
+            self._load_and_preprocess_image(image_data) for image_data in image_ids
         ]
         gts = None
         if self.load_gts:
-            gts = [
-                self._load_safe(image_data)[1]
-                for image_data in image_ids
-            ]
+            gts = [self._load_safe(image_data)[1] for image_data in image_ids]
         return torch.stack(images), "images", gts
 
     def extract_prompts(
-            self,
-            cat2img: dict,
-            img2cat: dict,
-            images: dict,
-            img2cat_annotations: dict,
+        self,
+        cat2img: dict,
+        img2cat: dict,
+        images: dict,
+        img2cat_annotations: dict,
     ) -> (torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor):
         image_ids = self._extract_examples(cat2img, img2cat)
         prompt_images = [images[x] for x in image_ids]
 
-        prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(prompt_images)
+        prompt_images, prompt_images_key, _ = self._get_images_or_embeddings(
+            prompt_images
+        )
 
         cat_ids = list(self.categories.keys())
-        bboxes, masks, points, _, image_sizes = self._get_annotations(image_ids, cat_ids,
-                                                                      images, img2cat_annotations)
+        bboxes, masks, points, _, image_sizes = self._get_prompts(
+            image_ids, cat_ids, images, img2cat_annotations
+        )
 
-        bboxes, flag_bboxes = self.annotations_to_tensor(bboxes, image_sizes, PromptType.BBOX)
-        masks, flag_masks = self.annotations_to_tensor(masks, image_sizes, PromptType.MASK)
-        points, flag_points = self.annotations_to_tensor(points, image_sizes, PromptType.POINT)
+        bboxes, flag_bboxes = self.annotations_to_tensor(
+            bboxes, image_sizes, PromptType.BBOX
+        )
+        masks, flag_masks = self.annotations_to_tensor(
+            masks, image_sizes, PromptType.MASK
+        )
+        points, flag_points = self.annotations_to_tensor(
+            points, image_sizes, PromptType.POINT
+        )
         return {
             prompt_images_key: prompt_images,
             "prompt_masks": masks,
@@ -644,7 +654,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "dims": torch.as_tensor(image_sizes),
         }
 
-    def _get_annotations(
+    def _get_prompts(
         self,
         image_ids: list,
         cat_ids: list,
@@ -658,8 +668,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         # get prompts from annotations
         classes = [list() for _ in image_ids]
         img_sizes = [
-            (images[img_id]["height"], images[img_id]["width"])
-            for img_id in image_ids
+            (images[img_id]["height"], images[img_id]["width"]) for img_id in image_ids
         ]
 
         for i, (img_id, img_size) in enumerate(zip(image_ids, img_sizes)):
@@ -678,7 +687,9 @@ class CocoLVISTestDataset(CocoLVISDataset):
                     prompt_types = random.choices(
                         list(PromptType), k=number_of_annotations
                     )
-                for ann, prompt_type in zip(img2cat_annotations[img_id][cat_id], prompt_types):
+                for ann, prompt_type in zip(
+                    img2cat_annotations[img_id][cat_id], prompt_types
+                ):
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -719,7 +730,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         data, data_key, gt = self._get_images_or_embeddings([self.images[image_id]])
         cat_ids = list(self.cat2img.keys())
         if gt is None:
-            gt = self.get_ground_truths([image_id], cat_ids)[0]
+            gt = self.compute_ground_truths([image_id], cat_ids)[0]
         else:
             gt = gt[0]
             # convert the ground truths to the right format
@@ -731,7 +742,6 @@ class CocoLVISTestDataset(CocoLVISDataset):
                     continue
                 gt[ground_truths_copy == cat_id] = i
 
-
         dim = torch.as_tensor(gt.size())
         data_dict = {
             data_key: data,
@@ -741,9 +751,9 @@ class CocoLVISTestDataset(CocoLVISDataset):
         return data_dict
 
     def collate_fn(
-        self, batched_input: List[Dict[str, Any]]
-    ) -> (Dict[str, Any], torch.Tensor):
-        data_key = 'images' if 'images' in batched_input[0].keys() else 'embeddings'
+        self, batched_input: list[dict[str, Any]]
+    ) -> (dict[str, Any], torch.Tensor):
+        data_key = "images" if "images" in batched_input[0].keys() else "embeddings"
         images = torch.stack([x[data_key] for x in batched_input])
 
         dims = torch.stack([x["dim"] for x in batched_input])
