@@ -2,7 +2,7 @@ import glob
 import itertools
 import json
 import pickle
-from enum import IntEnum, StrEnum
+from enum import IntEnum, Enum
 from itertools import combinations
 from typing import Dict, List, Tuple
 
@@ -12,6 +12,10 @@ import torch
 import torchvision.transforms
 from PIL import Image, ImageDraw
 from torch.utils.data import Dataset
+
+
+class StrEnum(str, Enum):
+    pass
 
 
 class PromptType(StrEnum):

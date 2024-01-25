@@ -29,7 +29,7 @@ class LabelAnythingDataset(Dataset):
             common_params (Dict): A dictionary containing the common parameters for all datasets.
         """
         self._log_images = True  # logs the first batch
-        self.load_embeddings = common_params.get("load_embeddings")
+        self.load_embeddings = common_params.pop("load_embeddings")
 
         self.datasets = {
             dataset_name: datasets[dataset_name](**{**common_params, **params})

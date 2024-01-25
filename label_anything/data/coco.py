@@ -566,11 +566,9 @@ class CocoLVISTestDataset(CocoLVISDataset):
         name,
         instances_path,  # Path
         img_dir=None,  # directory (only if images have to be loaded from disk)
-        max_num_examples=10,  # number of max examples to be given for the target image
         preprocess=ToTensor(),  # preprocess step
         emb_dir=None,
         seed=42,  # for reproducibility
-        load_embeddings=False,  # max number of coords for each example for each class
         load_gts=False,
         add_box_noise=False,
     ):
@@ -578,12 +576,10 @@ class CocoLVISTestDataset(CocoLVISDataset):
             name=name,
             instances_path=instances_path,
             img_dir=img_dir,
-            max_num_examples=max_num_examples,
             preprocess=preprocess,
             seed=seed,
             add_box_noise=add_box_noise,
             emb_dir=emb_dir,
-            load_embeddings=load_embeddings,
             load_gts=load_gts,
         )
         self.num_classes = len(list(self.cat2img.keys()))

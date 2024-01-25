@@ -58,10 +58,10 @@ parameters:
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
-      voc:
-        name: [voc] #voc
-        instances_path: [data/raw/instances_voc12train.json]
-        img_dir: [data/raw/VOCdevkit/VOC2012/JPEGImages]
+      # voc:
+      #   name: [voc] #voc
+      #   instances_path: [data/raw/instances_voc12train.json]
+      #   img_dir: [data/raw/VOCdevkit/VOC2012/JPEGImages]
       lvis:
         name: [lvis]
         instances_path: [data/annotations/lvis_v1_train.json]

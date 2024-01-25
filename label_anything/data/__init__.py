@@ -12,9 +12,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
-    max_num_examples = common_params.get("max_num_examples")
-    if max_num_examples is not None:
-        del common_params["max_num_examples"]
+    max_num_examples = common_params.pop("max_num_examples")
 
     val_datasets_params = {
         k: v for k, v in datasets_params.items() if k.startswith("val_")
