@@ -37,6 +37,7 @@ class CocoLVISDataset(Dataset):
         instances_path: str,
         img_dir: Optional[str] = None,
         emb_dir: Optional[str] = None,
+        max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
         preprocess=ToTensor(),
         seed: int = 42,
@@ -81,6 +82,7 @@ class CocoLVISDataset(Dataset):
         self.img_dir = img_dir
         self.emb_dir = emb_dir
         self.load_gts = load_gts
+        self.max_points_per_annotation = max_points_per_annotation
         self.max_points_annotations = max_points_annotations
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
@@ -277,6 +279,26 @@ class CocoLVISDataset(Dataset):
             num_examples=num_examples,
         )
 
+    def _sample_num_points(self, image_id: int, ann: dict) -> int:
+        """
+        Calculate the number of points to sample for a given image and category proportionally to the area of the annotation.
+
+        Args:
+            image_id (int): The ID of the image.
+            ann (dict): The annotation.
+
+        Returns:
+            int: The number of points to sample.
+        """
+        image_area = self.images[image_id]["height"] * self.images[image_id]["width"]
+        annotation_area = ann["area"] / image_area
+        poisson_mean = self.max_points_per_annotation * np.sqrt(
+            annotation_area
+        )  # poisson mean is proportional to the square root of the area
+        return np.clip(
+            self.np_rng.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
+        )
+
     def _get_prompts(
         self, image_ids: list, cat_ids: list
     ) -> (list, list, list, list, list):
@@ -345,6 +367,11 @@ class CocoLVISDataset(Dataset):
                             ann["segmentation"],
                             *img_size,
                         )
+                        num_points = self._sample_num_points(img_id, ann)
+                        for _ in range(num_points):
+                            points[i][cat_id].append(
+                                self.prompts_processor.sample_point(mask)
+                            )
                         points[i][cat_id].append(
                             self.prompts_processor.sample_point(mask)
                         )

@@ -326,7 +326,7 @@ class PromptImageEncoder(PromptEncoder):
             masks = masks[0]
             return masks.shape[0], masks.shape[1], masks.shape[2]
         else:
-            return 1
+            raise ValueError("No prompts provided")
 
     def embed_points_masks(
         self,

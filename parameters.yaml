@@ -85,6 +85,8 @@ parameters:
       do_subsample: [True]
       add_box_noise: [True]
       max_num_examples: [4]
+      max_points_annotations: [50]
+      max_points_per_annotation: [10]
       load_embeddings: [True]
       load_gts: [True]
   dataloader:
