@@ -17,7 +17,7 @@ parameters:
     experiment_save_delta: [3600] # save experiment every n seconds
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
     comet:
-      tags: [[FirstParallelTry]] # list of tags to attach to the run in logger platform
+      tags: [[SecondParallelTry]] # list of tags to attach to the run in logger platform
       offline: [True]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
@@ -25,24 +25,16 @@ parameters:
     loss:
       class_weighting: [True]
       components:
-        - 
-          focal:
-            weight: 0.485
-          dice: 
-            weight: 0.05
-          rmi:
-            weight: 0.485
-        -
-          focal:
-            weight: 0.95
-          dice: 
-            weight: 0.05
+        focal:
+          weight: 0.95
+        dice: 
+          weight: 0.05
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [5]
+    max_epochs: [10]
     compile: [False]
-    initial_lr: [0.0001, 0.00005, 0.00001, 0.000005]
+    initial_lr: [0.0001, 0.0005]
     optimizer: [AdamW]
     scheduler:
       type: [constant_with_warmup]
