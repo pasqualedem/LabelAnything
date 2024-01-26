@@ -624,19 +624,19 @@ class CocoLVISTestDataset(CocoLVISDataset):
         return prompt_images
 
     def _get_images_or_embeddings(self, image_ids):
-        if self.load_embeddings:
+        if self.emb_dir is not None:
             embeddings_gts = [self._load_safe(data) for data in image_ids]
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
-            return torch.stack(embeddings), "embeddings", gts
+            return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
         images = [
             self._load_and_preprocess_image(image_data) for image_data in image_ids
         ]
         gts = None
         if self.load_gts:
             gts = [self._load_safe(image_data)[1] for image_data in image_ids]
-        return torch.stack(images), "images", gts
+        return torch.stack(images), BatchKeys.IMAGES, gts
 
     def extract_prompts(
         self,
