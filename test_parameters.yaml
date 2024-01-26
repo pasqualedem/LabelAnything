@@ -97,7 +97,6 @@ parameters:
       max_points_annotations: [50]
       max_points_per_annotation: [10]
       max_num_examples: [1]
-      load_embeddings: [False]
   dataloader:
     batch_size: [1]
     num_workers: [0]

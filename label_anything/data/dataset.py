@@ -28,8 +28,6 @@ class LabelAnythingDataset(Dataset):
             datasets_params (Dict): A dictionary containing the parameters for each dataset.
             common_params (Dict): A dictionary containing the common parameters for all datasets.
         """
-        self._log_images = True  # logs the first batch
-        self.load_embeddings = common_params.pop("load_embeddings")
 
         self.datasets = {
             dataset_name: datasets[dataset_name](**{**common_params, **params})
@@ -204,10 +202,6 @@ class LabelAnythingDataset(Dataset):
             "image_ids": image_ids,
             "flag_gts": flag_gts,
         }
-
-        if self._log_images and self.load_embeddings:
-            log_images = torch.stack([x["images"] for x in batched_input])
-            data_dict["images"] = log_images
 
         return (data_dict, ground_truths), dataset_names
 
