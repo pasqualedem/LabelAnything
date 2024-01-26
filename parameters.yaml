@@ -26,9 +26,9 @@ parameters:
       class_weighting: [True]
       components:
         focal:
-          weight: 0.95
+          weight: [0.95]
         dice: 
-          weight: 0.05
+          weight: [0.05]
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
