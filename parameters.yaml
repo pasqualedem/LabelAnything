@@ -14,7 +14,7 @@ parameters:
     log_frequency: [10]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [1000]
-    experiment_save_delta: [None] # save experiment every n seconds
+    experiment_save_delta: [null] # save experiment every n seconds
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
     comet:
       tags: [[SecondParallelTry]] # list of tags to attach to the run in logger platform
