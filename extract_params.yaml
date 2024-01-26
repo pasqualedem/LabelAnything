@@ -9,5 +9,5 @@ dataloader:
   shuffle: False
   drop_last: False
 general:
-  out_dir: /leonardo_scratch/large/userexternal/nfanelli/embeddings
+  out_dir: /leonardo_scratch/large/userexternal/rscaring/embeddings
   device: cuda

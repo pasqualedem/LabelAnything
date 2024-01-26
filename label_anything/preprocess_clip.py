@@ -54,8 +54,7 @@ def extract_and_save_embeddings(
         out = model.enode_image(img).cpu()
         for i in range(out.shape[0]):
             # safe load previous embeddings
-            emb_dict = safe_load(os.path.join(out_dir, f"{image_id[i]}.safetensors"))
-            emb_dict['clip_embedding'] = out[i]
+            emb_dict = {'clip_embedding' :out[i]}
             save_file(
                 emb_dict,
                 os.path.join(out_dir, f"{image_id[i]}.safetensors"),
