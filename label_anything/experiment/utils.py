@@ -9,8 +9,8 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 
 from label_anything.data.utils import random_batch
-from label_anything.logger.image_logger import Logger
 from label_anything.logger.text_logger import get_logger
+from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import find_divisor_pairs, get_divisors
 
 logger = get_logger(__name__)
@@ -25,45 +25,12 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
-def comet_experiment(comet_information: dict, accelerator: Accelerator, params: dict):
-    global logger
-    logger_params = deepcopy(params.get("logger", {}))
-    logger_params.pop("comet", None)
-    if (
-        os.environ.get("TMPDIR", None)
-        or os.environ.get("TMP", None)
-        or os.environ.get("TEMP", None)
-    ):
-        if os.environ.get("TMPDIR", None):
-            tmp_dir = os.environ.get("TMPDIR")
-        elif os.environ.get("TMP", None):
-            tmp_dir = os.environ.get("TMP")
-        else:
-            tmp_dir = os.environ.get("TEMP")
-        logger.info(
-            f"Using {tmp_dir} as temporary directory from environment variables"
-        )
-        logger_params["tmp_dir"] = tmp_dir
-    else:
-        tmp_dir = logger_params.get("tmp_dir", None)
-        logger.info(
-            f"No temporary directory found in environment variables, using {tmp_dir} for images"
-        )
-    os.makedirs(tmp_dir, exist_ok=True)
-    tags = comet_information.pop("tags", [])
-
-    if comet_information.pop("offline"):
-        offdir = comet_information.pop("offline_directory", None)
-        experiment = comet_ml.OfflineExperiment(
-            offline_directory=offdir, **comet_information
-        )
-    else:
-        experiment = comet_ml.Experiment(**comet_information)
-    comet_ml.init(comet_information)
-    experiment.add_tags(tags)
-    experiment.log_parameters(params)
-
-    return Logger(experiment, accelerator, **logger_params)
+def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
+    if params.get("logger", {}).get("comet") is not None:
+        from label_anything.logger.comet_logger import comet_experiment as platform_logger
+    elif params.get("logger", {}).get("wandb") is not None:
+        from label_anything.logger.wandb_logger import wandb_experiment as platform_logger
+    return platform_logger(accelerator, params)
 
 
 def get_batch_size(batch_tuple):

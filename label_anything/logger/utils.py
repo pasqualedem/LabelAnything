@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 from PIL import Image, ImageDraw
 import colorsys
@@ -6,6 +7,22 @@ from torchvision.transforms.functional import resize
 from label_anything.data.utils import get_preprocess_shape
 import torch.nn.functional as F
 import torch
+
+
+def get_tmp_dir():
+    tmp_dir = None
+    if (
+        os.environ.get("TMPDIR", None)
+        or os.environ.get("TMP", None)
+        or os.environ.get("TEMP", None)
+    ):
+        if os.environ.get("TMPDIR", None):
+            tmp_dir = os.environ.get("TMPDIR")
+        elif os.environ.get("TMP", None):
+            tmp_dir = os.environ.get("TMP")
+        else:
+            tmp_dir = os.environ.get("TEMP")
+    return tmp_dir
 
 
 def resize_anything(image, dims):

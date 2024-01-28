@@ -1,15 +1,19 @@
+from copy import deepcopy
 from label_anything.visualization.visualize import get_image
 from label_anything.logger.utils import (
     extract_polygons_from_tensor,
+    get_tmp_dir,
     take_image,
 )
 from label_anything.logger.text_logger import get_logger
+from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import log_every_n
 import os
 import math
 import time
 import torch
 import tempfile
+import comet_ml
 import torch.nn.functional as F
 
 from datetime import datetime as dt
@@ -27,10 +31,38 @@ def validate_polygon(polygon):
     return len(polygon) >= 6  # 3 points at least
 
 
-class Logger:
+def comet_experiment(accelerator: Accelerator, params: dict):
+    comet_params = params.get("logger", {}).pop("comet", {})
+    comet_information = {
+        "api_key": os.getenv("COMET_API_KEY"),
+        "project_name": params["experiment"]["name"],
+        **comet_params,
+    }
+    global logger
+    logger_params = deepcopy(params.get("logger", {}))
+    tmp_dir = get_tmp_dir()
+    if tmp_dir:
+        logger.info(
+            f"Using {tmp_dir} as temporary directory from environment variables"
+        )
+    else:
+        tmp_dir = logger_params.get("tmp_dir", None)
+        logger.info(
+            f"No temporary directory found in environment variables, using {tmp_dir} for images"
+        )
+    os.makedirs(tmp_dir, exist_ok=True)
+    tags = logger_params.pop("tags", [])
+    comet_logger = CometLogger(accelerator=accelerator, comet_information=comet_information, **logger_params)
+
+    comet_logger.add_tags(tags)
+    comet_logger.log_parameters(params)
+    
+    return comet_logger
+
+
+class CometLogger(AbstractLogger):
     def __init__(
         self,
-        experiment: Experiment,
         accelerator: Accelerator,
         tmp_dir: str,
         log_frequency: int = 100,
@@ -38,83 +70,37 @@ class Logger:
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
         experiment_save_delta: int = None,
+        
+        comet_information: dict = {},
     ):
-        self.experiment = experiment
-        self.accelerator = accelerator
-        self.tmp_dir = tmp_dir
-        os.makedirs(self.tmp_dir, exist_ok=True)
-        self.log_frequency = log_frequency
-        self.prefix_frequency_dict = {
-            "train": train_image_log_frequency,
-            "val": val_image_log_frequency,
-            "test": test_image_log_frequency,
-        }
-        self.start_time = time.time()
-        self.experiment_save_delta = experiment_save_delta
-
-    def __get_class_ids(self, classes):
-        res_classes = []
-        for c in classes:
-            max_len = 0
-            max_idx = 0
-            for i, x in enumerate(c):
-                max_len = max(max_len, len(x))
-                if len(x) == max_len:
-                    max_idx = i
-            res_classes.append(list(c[max_idx]))
-        return res_classes
-
-    def log_batch(
-        self,
-        batch_idx,
-        image_idx,
-        batch_size,
-        epoch,
-        step,
-        substitution_step,
-        input_dict,
-        gt,
-        pred,
-        dataset,
-        dataset_names,
-        phase,
-    ):
-        if log_every_n(image_idx, self.prefix_frequency_dict[phase]):
-            query_images = [
-                dataset.load_and_preprocess_images(dataset_name, [ids[0]])[0]
-                for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
-            ]
-            example_images = [
-                dataset.load_and_preprocess_images(dataset_name, ids[1:])
-                for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
-            ]
-            categories = dataset.categories
-            self.log_prompts(
-                batch_idx=batch_idx,
-                epoch=epoch,
-                step=step,
-                image_idx=image_idx,
-                substitution_step=substitution_step,
-                input_dict=input_dict,
-                images=example_images,
-                categories=categories,
-                dataset_names=dataset_names,
-                prefix=phase,
+        if comet_information.pop("offline"):
+            offdir = comet_information.pop("offline_directory", None)
+            experiment = comet_ml.OfflineExperiment(
+                offline_directory=offdir, **comet_information
             )
-            self.log_gt_pred(
-                batch_idx=batch_idx,
-                image_idx=image_idx,
-                epoch=epoch,
-                step=step,
-                substitution_step=substitution_step,
-                input_dict=input_dict,
-                images=query_images,
-                gt=gt,
-                pred=pred,
-                categories=categories,
-                dataset_names=dataset_names,
-                prefix=phase,
-            )
+        else:
+            experiment = comet_ml.Experiment(**comet_information)
+        comet_ml.init(comet_information)
+
+        super().__init__(
+            experiment,
+            accelerator,
+            tmp_dir,
+            log_frequency,
+            train_image_log_frequency,
+            val_image_log_frequency,
+            test_image_log_frequency,
+            experiment_save_delta,
+        )
+        self.train = self.experiment.train
+        self.validate = self.experiment.validate
+        self.test = self.experiment.test
+        
+    def add_tags(self, tags):
+        self.experiment.add_tags(tags)
+        
+    def log_parameters(self, params):
+        self.experiment.log_parameters(params)
 
     def log_gt_pred(
         self,
@@ -132,7 +118,7 @@ class Logger:
         prefix,
     ):
         dims = input_dict["dims"]
-        classes = self.__get_class_ids(input_dict["classes"])
+        classes = self._get_class_ids(input_dict["classes"])
 
         for b in range(gt.shape[0]):
             data_gt = []
@@ -215,7 +201,7 @@ class Logger:
         flags_masks = input_dict["flag_masks"]
         flags_boxes = input_dict["flag_bboxes"]
         flags_points = input_dict["flag_points"]
-        classes = self.__get_class_ids(input_dict["classes"])
+        classes = self._get_class_ids(input_dict["classes"])
 
         for i in range(len(images)):
             cur_dataset_categories = categories[dataset_names[i]]
@@ -342,7 +328,10 @@ class Logger:
         if self.accelerator.is_local_main_process:
             tmp_dir = tempfile.mkdtemp(dir=self.tmp_dir)
             self.accelerator.save_state(output_dir=tmp_dir)
-            self.experiment.log_asset_folder(tmp_dir, step=epoch)
+            self.log_asset_folder(tmp_dir, step=epoch)
+
+    def log_asset_folder(self, folder, step=None):
+        self.experiment.log_asset_folder(folder, step)
 
     def save_experiment_timed(self):
         """

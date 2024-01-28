@@ -320,7 +320,7 @@ class CocoLVISDataset(Dataset):
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
 
-        classes = [list()] * len(image_ids)
+        classes = [[] for _ in range(len(image_ids))]
         img_sizes = [
             (self.images[img_id]["height"], self.images[img_id]["width"])
             for img_id in image_ids
@@ -372,9 +372,6 @@ class CocoLVISDataset(Dataset):
                             points[i][cat_id].append(
                                 self.prompts_processor.sample_point(mask)
                             )
-                        points[i][cat_id].append(
-                            self.prompts_processor.sample_point(mask)
-                        )
 
         # convert the lists of prompts to arrays
         for i in range(len(image_ids)):
@@ -424,7 +421,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             list[torch.Tensor]: A list of tensors containing the ground truths (per image).
         """
-        ground_truths = [dict()] * len(image_ids)
+        ground_truths = [dict() for _ in range (len(image_ids))]
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
@@ -584,6 +581,7 @@ class CocoLVISDataset(Dataset):
         return data_dict
 
     def __len__(self):
+        return 25
         return len(self.images)
 
 
