@@ -16,9 +16,9 @@ parameters:
     val_image_log_frequency: [1000]
     experiment_save_delta: [null] # save experiment every n seconds
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
-    comet:
-      tags: [[ThirdParallelTry]] # list of tags to attach to the run in logger platform
-      offline: [True]
+    wandb:
+      offline: [False]
+      entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
