@@ -113,7 +113,7 @@ class AbstractLogger:
         dataset_names,
         prefix,
     ):
-        pass
+        raise NotImplementedError
 
     def log_prompts(
         self,
@@ -128,30 +128,37 @@ class AbstractLogger:
         dataset_names,
         prefix,
     ):
-        pass
+        raise NotImplementedError
 
     def log_image(
         self, name: str, image_data: Image, annotations=None, metadata=None, step=None
     ):
-        pass
+        raise NotImplementedError
 
     def add_tags(self, tags):
-        pass
+        raise NotImplementedError
         
     def log_parameters(self, params):
-        pass
+        raise NotImplementedError
     
     def log_metric(self, name, metric, epoch=None):
-        pass
+        raise NotImplementedError
 
     def log_metrics(self, metrics, epoch=None):
-        pass
+        raise NotImplementedError
 
     def log_parameter(self, name, parameter):
-        pass
+        raise NotImplementedError
 
-    def log_training_state(self, epoch):
-        pass
+    def log_training_state(self, epoch, subfolder):
+        logger.info("Waiting for all processes to finish for saving training state")
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            tmp_dir = os.path.join(self.tmp_dir, subfolder)
+            self.accelerator.save_state(output_dir=tmp_dir)
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            self.log_asset_folder(tmp_dir, step=epoch)
 
     def save_experiment_timed(self):
         """
@@ -163,19 +170,19 @@ class AbstractLogger:
         pass
     
     def log_asset_folder(self, path):
-        pass
+        raise NotImplementedError
     
     def train(self):
-        pass
+        raise NotImplementedError
     
     def validate(self):
-        pass
+        raise NotImplementedError
         
     def test(self):
-        pass
+        raise NotImplementedError
 
     def end(self):
-        pass
+        raise NotImplementedError
     
     @property
     def name(self):

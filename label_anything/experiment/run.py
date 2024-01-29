@@ -56,6 +56,7 @@ class Run:
         self.scheduler = None
         self.criterion = None
         self.oom = None
+        self.best_metric = None
         if "." not in sys.path:
             sys.path.extend(".")
         self.global_train_step = 0
@@ -145,12 +146,12 @@ class Run:
                 )
                 self.train_epoch(epoch)
 
-                self.plat_logger.log_training_state(epoch=epoch)
+                best_metric = None
                 if self.val_loader:
                     with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
-                        self.validate(epoch)
-                        self.plat_logger.save_experiment()
+                        best_metric = self.validate(epoch)
+                self.save_training_state(epoch, best_metric)
 
         if self.test_loader:
             with self.plat_logger.test():
@@ -164,6 +165,18 @@ class Run:
         logger.info("Ending run")
         self.plat_logger.end()
         logger.info("Run ended")
+
+    def save_training_state(self, epoch, watch_metric=None):
+        if watch_metric:
+            if self.best_metric is None:
+                self.best_metric = watch_metric
+            if watch_metric >= self.best_metric:
+                logger.info(
+                    f"Saving best model with metric {watch_metric} as given that metric is greater than {self.best_metric}"
+                )
+                self.best_metric = watch_metric
+                self.plat_logger.log_training_state(epoch=epoch, subfolder="best")
+        self.plat_logger.log_training_state(epoch=epoch, subfolder="latest")
 
     def _get_lr(self):
         return (
@@ -393,9 +406,9 @@ class Run:
         logger.info(f"Metrics")
         metric_dict = {
             **{
-                "avg_" + k : v
+                "avg_" + k: v
                 for k, v in {**metrics.compute(), **metrics.compute()}.items()
-            },            
+            },
             "avg_loss": loss_avg.compute(),
             "avg_first_step_loss": first_step_loss_avg.compute(),
         }
@@ -408,7 +421,7 @@ class Run:
         )
 
     def validate(self, epoch):
-        self.val_loader.dataset.reset_seed(42)
+        self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
         metrics = AverageMetricCollection(
@@ -474,19 +487,18 @@ class Run:
 
             self.plat_logger.log_metrics(
                 {
-                    **{
-                        "avg_" + k : v
-                        for k, v in metrics.compute().items()
-                    },
+                    **{"avg_" + k: v for k, v in metrics.compute().items()},
                     "avg_loss": avg_loss.compute(),
                 },
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
         logger.info(f"Validation epoch {epoch} finished")
-        for k, v in metrics.compute().items():
+        metrics_value = metrics.compute()
+        for k, v in metrics_value.items():
             logger.info(f"Validation epoch {epoch} - {k}: {v}")
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
+        return metrics_value["batch_mIoU"]
 
     def test(self, dataloader, train_dataset):
         self.model.eval()

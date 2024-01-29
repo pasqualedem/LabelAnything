@@ -322,14 +322,6 @@ class CometLogger(AbstractLogger):
             parameter,
         )
 
-    def log_training_state(self, epoch):
-        logger.info("Waiting for all processes to finish for saving training state")
-        self.accelerator.wait_for_everyone()
-        if self.accelerator.is_local_main_process:
-            tmp_dir = tempfile.mkdtemp(dir=self.tmp_dir)
-            self.accelerator.save_state(output_dir=tmp_dir)
-            self.log_asset_folder(tmp_dir, step=epoch)
-
     def log_asset_folder(self, folder, step=None):
         self.experiment.log_asset_folder(folder, step)
 

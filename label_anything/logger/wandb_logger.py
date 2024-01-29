@@ -116,11 +116,11 @@ class WandBLogger(AbstractLogger):
         self.save_logs_wandb = save_logs_remote
         self.context = ""
         self.sequences = {}
-        
+
         wandb.define_metric("train/step")
         # set all other train/ metrics to use this step
         wandb.define_metric("train/*", step_metric="train/step")
-        
+
         wandb.define_metric("validate/step")
         # set all other validate/ metrics to use this step
         wandb.define_metric("validate/*", step_metric="train/step")
@@ -402,7 +402,7 @@ class WandBLogger(AbstractLogger):
                 for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])
             ]
             categories = dataset.categories
-            # sequence_name = f"image_{image_idx}_substep_{substitution_step}" 
+            # sequence_name = f"image_{image_idx}_substep_{substitution_step}"
             sequence_name = "predictions"
             self.create_image_sequence(sequence_name, columns=["Epoch", "Dataset"])
             self.log_prompts(
@@ -489,7 +489,7 @@ class WandBLogger(AbstractLogger):
                 sequence_name,
                 f"image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
                 wandb_image,
-                metadata=[epoch, dataset_names[b]]
+                metadata=[epoch, dataset_names[b]],
             )
 
     def log_prompts(
@@ -525,11 +525,20 @@ class WandBLogger(AbstractLogger):
                 for k, c in enumerate(classes[i])
             }
             cur_sample_categories[0] = "background"
-            mask_sample_categories = deepcopy(cur_sample_categories)
             sample_images = images[i]
             for j in range(all_masks.shape[1]):
+                
+                mask_sample_categories = torch.argwhere(flags_masks[i, j])[:, 0].tolist()
+                mask_sample_categories = {
+                    k: cur_sample_categories[k] for k in mask_sample_categories
+                }
+                point_sample_categories = {}
+                box_sample_categories = {}
+                
                 image = get_image(sample_images[j])
                 # log masks, boxes and points
+                points_data = []
+                box_data = []
                 for c in range(1, input_dict["prompt_masks"].shape[2]):
                     if c > len(classes[i]):
                         break
@@ -539,7 +548,6 @@ class WandBLogger(AbstractLogger):
                     flag_points = flags_points[i, j, c]
                     label = cur_sample_categories[c]
 
-                    box_data = []
                     for k in range(boxes.shape[0]):
                         if flag_boxes[k] == 1:
                             box = boxes[k].tolist()
@@ -554,9 +562,9 @@ class WandBLogger(AbstractLogger):
                                 "box_caption": f"{label}",
                                 "domain": "pixel",
                             }
+                            box_sample_categories[c] = label
                             box_data.append(box)
 
-                    points_data = []
                     for k in range(points.shape[0]):
                         if flag_points[k] != 0:
                             x, y = points[k].tolist()
@@ -564,10 +572,11 @@ class WandBLogger(AbstractLogger):
                             if flag_points[k] == 1:
                                 point_label = label
                                 class_id = c
+                                point_sample_categories[class_id] = point_label
                             else:
                                 point_label = f"Neg-{label}"
                                 class_id = self.MAX_CLASSES + c
-                                cur_sample_categories[class_id] = point_label
+                                point_sample_categories[class_id] = point_label
 
                             box = {
                                 "position": {
@@ -586,7 +595,7 @@ class WandBLogger(AbstractLogger):
                 if flags_masks[i, j].sum() > 0:
                     cur_mask = all_masks[i, j].unsqueeze(0).unsqueeze(0).float()
                     masks = {
-                        "prompts": {
+                        "ground_truth": {
                             "mask_data": F.interpolate(
                                 cur_mask,
                                 sample_images[j].shape[-2:],
@@ -601,22 +610,25 @@ class WandBLogger(AbstractLogger):
                 if len(box_data) > 0:
                     boxes["boxes"] = {
                         "box_data": box_data,
-                        "class_labels": cur_sample_categories,
+                        "class_labels": box_sample_categories,
                     }
                 if len(points_data) > 0:
                     boxes["points"] = {
                         "box_data": points_data,
-                        "class_labels": cur_sample_categories,
+                        "class_labels": point_sample_categories,
                     }
                 boxes = None if len(boxes) == 0 else boxes
 
                 wandb_image = wandb.Image(
                     image,
-                    masks=masks, 
+                    masks=masks,
                     boxes=boxes,
                     classes=[
                         {"id": c, "name": name}
-                        for c, name in cur_sample_categories.items()
+                        for c, name in {
+                            **point_sample_categories,
+                            **cur_sample_categories,
+                        }.items()
                     ],
                 )
 
@@ -624,13 +636,15 @@ class WandBLogger(AbstractLogger):
                     sequence_name,
                     f"image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
                     wandb_image,
-                    metadata=[epoch, dataset_names[i]]
+                    metadata=[epoch, dataset_names[i]],
                 )
 
     def create_image_sequence(self, name, columns=[]):
         self.sequences[name] = wandb.Table(["ID", "Image"] + columns)
 
-    def add_image_to_sequence(self, sequence_name, name, wandb_image: wandb.Image, metadata=[]):
+    def add_image_to_sequence(
+        self, sequence_name, name, wandb_image: wandb.Image, metadata=[]
+    ):
         self.sequences[sequence_name].add_data(name, wandb_image, *metadata)
 
     def add_image_sequence(self, name):
@@ -640,7 +654,7 @@ class WandBLogger(AbstractLogger):
     def log_asset_folder(self, folder, step=None):
         files = os.listdir(folder)
         for file in files:
-            wandb.log_artifact(os.path.join(folder, file), step=step)
+            wandb.save(os.path.join(folder, file))
 
     def log_metric(self, name, metric, epoch=None):
         wandb.log({f"{self.context}/{name}": metric})

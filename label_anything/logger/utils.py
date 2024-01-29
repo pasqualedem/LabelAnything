@@ -9,6 +9,24 @@ import torch.nn.functional as F
 import torch
 
 
+def merge_dataset_categories(categories_dict: dict[dict]):
+    dataset_categories_len = {
+        dataset: len(categories_dict[dataset]) for dataset in categories_dict
+    }
+    cumulative_len = np.cumsum(list(dataset_categories_len.values()))
+    dataset_categories_len = {
+        dataset: length for dataset, length in zip(categories_dict, cumulative_len)
+    }
+    absolute_categories = {
+        dataset: {
+            k + dataset_categories_len[dataset]: v for k, v in categories_dict[dataset]
+        }
+        for dataset in categories_dict
+    }
+    absolute_categories = {key: value for d in absolute_categories.values() for key, value in d.items()}
+    return absolute_categories
+
+
 def get_tmp_dir():
     tmp_dir = None
     if (

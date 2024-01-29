@@ -138,6 +138,10 @@ class CocoLVISDataset(Dataset):
         self.rng = random.Random(self.seed)
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_rng = torch.Generator().manual_seed(self.seed)
+        if hasattr(self, "example_generator"):
+            self.example_generator.generator = self.torch_rng
+        if hasattr(self, "prompts_processor"):
+            self.prompts_processor.np_rng = self.np_rng
 
     def _load_annotation_dicts(self) -> (dict, dict, dict, dict):
         """Load useful annotation dicts.
@@ -581,7 +585,6 @@ class CocoLVISDataset(Dataset):
         return data_dict
 
     def __len__(self):
-        return 25
         return len(self.images)
 
 
