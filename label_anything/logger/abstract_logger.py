@@ -1,3 +1,4 @@
+import tempfile
 from label_anything.logger.text_logger import get_logger
 from label_anything.utils.utils import log_every_n
 import os
@@ -20,10 +21,12 @@ class AbstractLogger:
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
         experiment_save_delta: int = None,
+        local_dir: str = None,
     ):
         self.experiment = experiment
         self.accelerator = accelerator
         self.tmp_dir = tmp_dir
+        self.local_dir = local_dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
         self.prefix_frequency_dict = {
@@ -154,11 +157,11 @@ class AbstractLogger:
         logger.info("Waiting for all processes to finish for saving training state")
         self.accelerator.wait_for_everyone()
         if self.accelerator.is_local_main_process:
-            tmp_dir = os.path.join(self.tmp_dir, subfolder)
-            self.accelerator.save_state(output_dir=tmp_dir)
+            subdir = os.path.join(self.local_dir, subfolder)
+            self.accelerator.save_state(output_dir=subdir)
         self.accelerator.wait_for_everyone()
         if self.accelerator.is_local_main_process:
-            self.log_asset_folder(tmp_dir, step=epoch)
+            self.log_asset_folder(subdir, step=epoch, base_path=self.local_dir)
 
     def save_experiment_timed(self):
         """

@@ -35,6 +35,7 @@ def wandb_experiment(accelerator: Accelerator, params: dict):
     wandb_information = {
         "accelerator": accelerator,
         "project_name": params["experiment"]["name"],
+        "group": params["experiment"].get("group", None),
         **wandb_params,
     }
     global logger
@@ -77,6 +78,7 @@ class WandBLogger(AbstractLogger):
         save_code: bool = False,
         tags=None,
         run_id=None,
+        group=None,
         **kwargs,
     ):
         """
@@ -105,9 +107,9 @@ class WandBLogger(AbstractLogger):
             id=run_id,
             tags=tags,
             dir=offline_directory,
-            group=kwargs.get("group"),
+            group=group,
         )
-        super().__init__(experiment=experiment, **kwargs)
+        super().__init__(experiment=experiment, **kwargs, local_dir=experiment.dir)
         if save_code:
             self._save_code()
 
@@ -651,10 +653,10 @@ class WandBLogger(AbstractLogger):
         wandb.log({f"{self.context}_{name}": self.sequences[name]})
         del self.sequences[name]
 
-    def log_asset_folder(self, folder, step=None):
+    def log_asset_folder(self, folder, base_path=None, step=None):
         files = os.listdir(folder)
         for file in files:
-            wandb.save(os.path.join(folder, file))
+            wandb.save(os.path.join(folder, file), base_path=base_path)
 
     def log_metric(self, name, metric, epoch=None):
         wandb.log({f"{self.context}/{name}": metric})

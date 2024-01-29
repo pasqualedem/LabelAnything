@@ -585,6 +585,7 @@ class CocoLVISDataset(Dataset):
         return data_dict
 
     def __len__(self):
+        return 3
         return len(self.images)
 
 
