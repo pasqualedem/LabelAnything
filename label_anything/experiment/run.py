@@ -58,6 +58,8 @@ class Run:
         self.oom = None
         if "." not in sys.path:
             sys.path.extend(".")
+        self.global_train_step = 0
+        self.global_val_step = 0
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -231,6 +233,17 @@ class Run:
                 self.plat_logger.log_metric(metric_name, metric_value)
         return metrics_dict
 
+    def _update_val_metrics(
+        self,
+        metrics: AverageMetricCollection,
+        preds: torch.tensor,
+        gt: torch.tensor,
+        outputs,
+        tot_steps,
+    ):
+        self.plat_logger.log_metric("step", self.global_val_step)
+        return self._update_metrics(metrics, preds, gt, outputs, tot_steps)
+
     def _update_train_metrics(
         self,
         metrics: AverageMetricCollection,
@@ -244,6 +257,7 @@ class Run:
         loss: torch.tensor,
         first_step_loss_avg: RunningAverage,
     ):
+        self.plat_logger.log_metric("step", self.global_train_step)
         if tot_steps % self.plat_logger.log_frequency == 0:
             metric_values = self._update_metrics(metrics, preds, gt, outputs, tot_steps)
             if i == 0:
@@ -369,6 +383,7 @@ class Run:
                         }
                     )
                     tot_steps += 1
+                    self.global_train_step += 1
             self.plat_logger.save_experiment_timed()
             tot_images += cur_batch_size
 
@@ -427,7 +442,7 @@ class Run:
                 outputs = self.model(image_dict)
                 preds = outputs.argmax(dim=1)
 
-                metrics_value = self._update_metrics(
+                metrics_value = self._update_val_metrics(
                     metrics, preds, gt, outputs, tot_steps
                 )
                 loss = torch.mean(self.accelerator.gather(self.criterion(outputs, gt)))
@@ -454,6 +469,7 @@ class Run:
                     phase="val",
                 )
                 tot_steps += 1
+                self.global_val_step += 1
                 tot_images += cur_batch_size
 
             self.plat_logger.log_metrics(

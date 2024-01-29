@@ -116,6 +116,14 @@ class WandBLogger(AbstractLogger):
         self.save_logs_wandb = save_logs_remote
         self.context = ""
         self.sequences = {}
+        
+        wandb.define_metric("train/step")
+        # set all other train/ metrics to use this step
+        wandb.define_metric("train/*", step_metric="train/step")
+        
+        wandb.define_metric("validate/step")
+        # set all other validate/ metrics to use this step
+        wandb.define_metric("validate/*", step_metric="train/step")
 
         # self._set_wandb_id(self.experiment.id)
         if api_server is not None:
@@ -396,7 +404,7 @@ class WandBLogger(AbstractLogger):
             categories = dataset.categories
             # sequence_name = f"image_{image_idx}_substep_{substitution_step}" 
             sequence_name = "predictions"
-            self.create_image_sequence(sequence_name, columns=["Epoch"])
+            self.create_image_sequence(sequence_name, columns=["Epoch", "Dataset"])
             self.log_prompts(
                 batch_idx=batch_idx,
                 epoch=epoch,
@@ -481,7 +489,7 @@ class WandBLogger(AbstractLogger):
                 sequence_name,
                 f"image_{image_idx}_sample_{b}_substep_{substitution_step}_gt_pred",
                 wandb_image,
-                metadata=[epoch]
+                metadata=[epoch, dataset_names[b]]
             )
 
     def log_prompts(
@@ -616,7 +624,7 @@ class WandBLogger(AbstractLogger):
                     sequence_name,
                     f"image_{image_idx}_sample_{i}_substep_{substitution_step}_prompts",
                     wandb_image,
-                    metadata=[epoch]
+                    metadata=[epoch, dataset_names[i]]
                 )
 
     def create_image_sequence(self, name, columns=[]):
@@ -635,10 +643,10 @@ class WandBLogger(AbstractLogger):
             wandb.log_artifact(os.path.join(folder, file), step=step)
 
     def log_metric(self, name, metric, epoch=None):
-        wandb.log({f"{self.context}_{name}": metric})
+        wandb.log({f"{self.context}/{name}": metric})
 
     def log_metrics(self, metrics: dict, epoch=None):
-        wandb.log({f"{self.context}_{k}": v for k, v in metrics.items()})
+        wandb.log({f"{self.context}/{k}": v for k, v in metrics.items()})
 
     def __repr__(self):
         return "WandbLogger"
