@@ -51,4 +51,24 @@ Project Organization
 
 --------
 
+* HOW TO CREATE A VENV FOR CINECA
+- we need to add another file for cineca requirements
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install -r requirements_cineca.txt
+```
+
+* GENERAL PURPOSE ENVIRONMENT
+```
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install torch torchvision torchaudio
+pip install -r requirements.txt
+```
+
+
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
