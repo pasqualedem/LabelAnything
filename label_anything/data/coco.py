@@ -139,6 +139,10 @@ class CocoLVISDataset(Dataset):
         self.rng = random.Random(self.seed)
         self.np_rng = np.random.default_rng(self.seed)
         self.torch_rng = torch.Generator().manual_seed(self.seed)
+        if hasattr(self, "example_generator"):
+            self.example_generator.generator = self.torch_rng
+        if hasattr(self, "prompts_processor"):
+            self.prompts_processor.np_rng = self.np_rng
 
     def _load_annotation_dicts(self) -> (dict, dict, dict, dict):
         """Load useful annotation dicts.
@@ -326,7 +330,7 @@ class CocoLVISDataset(Dataset):
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         points = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
 
-        classes = [list()] * len(image_ids)
+        classes = [[] for _ in range(len(image_ids))]
         img_sizes = [
             (self.images[img_id]["height"], self.images[img_id]["width"])
             for img_id in image_ids
@@ -378,9 +382,6 @@ class CocoLVISDataset(Dataset):
                             points[i][cat_id].append(
                                 self.prompts_processor.sample_point(mask)
                             )
-                        points[i][cat_id].append(
-                            self.prompts_processor.sample_point(mask)
-                        )
 
         # convert the lists of prompts to arrays
         for i in range(len(image_ids)):
@@ -430,7 +431,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             list[torch.Tensor]: A list of tensors containing the ground truths (per image).
         """
-        ground_truths = [dict()] * len(image_ids)
+        ground_truths = [dict() for _ in range (len(image_ids))]
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
@@ -590,6 +591,7 @@ class CocoLVISDataset(Dataset):
         return data_dict
 
     def __len__(self):
+        return 5
         return len(self.images)
 
 
