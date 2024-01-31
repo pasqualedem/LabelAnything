@@ -155,8 +155,13 @@ class CocoLVISDataset(Dataset):
         img2cat = {}
         cat2img = {}
 
+        category_ids = set(self.categories.keys())
+
         for ann in self.annotations.values():
             if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
+                continue
+
+            if ann[AnnFileKeys.CATEGORY_ID] not in category_ids:
                 continue
 
             if ann[AnnFileKeys.IMAGE_ID] not in img2cat_annotations:
