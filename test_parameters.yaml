@@ -45,17 +45,19 @@ parameters:
     initial_lr: [0.00001]
     optimizer: [AdamW]
     scheduler:
-      type: [cosine]
-      warmup_steps: [2500]
+      type: [reduce_lr_on_plateau]
+      step_moment: [epoch]
+      # warmup_steps: [2500] 
     substitute: [False]
+    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    name: [dummy] # path to model class or model name contained in EzDL or super-gradients
+    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    # use_sam_checkpoint: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

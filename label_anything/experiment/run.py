@@ -12,7 +12,6 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
 from tqdm import tqdm
-from transformers import get_scheduler
 
 from label_anything.data import get_dataloaders
 from label_anything.experiment.substitution import Substitutor
@@ -30,6 +29,7 @@ from label_anything.utils.metrics import (
 from label_anything.utils.utils import RunningAverage, write_yaml
 
 from .utils import (
+    SchedulerStepMoment,
     allocate_memory,
     check_nan,
     get_batch_size,
@@ -38,6 +38,7 @@ from .utils import (
     parse_params,
     get_experiment_logger,
     nosync_accumulation,
+    get_scheduler,
 )
 
 logger = get_logger(__name__)
@@ -57,6 +58,8 @@ class Run:
         self.criterion = None
         self.oom = None
         self.best_metric = None
+        self.scheduler_step_moment = None
+        self.watch_metric = None
         if "." not in sys.path:
             sys.path.extend(".")
         self.global_train_step = 0
@@ -101,6 +104,7 @@ class Run:
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
+        self.watch_metric = self.train_params["watch_metric"]
 
     def launch(self):
         logger.info("Start training loop...")
@@ -113,10 +117,9 @@ class Run:
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
-            self.scheduler = get_scheduler(
-                scheduler_params["type"],
+            self.scheduler, self.scheduler_step_moment = get_scheduler(
+                scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
-                num_warmup_steps=scheduler_params["warmup_steps"],
                 num_training_steps=self.train_params["max_epochs"]
                 * len(self.train_loader),
             )
@@ -146,12 +149,13 @@ class Run:
                 )
                 self.train_epoch(epoch)
 
-                best_metric = None
+                metrics = None
                 if self.val_loader:
                     with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
-                        best_metric = self.validate(epoch)
-                self.save_training_state(epoch, best_metric)
+                        metrics = self.validate(epoch)
+                        self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
+                self.save_training_state(epoch, metrics)
 
         if self.test_loader:
             with self.plat_logger.test():
@@ -166,25 +170,33 @@ class Run:
         self.plat_logger.end()
         logger.info("Run ended")
 
-    def save_training_state(self, epoch, watch_metric=None):
-        if watch_metric:
+    def save_training_state(self, epoch, metrics=None):
+        if metrics:
             if self.best_metric is None:
-                self.best_metric = watch_metric
-            if watch_metric >= self.best_metric:
+                self.best_metric = metrics[self.watch_metric]
+            if metrics[self.watch_metric] >= self.best_metric:
                 logger.info(
-                    f"Saving best model with metric {watch_metric} as given that metric is greater than {self.best_metric}"
+                    f"Saving best model with metric {metrics[self.watch_metric]} as given that metric is greater than {self.best_metric}"
                 )
-                self.best_metric = watch_metric
+                self.best_metric = metrics[self.watch_metric]
                 self.plat_logger.log_training_state(epoch=epoch, subfolder="best")
         self.plat_logger.log_training_state(epoch=epoch, subfolder="latest")
 
     def _get_lr(self):
-        return (
-            self.scheduler.get_lr()[0]
-            if self.scheduler
-            else self.train_params["initial_lr"]
-        )
-
+        if self.scheduler is None:
+            return self.train_params["initial_lr"]
+        if hasattr(self.scheduler, "get_lr"):
+            return self.scheduler.get_lr()[0]
+        return self.scheduler.optimizer.param_groups[0]["lr"]
+        
+    def _scheduler_step(self, moment, metrics=None):
+        if moment != self.scheduler_step_moment or self.scheduler is None:
+            return
+        if moment == SchedulerStepMoment.BATCH:
+            self.scheduler.step()
+        elif moment == SchedulerStepMoment.EPOCH:
+            self.scheduler.step(metrics[self.watch_metric])
+            
     def _forward(
         self,
         batch_tuple: tuple[dict, torch.tensor],
@@ -293,6 +305,10 @@ class Run:
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False
         )
+        if accumulate_substitution and not self.train_params.get("substitute", True):
+            raise ValueError(
+                "accumulate_substitution can only be used when substitute is True"
+            )
         metrics = AverageMetricCollection(
             prefix="batch_",
             metrics={
@@ -354,8 +370,7 @@ class Run:
 
                     if not accumulating:
                         self.optimizer.step()
-                        if self.scheduler is not None:
-                            self.scheduler.step()
+                        self._scheduler_step(SchedulerStepMoment.BATCH)
                         self.optimizer.zero_grad()
 
                     loss_avg.update(loss.item())
@@ -498,7 +513,7 @@ class Run:
         for k, v in metrics_value.items():
             logger.info(f"Validation epoch {epoch} - {k}: {v}")
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
-        return metrics_value["batch_mIoU"]
+        return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
 
     def test(self, dataloader, train_dataset):
         self.model.eval()

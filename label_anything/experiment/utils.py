@@ -1,3 +1,4 @@
+from enum import Enum
 import gc
 import os
 import contextlib
@@ -7,6 +8,7 @@ import comet_ml
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
+from transformers import get_scheduler as get_transformers_scheduler
 
 from label_anything.data.utils import random_batch
 from label_anything.logger.text_logger import get_logger
@@ -25,11 +27,41 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
+class SchedulerStepMoment(Enum):
+    BATCH = "batch"
+    EPOCH = "epoch"
+
+
+def get_scheduler(optimizer, num_training_steps, scheduler_params):
+    scheduler_params = deepcopy(scheduler_params)
+    scheduler_type = scheduler_params.pop("type")
+    if scheduler_type is None:
+        logger.warning("No scheduler type specified, using None")
+        return None, None
+    step_moment = scheduler_params.pop("step_moment", None)
+    if step_moment is None:
+        raise ValueError("step_moment must be specified, choose (batch, epoch)")
+    step_moment = SchedulerStepMoment(step_moment)
+    return (
+        get_transformers_scheduler(
+            scheduler_type,
+            optimizer=optimizer,
+            **scheduler_params,
+            num_training_steps=num_training_steps,
+        ),
+        step_moment,
+    )    
+
+
 def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
     if params.get("logger", {}).get("comet") is not None:
-        from label_anything.logger.comet_logger import comet_experiment as platform_logger
+        from label_anything.logger.comet_logger import (
+            comet_experiment as platform_logger,
+        )
     elif params.get("logger", {}).get("wandb") is not None:
-        from label_anything.logger.wandb_logger import wandb_experiment as platform_logger
+        from label_anything.logger.wandb_logger import (
+            wandb_experiment as platform_logger,
+        )
     return platform_logger(accelerator, params)
 
 
