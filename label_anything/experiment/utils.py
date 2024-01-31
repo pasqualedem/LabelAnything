@@ -27,6 +27,16 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
+def cast_model(model: torch.nn.Module, precision=torch.float32):
+    if precision == torch.float32:
+        return model
+    model = model.type(precision)
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            module.float()
+    return model
+
+
 class SchedulerStepMoment(Enum):
     BATCH = "batch"
     EPOCH = "epoch"

@@ -26,11 +26,12 @@ from label_anything.utils.metrics import (
     fbiou,
     multiclass_jaccard_index,
 )
-from label_anything.utils.utils import RunningAverage, write_yaml
+from label_anything.utils.utils import FLOAT_PRECISIONS, RunningAverage, write_yaml
 
 from .utils import (
     SchedulerStepMoment,
     allocate_memory,
+    cast_model,
     check_nan,
     get_batch_size,
     handle_oom,
@@ -99,11 +100,17 @@ class Run:
         self.url = self.plat_logger.url
         self.name = self.plat_logger.name
 
+        float_precision = FLOAT_PRECISIONS[self.train_params.get("precision", "fp32")]
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
-            self.dataset_params, self.dataloader_params, self.accelerator.num_processes
+            self.dataset_params, self.dataloader_params, self.accelerator.num_processes,
+            float_precision
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
+        self.model = cast_model(
+            self.model, float_precision
+        )
+
         self.watch_metric = self.train_params["watch_metric"]
 
     def launch(self):

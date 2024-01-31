@@ -103,9 +103,11 @@ class DiceLoss(nn.Module):
 
     def _calc_dice(self, input, target):
         dims = (1, 2, 3)
+        full_input = input.float() # Union could generate -Inf for fp16
+        full_target = target.float()
 
-        intersection = torch.sum(input * target, dims)
-        cardinality = torch.sum(input + target, dims)
+        intersection = torch.sum(full_input * full_target, dims)
+        cardinality = torch.sum(full_input + full_target, dims)
         dice_score = (2.0 * intersection + self.eps) / (cardinality + self.eps)
         return dice_score
 
