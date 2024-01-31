@@ -71,7 +71,6 @@ parameters:
       max_points_per_annotation: [10]
       load_gts: [True]
   dataloader:
-    batch_size: [4]
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 16], [4, 8], [8, 4], [16, 2]]]
