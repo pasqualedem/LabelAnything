@@ -125,7 +125,7 @@ class WandBLogger(AbstractLogger):
 
         wandb.define_metric("validate/step")
         # set all other validate/ metrics to use this step
-        wandb.define_metric("validate/*", step_metric="train/step")
+        wandb.define_metric("validate/*", step_metric="validate/step")
 
         # self._set_wandb_id(self.experiment.id)
         if api_server is not None:
