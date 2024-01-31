@@ -47,6 +47,7 @@ parameters:
     scheduler:
       type: [reduce_lr_on_plateau]
       step_moment: [epoch]
+      patience: [0]
       # warmup_steps: [2500] 
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
