@@ -210,19 +210,16 @@ class LabelAnythingDataset(Dataset):
             dataset.reset_seed(seed)
 
 
-def get_example_num_list(dataset_len, batch_size, max_num_examples, num_processes=1):
+def get_example_num_list(dataset_len, possible_batch_example_nums, num_processes=1):
     """
     Returns a list of number of examples per batch and a list of batch sizes
     such that the total number of examples is `batch_size * max_num_examples`
     """
-    target_examples_num = batch_size * max_num_examples
-    possible_target_examples_len = get_divisors(max_num_examples)
     examples_nums = []
     batch_sizes = []
     remaining_images = dataset_len // num_processes
     while remaining_images > 0:
-        examples_num = random.choice(possible_target_examples_len)
-        cur_batch_size = target_examples_num // examples_num
+        cur_batch_size, examples_num = random.choice(possible_batch_example_nums)
         if cur_batch_size > remaining_images:
             cur_batch_size = remaining_images
         examples_nums.append(examples_num)
@@ -264,8 +261,7 @@ class VariableBatchSampler(BatchSampler):
     def __init__(
         self,
         data_source,
-        max_batch_size,
-        max_num_examples,
+        possible_batch_example_nums,
         drop_last=False,
         shuffle=False,
         num_processes=1,
@@ -274,8 +270,7 @@ class VariableBatchSampler(BatchSampler):
 
         self.batch_sizes, self.num_examples = get_example_num_list(
             len(data_source),
-            max_batch_size,
-            max_num_examples,
+            possible_batch_example_nums,
             num_processes=num_processes,
         )
         self.drop_last = drop_last

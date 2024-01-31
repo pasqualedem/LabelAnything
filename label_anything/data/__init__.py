@@ -12,7 +12,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
-    max_num_examples = common_params.pop("max_num_examples")
+    possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")
 
     val_datasets_params = {
         k: v for k, v in datasets_params.items() if k.startswith("val_")
@@ -25,7 +25,6 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         for k, v in datasets_params.items()
         if k not in list(val_datasets_params.keys()) + list(test_datasets_params.keys())
     }
-    batch_size = dataloader_args.pop("batch_size")
 
     train_dataset = LabelAnythingDataset(
         datasets_params=train_datasets_params,
@@ -33,8 +32,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     )
     train_batch_sampler = VariableBatchSampler(
         train_dataset,
-        max_batch_size=batch_size,
-        max_num_examples=max_num_examples,
+        possible_batch_example_nums=possible_batch_example_nums,
         num_processes=num_processes,
         shuffle=True,
     )
@@ -51,8 +49,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         )
         val_batch_sampler = VariableBatchSampler(
             val_dataset,
-            max_batch_size=batch_size,
-            max_num_examples=max_num_examples,
+            possible_batch_example_nums=possible_batch_example_nums,
             num_processes=num_processes,
         )
         val_dataloader = DataLoader(
