@@ -66,7 +66,7 @@ class Coco20iDataset(CocoLVISDataset):
         ) = self._load_annotation_dicts()
 
         # load image ids and info
-        instances = self._load_instances()
+        instances = utils.load_instances(self.instances_path)
         img2cat_keys = set(self.img2cat.keys())
         self.images = {
             x[AnnFileKeys.ID]: x
@@ -99,7 +99,7 @@ class Coco20iDataset(CocoLVISDataset):
             # sample a random category
             cat_ids = [-1, self.rng.choice(list(self.categories.keys()))]
             # sample random img ids
-            image_ids = self.rng.sample(self.cat2img[cat_ids[1]], self.n_shots + 1)
+            image_ids = self.rng.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
 
             # load, stack and preprocess the images
             images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)

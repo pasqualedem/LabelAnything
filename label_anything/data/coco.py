@@ -78,6 +78,7 @@ class CocoLVISDataset(Dataset):
         assert len(prompt_types) > 0, "prompt_types must be a non-empty list."
 
         self.name = name
+        self.instances_path = instances_path
 
         self.img_dir = img_dir
         self.emb_dir = emb_dir
@@ -92,7 +93,7 @@ class CocoLVISDataset(Dataset):
         self.reset_seed(seed)
 
         # load instances
-        instances = utils.load_instances(instances_path)
+        instances = utils.load_instances(self.instances_path)
         self.annotations = {
             x[AnnFileKeys.ID]: x for x in instances[AnnFileKeys.ANNOTATIONS]
         }
