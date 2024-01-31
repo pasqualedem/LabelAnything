@@ -47,12 +47,14 @@ parameters:
     scheduler:
       type: [reduce_lr_on_plateau]
       step_moment: [epoch]
+      patience: [0]
       # warmup_steps: [2500] 
-    substitute: [False]
-    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
+    substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
+    precision: ["fp32"] # fp16 or bf16 or fp32
 
   model:
     name: [dummy] # path to model class or model name contained in EzDL or super-gradients
@@ -100,9 +102,9 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      max_num_examples: [1]
   dataloader:
     batch_size: [1]
     num_workers: [0]
+    possible_batch_example_nums: [[[1, 16], [2, 8], [4, 4], [8, 2],]]
 
 other_grids:

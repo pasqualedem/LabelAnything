@@ -11,6 +11,14 @@ import yaml
 from label_anything.models.lam import Lam
 
 
+FLOAT_PRECISIONS = {
+    "fp32": torch.float32,
+    "fp64": torch.float64,
+    "fp16": torch.float16,
+    "bf16": torch.bfloat16,
+}
+
+
 def load_yaml(file_path):
     try:
         with open(file_path, "r") as yaml_file:

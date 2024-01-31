@@ -23,7 +23,7 @@ from label_anything.data.transforms import (
     CustomResize,
     PromptsProcessor,
 )
-from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
+from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType, cast_dict
 
 warnings.filterwarnings("ignore")
 
@@ -49,6 +49,7 @@ class CocoLVISDataset(Dataset):
             PromptType.MASK,
             PromptType.POINT,
         ],
+        dtype=torch.float32,
     ):
         """Initialize the dataset.
 
@@ -65,6 +66,7 @@ class CocoLVISDataset(Dataset):
             do_subsample (bool, optional): Specify if classes should be randomly subsampled. Defaults to True.
             add_box_noise (bool, optional): Add noise to the boxes (useful for training). Defaults to True.
             prompt_types (list[PromptType], optional): List of prompt types to be used. Defaults to [PromptType.BBOX, PromptType.MASK, PromptType.POINT].
+            dtype (torch.dtype, optional): The dtype of the tensors. Defaults to torch.float32.
         """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -88,6 +90,7 @@ class CocoLVISDataset(Dataset):
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.prompt_types = prompt_types
+        self.dtype = dtype
 
         # seeds
         self.reset_seed(seed)
@@ -587,7 +590,7 @@ class CocoLVISDataset(Dataset):
             BatchKeys.IMAGE_IDS: image_ids,
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }
-
+        data_dict = cast_dict(data_dict, self.dtype)
         return data_dict
 
     def __len__(self):
@@ -605,6 +608,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         seed=42,  # for reproducibility
         load_gts=False,
         add_box_noise=False,
+        dtype=torch.float32,
     ):
         super(CocoLVISTestDataset, self).__init__(
             name=name,
@@ -615,6 +619,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             add_box_noise=add_box_noise,
             emb_dir=emb_dir,
             load_gts=load_gts,
+            dtype=dtype,
         )
         self.num_classes = len(list(self.cat2img.keys()))
 
@@ -673,7 +678,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         points, flag_points = self.annotations_to_tensor(
             points, image_sizes, PromptType.POINT
         )
-        return {
+        prompt_dict = {
             prompt_images_key: prompt_images,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
@@ -683,6 +688,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "flag_bboxes": flag_bboxes,
             "dims": torch.as_tensor(image_sizes),
         }
+        return cast_dict(prompt_dict, self.dtype)
 
     def _get_prompts(
         self,
@@ -778,7 +784,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "dim": dim,
             "gt": gt,
         }
-        return data_dict
+        return cast_dict(data_dict, self.dtype)
 
     def collate_fn(
         self, batched_input: list[dict[str, Any]]

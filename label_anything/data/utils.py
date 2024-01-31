@@ -54,6 +54,18 @@ class BatchKeys(StrEnum):
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
+    
+
+def cast_dict(input_dict: dict, dtype) -> dict:
+    """Casts the values of the input dictionary to specified dtype if different from fp32.
+    """
+    if dtype == torch.float:
+        return input_dict
+    for key, value in input_dict.items():
+        if isinstance(value, torch.Tensor):
+            if value.dtype == torch.float32:
+                input_dict[key] = value.type(dtype)
+    return input_dict
 
 
 def get_max_annotations(annotations: list) -> int:
