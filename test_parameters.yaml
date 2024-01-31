@@ -49,8 +49,8 @@ parameters:
       step_moment: [epoch]
       # warmup_steps: [2500] 
     substitute: [True]
-    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
     precision: ["fp32"] # fp16 or bf16 or fp32
