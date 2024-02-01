@@ -17,7 +17,7 @@ class Coco20iDataset(CocoLVISDataset):
         split: Coco20iSplit,
         val_fold_idx: int,
         n_folds: int,
-        n_shots: int,
+        n_shots: int = None,
         *args,
         **kwargs
     ):
@@ -25,11 +25,16 @@ class Coco20iDataset(CocoLVISDataset):
 
         Args:
             split (Coco20iSplit): Split to use (can be train or val).
-            fold_idx (int): Validation fold index.
+            val_fold_idx (int): Validation fold index.
             n_folds (int): Number of folds.
             n_shots (int): Number of shots.
         """
         super().__init__(*args, **kwargs)
+
+        assert split in [Coco20iSplit.TRAIN, Coco20iSplit.VAL]
+        assert val_fold_idx < n_folds
+        assert split == Coco20iSplit.TRAIN or n_shots is not None
+
         self.split = split
         self.val_fold_idx = val_fold_idx
         self.n_folds = n_folds
@@ -99,7 +104,9 @@ class Coco20iDataset(CocoLVISDataset):
             # sample a random category
             cat_ids = [-1, self.rng.choice(list(self.categories.keys()))]
             # sample random img ids
-            image_ids = self.rng.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
+            image_ids = self.rng.sample(
+                list(self.cat2img[cat_ids[1]]), self.n_shots + 1
+            )
 
             # load, stack and preprocess the images
             images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
@@ -157,7 +164,7 @@ class Coco20iDataset(CocoLVISDataset):
             }
 
             return data_dict
-        
+
     def __len__(self):
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
