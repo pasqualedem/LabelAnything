@@ -16,6 +16,9 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes, dtype=torch.fl
     common_params = dataset_args.get("common")
     common_params["dtype"] = dtype
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")
+    val_possible_batch_example_nums = dataloader_args.pop(
+        "val_possible_batch_example_nums", possible_batch_example_nums
+    )
 
     val_datasets_params = {
         k: v for k, v in datasets_params.items() if k.startswith("val_")
@@ -52,7 +55,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes, dtype=torch.fl
         )
         val_batch_sampler = VariableBatchSampler(
             val_dataset,
-            possible_batch_example_nums=possible_batch_example_nums,
+            possible_batch_example_nums=val_possible_batch_example_nums,
             num_processes=num_processes,
         )
         val_dataloader = DataLoader(

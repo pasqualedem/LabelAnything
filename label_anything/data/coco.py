@@ -58,7 +58,7 @@ class CocoLVISDataset(Dataset):
             instances_path (str): Path to the instances json file.
             img_dir (Optional[str], optional): Path to the directory containing the images. Defaults to None.
             emb_dir (Optional[str], optional): Path to the directory containing the embeddings. Defaults to None.
-            max_num_examples (int, optional): Maximum number of examples for each image. Defaults to 10.
+            max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
             seed (int, optional): For reproducibility. Defaults to 42.
@@ -80,6 +80,7 @@ class CocoLVISDataset(Dataset):
         assert len(prompt_types) > 0, "prompt_types must be a non-empty list."
 
         self.name = name
+        self.instances_path = instances_path
 
         self.img_dir = img_dir
         self.emb_dir = emb_dir
@@ -95,7 +96,7 @@ class CocoLVISDataset(Dataset):
         self.reset_seed(seed)
 
         # load instances
-        instances = utils.load_instances(instances_path)
+        instances = utils.load_instances(self.instances_path)
         self.annotations = {
             x[AnnFileKeys.ID]: x for x in instances[AnnFileKeys.ANNOTATIONS]
         }
@@ -162,8 +163,13 @@ class CocoLVISDataset(Dataset):
         img2cat = {}
         cat2img = {}
 
+        category_ids = set(self.categories.keys())
+
         for ann in self.annotations.values():
             if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
+                continue
+
+            if ann[AnnFileKeys.CATEGORY_ID] not in category_ids:
                 continue
 
             if ann[AnnFileKeys.IMAGE_ID] not in img2cat_annotations:

@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, BatchSampler
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
+from label_anything.data.coco20i import Coco20iDataset
 from label_anything.utils.utils import get_divisors
 
 datasets = {
@@ -16,6 +17,8 @@ datasets = {
     "val_lvis": CocoLVISDataset,
     "ade20k": None,
     "voc": CocoLVISDataset,
+    "coco20i": Coco20iDataset,
+    "val_coco20i": Coco20iDataset,
 }
 
 
