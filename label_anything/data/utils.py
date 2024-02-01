@@ -54,18 +54,21 @@ class BatchKeys(StrEnum):
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
-    
 
-def cast_dict(input_dict: dict, dtype) -> dict:
-    """Casts the values of the input dictionary to specified dtype if different from fp32.
-    """
+
+def cast_type(input, dtype) -> dict:
+    """Casts the values of the input dictionary / tuple / list / Tensor to specified dtype if different from fp32."""
     if dtype == torch.float:
-        return input_dict
-    for key, value in input_dict.items():
-        if isinstance(value, torch.Tensor):
-            if value.dtype == torch.float32:
-                input_dict[key] = value.type(dtype)
-    return input_dict
+        return input
+    if isinstance(input, dict):
+        return {key: cast_type(value, dtype) for key, value in input.items()}
+    if isinstance(input, tuple):
+        return tuple(cast_type(value, dtype) for value in input)
+    if isinstance(input, list):
+        return [cast_type(value, dtype) for value in input]
+    if isinstance(input, torch.Tensor) and input.dtype == torch.float32:
+        return input.type(dtype)
+    return input
 
 
 def get_max_annotations(annotations: list) -> int:
@@ -187,8 +190,8 @@ def collate_mask(
         h,
         w,
     ) = masks.shape
-    out = torch.zeros(size=(m, num_classes, h, w))
-    out_flags = torch.zeros(size=(m, num_classes))
+    out = torch.zeros(size=(m, num_classes, h, w), dtype=masks.dtype)
+    out_flags = torch.zeros(size=(m, num_classes), dtype=flags.dtype)
     out[:, :c, :, :] = masks
     out_flags[:, :c] = flags
 

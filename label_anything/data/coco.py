@@ -23,7 +23,7 @@ from label_anything.data.transforms import (
     CustomResize,
     PromptsProcessor,
 )
-from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType, cast_dict
+from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType, cast_type
 
 warnings.filterwarnings("ignore")
 
@@ -584,7 +584,7 @@ class CocoLVISDataset(Dataset):
             BatchKeys.IMAGE_IDS: image_ids,
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }
-        data_dict = cast_dict(data_dict, self.dtype)
+        data_dict = cast_type(data_dict, self.dtype)
         return data_dict
 
     def __len__(self):
@@ -682,7 +682,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "flag_bboxes": flag_bboxes,
             "dims": torch.as_tensor(image_sizes),
         }
-        return cast_dict(prompt_dict, self.dtype)
+        return cast_type(prompt_dict, self.dtype)
 
     def _get_prompts(
         self,
@@ -778,7 +778,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             "dim": dim,
             "gt": gt,
         }
-        return cast_dict(data_dict, self.dtype)
+        return cast_type(data_dict, self.dtype)
 
     def collate_fn(
         self, batched_input: list[dict[str, Any]]

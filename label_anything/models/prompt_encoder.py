@@ -200,7 +200,9 @@ class PositionEmbeddingRandom(nn.Module):
     def _pe_encoding(self, coords: torch.Tensor) -> torch.Tensor:
         """Positionally encode points that are normalized to [0,1]."""
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coords = coords.type(self.positional_encoding_gaussian_matrix.dtype) # Ensure same type
+        coords = coords.type(
+            self.positional_encoding_gaussian_matrix.dtype
+        )  # Ensure same type
         coords = 2 * coords - 1
         coords = coords @ self.positional_encoding_gaussian_matrix
         coords = 2 * np.pi * coords
@@ -294,7 +296,7 @@ class PromptImageEncoder(PromptEncoder):
         else:
             for i in range(0, masks.shape[0], chunk_size):
                 mask_embedding = torch.zeros(
-                    B*M*C, self.embed_dim, H // 4, W // 4, device=self._get_device()
+                    B * M * C, self.embed_dim, H // 4, W // 4, device=self._get_device()
                 )
                 mask_embedding[i : i + chunk_size] = self.mask_downscaling(
                     masks[i : i + chunk_size]
@@ -360,7 +362,9 @@ class PromptImageEncoder(PromptEncoder):
         bs = B * n_examples * n_classes
 
         sparse_embeddings = torch.empty(
-            (bs, 0, self.embed_dim), device=self._get_device()
+            (bs, 0, self.embed_dim),
+            device=self._get_device(),
+            dtype=self.no_sparse_embedding.weight.dtype,
         )
         if points is not None:
             coords, labels = points
