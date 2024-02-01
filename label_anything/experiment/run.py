@@ -31,7 +31,6 @@ from label_anything.utils.utils import FLOAT_PRECISIONS, RunningAverage, write_y
 from .utils import (
     SchedulerStepMoment,
     allocate_memory,
-    cast_model,
     check_nan,
     get_batch_size,
     handle_oom,
@@ -94,22 +93,21 @@ class Run:
             DistributedDataParallelKwargs(find_unused_parameters=True),
         ]
         self.accelerator = Accelerator(
-            even_batches=False, kwargs_handlers=kwargs, split_batches=False
+            even_batches=False,
+            kwargs_handlers=kwargs,
+            split_batches=False,
+            mixed_precision=self.train_params.get("precision", None),
         )
         self.plat_logger = get_experiment_logger(self.accelerator, self.params)
         self.url = self.plat_logger.url
         self.name = self.plat_logger.name
-
-        float_precision = FLOAT_PRECISIONS[self.train_params.get("precision", "fp32")]
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
-            self.dataset_params, self.dataloader_params, self.accelerator.num_processes,
-            float_precision
+            self.dataset_params,
+            self.dataloader_params,
+            self.accelerator.num_processes,
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
-        self.model = cast_model(
-            self.model, float_precision
-        )
 
         self.watch_metric = self.train_params["watch_metric"]
 
@@ -195,7 +193,7 @@ class Run:
         if hasattr(self.scheduler, "get_lr"):
             return self.scheduler.get_lr()[0]
         return self.scheduler.optimizer.param_groups[0]["lr"]
-        
+
     def _scheduler_step(self, moment, metrics=None):
         if moment != self.scheduler_step_moment or self.scheduler is None:
             return
@@ -203,7 +201,7 @@ class Run:
             self.scheduler.step()
         elif moment == SchedulerStepMoment.EPOCH:
             self.scheduler.step(metrics[self.watch_metric])
-            
+
     def _forward(
         self,
         batch_tuple: tuple[dict, torch.tensor],

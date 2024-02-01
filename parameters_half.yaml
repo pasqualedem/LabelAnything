@@ -20,6 +20,7 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      tags: [[half_precision]]
 
   train_params:
     loss:
@@ -45,6 +46,7 @@ parameters:
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
     precision: ["fp16", "bf16"] # fp16 or bf16 or fp32
+
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters

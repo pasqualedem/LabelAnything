@@ -54,7 +54,7 @@ parameters:
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
-    precision: ["fp16"] # fp16 or bf16 or fp32
+    precision: ["bf16"] # fp16 or bf16 or fp32
 
   model:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
