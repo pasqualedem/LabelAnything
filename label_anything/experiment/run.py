@@ -81,6 +81,8 @@ class Run:
         np.random.seed(42)
         random.seed(42)
         self.seg_trainer = None
+        logger.info("Parameters: ")
+        logger.info(params)
         self.parse_params(params)
         (
             self.train_params,
