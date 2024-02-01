@@ -74,6 +74,6 @@ parameters:
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
-    possible_batch_example_nums: [[[2, 16], [4, 8], [8, 4], [16, 2]]]
+    possible_batch_example_nums: [[[2, 16], [4, 8], [8, 4], [16, 2], [32, 1]]]
 
 other_grids:
