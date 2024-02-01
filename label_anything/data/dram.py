@@ -197,7 +197,7 @@ if __name__ == '__main__':
         PILToTensor(),
         CustomNormalize(),
     ])
-    parent_dir = "/home/raffaele/art/LabelAnything/data/raw/DRAM_processed"
+    parent_dir = "../../data/raw/DRAM_processed"
     dram = DramTestDataset(
         image_dir=f"{parent_dir}/test",
         gt_dir=f"{parent_dir}/labels",
