@@ -24,6 +24,7 @@ from label_anything.data.transforms import (
     PromptsProcessor,
 )
 from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
+from label_anything.data.dataset import LabelAnythingTestDataset
 
 warnings.filterwarnings("ignore")
 
@@ -594,7 +595,7 @@ class CocoLVISDataset(Dataset):
         return len(self.images)
 
 
-class CocoLVISTestDataset(CocoLVISDataset):
+class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
     def __init__(
         self,
         name,
@@ -607,7 +608,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
         add_box_noise=False,
         dtype=torch.float32,
     ):
-        super(CocoLVISTestDataset, self).__init__(
+        CocoLVISTestDataset.__init__(
             name=name,
             instances_path=instances_path,
             img_dir=img_dir,
@@ -618,6 +619,7 @@ class CocoLVISTestDataset(CocoLVISDataset):
             load_gts=load_gts,
             dtype=dtype,
         )
+        LabelAnythingTestDataset.__init__()
         self.num_classes = len(list(self.cat2img.keys()))
 
     def _extract_examples(self, cat2img: dict, img2cat: dict) -> list[int]:

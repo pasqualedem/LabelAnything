@@ -6,6 +6,7 @@ from label_anything.data.utils import BatchKeys, collate_gts
 from PIL import Image
 import random
 from label_anything.data.transforms import PromptsProcessor
+from label_anything.data.dataset import LabelAnythingTestDataset
 
 
 def collate_fn(batched_input):
@@ -27,7 +28,7 @@ def _get_data(image_dir, split):
     return list(map(lambda x: x.strip(), data))
 
 
-class DramTestDataset(Dataset):
+class DramTestDataset(LabelAnythingTestDataset):
     ID2TRAIN_ID = {
         0: 0,
         3: 1,
