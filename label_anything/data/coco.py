@@ -233,7 +233,7 @@ class CocoLVISDataset(Dataset):
         """
         if self.img_dir is not None:
             return Image.open(
-                f'{self.img_dir}/{img_data["coco_url"].split("/")[-1]}'
+                f'{self.img_dir}/{img_data["file_name"]}'
             ).convert("RGB")
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert(
             "RGB"
@@ -277,14 +277,14 @@ class CocoLVISDataset(Dataset):
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of sets of category ids of the examples.
         """
-        img_cats = torch.tensor(list(self.img2cat[img_data["id"]]))
+        img_cats = torch.tensor(list(self.img2cat[img_data[AnnFileKeys.ID]]))
         sampled_classes = (
             self.example_generator.sample_classes_from_query(img_cats, uniform_sampling)
             if self.do_subsample
             else img_cats
         )
         return self.example_generator.generate_examples(
-            query_image_id=img_data["id"],
+            query_image_id=img_data[AnnFileKeys.ID],
             image_classes=img_cats,
             sampled_classes=torch.tensor(sampled_classes),
             num_examples=num_examples,
