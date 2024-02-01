@@ -109,6 +109,9 @@ class WandBLogger(AbstractLogger):
             dir=offline_directory,
             group=group,
         )
+        logger.info(f"wandb run id  : {experiment.id}")
+        logger.info(f"wandb run name: {experiment.name}")
+        logger.info(f"wandb run dir : {experiment.dir}")
         super().__init__(experiment=experiment, **kwargs, local_dir=experiment.dir)
         if save_code:
             self._save_code()
