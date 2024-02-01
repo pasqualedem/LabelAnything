@@ -58,7 +58,7 @@ class CocoLVISDataset(Dataset):
             instances_path (str): Path to the instances json file.
             img_dir (Optional[str], optional): Path to the directory containing the images. Defaults to None.
             emb_dir (Optional[str], optional): Path to the directory containing the embeddings. Defaults to None.
-            max_num_examples (int, optional): Maximum number of examples for each image. Defaults to 10.
+            max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
             seed (int, optional): For reproducibility. Defaults to 42.

@@ -18,6 +18,7 @@ datasets = {
     "ade20k": None,
     "voc": CocoLVISDataset,
     "coco20i": Coco20iDataset,
+    "val_coco20i": Coco20iDataset,
 }
 
 
