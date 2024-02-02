@@ -100,6 +100,11 @@ class WandBLogger(AbstractLogger):
         resume = "must" if resumed else None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
+            os.environ["WANDB_ARTIFACT_LOCATION"] = offline_directory
+            os.environ["WANDB_ARTIFACT_DIR"] = offline_directory
+            os.environ["WANDB_CACHE_DIR"] = offline_directory
+            os.environ["WANDB_CONFIG_DIR"] = offline_directory
+            os.environ["WANDB_DATA_DIR"] = offline_directory
         experiment = wandb.init(
             project=project_name,
             entity=entity,
