@@ -31,7 +31,19 @@ def load_yaml(file_path):
         print(f"Error parsing YAML file: {e}")
         
 
-def write_yaml(data, file_path):
+def write_yaml(data: dict, file_path: str = None, file=None):
+    """ Write a dictionary to a YAML file.
+
+    Args:
+        data (dict): the data to write
+        file_path (str): the path to the file
+        file: the file object to write to (esclusive with file_path)
+    """
+    if file is not None:
+        file.write(yaml.dump(data))
+        return
+    if file_path is None:
+        raise ValueError("file_path or file must be specified")
     try:
         with open(file_path, "w") as yaml_file:
             yaml.dump(data, yaml_file)

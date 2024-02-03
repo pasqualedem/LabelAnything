@@ -89,7 +89,7 @@ class Run:
         random.seed(42)
         self.seg_trainer = None
         logger.info("Parameters: ")
-        logger.info(params)
+        write_yaml(params, file=sys.stdout)
         self.parse_params(params)
         (
             self.train_params,
