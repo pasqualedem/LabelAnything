@@ -31,7 +31,7 @@ class PromptContrastiveLoss(nn.Module):
         
         class_embeddings = rearrange(class_embeddings, "b m c d -> b (m c) d")
         dot_products = class_embeddings @ rearrange(class_embeddings, " b c d -> b d c")
-        dot_products = normalize(dot_products, dim=1)
+        dot_products = torch.sigmoid(dot_products)
         
         contrastive_matrix = torch.eye(C, device=class_embeddings.device)
         contrastive_matrix = contrastive_matrix.unsqueeze(0).repeat(B, M, M)
