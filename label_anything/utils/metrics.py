@@ -1,3 +1,5 @@
+import lovely_tensors as lt
+lt.monkey_patch()
 import torch
 from accelerate import Accelerator
 from torch import Tensor
@@ -86,7 +88,9 @@ def fbiou(preds: Tensor, target: Tensor, ignore_index=-100, *args, **kwargs) -> 
     return binary_jaccard_index(preds, target, ignore_index=ignore_index)
 
 
-def to_global_multiclass(classes: list[list[list[int]]], *tensors: list[Tensor]) -> list[Tensor]:
+def to_global_multiclass(
+    classes: list[list[list[int]]], *tensors: list[Tensor]
+) -> list[Tensor]:
     """Convert the classes of an episode to the global classes.
 
     Args:
@@ -96,24 +100,27 @@ def to_global_multiclass(classes: list[list[list[int]]], *tensors: list[Tensor])
         list[Tensor]: The updated tensors.
     """
     batch_size = len(classes)
-    out_tensors = [tensor.clone() for tensor in tensors]    
+    out_tensors = [tensor.clone() for tensor in tensors]
     for i in range(batch_size):
         for j, v in enumerate(classes[i][0]):
             for tensor in out_tensors:
                 tensor[i] = torch.where(tensor[i] == j, v, tensor[i])
-    return out_tensors  
+    return out_tensors
 
 
 class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
     """Distributed version of the MulticlassJaccardIndex.
-    
+
     Please, use a value of `ignore_index` that is >= 0.
     """
+
     def __init__(self, accelerator: Accelerator, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.accelerator = accelerator
 
     def update(self, preds: Tensor, target: Tensor) -> None:
+        print("preds", preds)
+        print("target", target)
         super().update(preds, target.where(target < 0, self.ignore_index, target))
 
     def compute(self) -> Tensor:
@@ -122,13 +129,15 @@ class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
 
 
 class DistributedBinaryJaccardIndex(BinaryJaccardIndex):
-    """Distributed version of the BinaryJaccardIndex.   
-    """
+    """Distributed version of the BinaryJaccardIndex."""
+
     def __init__(self, accelerator: Accelerator, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.accelerator = accelerator
 
     def update(self, preds: Tensor, target: Tensor) -> None:
+        print("preds", preds)
+        print("target", target)
         super().update((preds != 0).int(), (target != 0).int())
 
     def compute(self) -> Tensor:
