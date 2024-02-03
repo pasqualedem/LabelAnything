@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
+from torchmetrics import MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
@@ -17,15 +18,10 @@ from label_anything.experiment.substitution import Substitutor
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
-from torchmetrics import MetricCollection
-from label_anything.utils.metrics import (
-    FBIoU,
-    JaccardIndex,
-    to_global_multiclass,
-)
 from label_anything.utils.metrics import (
     DistributedBinaryJaccardIndex,
     DistributedMulticlassJaccardIndex,
+    to_global_multiclass,
 )
 from label_anything.utils.utils import FLOAT_PRECISIONS, RunningAverage, write_yaml
 
@@ -34,12 +30,12 @@ from .utils import (
     allocate_memory,
     check_nan,
     get_batch_size,
-    handle_oom,
-    set_class_embeddings,
-    parse_params,
     get_experiment_logger,
-    nosync_accumulation,
     get_scheduler,
+    handle_oom,
+    nosync_accumulation,
+    parse_params,
+    set_class_embeddings,
 )
 
 logger = get_logger(__name__)
@@ -307,7 +303,9 @@ class Run:
             )
 
         # prepare metrics
-        dataset_categories = next(iter(self.train_loader.dataset.datasets.values())).categories
+        dataset_categories = next(
+            iter(self.train_loader.dataset.datasets.values())
+        ).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
@@ -322,7 +320,7 @@ class Run:
                     ignore_index=-100,
                 ),
             },
-            prefix="batch_"
+            prefix="batch_",
         )
         metrics.to(self.accelerator.device)
         loss_avg = RunningAverage()
@@ -439,7 +437,9 @@ class Run:
         self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        dataset_categories = next(iter(self.val_loader.dataset.datasets.values())).categories
+        dataset_categories = next(
+            iter(self.val_loader.dataset.datasets.values())
+        ).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
