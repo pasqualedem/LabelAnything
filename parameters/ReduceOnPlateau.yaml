@@ -11,7 +11,7 @@ parameters:
   # Each value should be a dict or a list
   
   logger:
-    log_frequency: [10]
+    log_frequency: [250]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [50]
     experiment_save_delta: [null] # save experiment every n seconds
