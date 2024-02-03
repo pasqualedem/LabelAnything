@@ -1,8 +1,12 @@
 import torch
+from accelerate import Accelerator
 from torch import Tensor
-from torchmetrics.classification import BinaryJaccardIndex, JaccardIndex
-from torchmetrics import MetricCollection
-from torchmetrics.functional.classification import binary_jaccard_index, multiclass_jaccard_index
+from torchmetrics.classification import (
+    BinaryJaccardIndex,
+    JaccardIndex,
+    MulticlassJaccardIndex,
+)
+from torchmetrics.functional.classification import binary_jaccard_index
 
 from label_anything.utils.utils import RunningAverage
 
@@ -13,9 +17,9 @@ __all__ = [
     "AverageMetricCollection",
     "fbiou",
     "binary_jaccard_index",
-    "multiclass_jaccard_index"
-    "MetricCollection"
+    "multiclass_jaccard_index" "MetricCollection",
 ]
+
 
 class FBIoU(BinaryJaccardIndex):
     def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
@@ -81,3 +85,52 @@ def fbiou(preds: Tensor, target: Tensor, ignore_index=-100, *args, **kwargs) -> 
     target[target != 0] = 1
     return binary_jaccard_index(preds, target, ignore_index=ignore_index)
 
+
+def to_global_multiclass(classes: list[list[list[int]]], *tensors: list[Tensor]) -> list[Tensor]:
+    """Convert the classes of an episode to the global classes.
+
+    Args:
+        classes (list[list[list[int]]]): The classes corresponding to batch, episode and query.
+
+    Returns:
+        list[Tensor]: The updated tensors.
+    """
+    batch_size = len(classes)
+    out_tensors = [tensor.clone() for tensor in tensors]    
+    for i in range(batch_size):
+        for j, v in classes[i][0]:
+            for tensor in out_tensors:
+                tensor[i] = torch.where(tensor[i] == j, v, tensor[i])
+    return out_tensors  
+
+
+class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
+    """Distributed version of the MulticlassJaccardIndex.
+    
+    Please, use a value of `ignore_index` that is >= 0.
+    """
+    def __init__(self, accelerator: Accelerator, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.accelerator = accelerator
+
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        super().update(preds, target.where(target < 0, self.ignore_index, target))
+
+    def compute(self) -> Tensor:
+        self.confmat = self.accelerator.gather(self.confmat)
+        return super().compute()
+
+
+class DistributedBinaryJaccardIndex(BinaryJaccardIndex):
+    """Distributed version of the BinaryJaccardIndex.   
+    """
+    def __init__(self, accelerator: Accelerator, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.accelerator = accelerator
+
+    def update(self, preds: Tensor, target: Tensor) -> None:
+        super().update((preds != 0).int(), (target != 0).int())
+
+    def compute(self) -> Tensor:
+        self.confmat = self.accelerator.gather(self.confmat)
+        return super().compute()
