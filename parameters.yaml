@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: FourthParallelTry # name of group of experiments for the logger platform
+  group: LimitedSteps # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -11,7 +11,7 @@ parameters:
   # Each value should be a dict or a list
   
   logger:
-    log_frequency: [10]
+    log_frequency: [250]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [50]
     experiment_save_delta: [null] # save experiment every n seconds
@@ -32,7 +32,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [20]
+    max_epochs: [30]
     compile: [False]
     initial_lr: [0.0001]
     optimizer: [AdamW]
@@ -40,6 +40,8 @@ parameters:
       type: [reduce_lr_on_plateau]
       step_moment: [epoch]
       patience: [0]
+      factor: [0.5, 0.1]
+
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
@@ -71,8 +73,9 @@ parameters:
       max_points_per_annotation: [10]
       load_gts: [True]
   dataloader:
-    num_workers: [28]
+    num_workers: [24]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
+    num_steps: [500]
 
 other_grids:
