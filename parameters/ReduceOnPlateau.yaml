@@ -19,6 +19,7 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
+      tags: [[NewArchitecture]]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
@@ -32,7 +33,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [20]
+    max_epochs: [10]
     compile: [False]
     initial_lr: [0.0001]
     optimizer: [AdamW]
