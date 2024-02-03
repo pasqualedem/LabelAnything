@@ -1,3 +1,6 @@
+import lovely_tensors as lt
+lt.monkey_patch()
+
 import torch
 from accelerate import Accelerator
 from torch import Tensor
@@ -39,7 +42,7 @@ def to_global_multiclass(
         longest_classes = max(classes[i], key=len)
         for j, v in enumerate(longest_classes):
             for tensor in out_tensors:
-                tensor[i] = torch.where(tensor[i] == j + 1, cats_map[v], tensor[i])
+                tensor[i] = tensor[i].where(tensor[i] == j + 1, cats_map[v])
     return out_tensors
 
 
@@ -52,6 +55,8 @@ class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         target = target.where(target < 0, self.ignore_index)
+        print("preds", preds)
+        print("target", target)
         super().update(preds, target)
 
 
@@ -65,4 +70,6 @@ class DistributedBinaryJaccardIndex(BinaryJaccardIndex):
         preds, target = preds.clone(), target.clone()
         preds[preds > 0] = 1
         target[target > 0] = 1
+        print("preds", preds)
+        print("target", target)
         super().update(preds, target)
