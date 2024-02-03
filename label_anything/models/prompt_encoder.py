@@ -15,6 +15,7 @@ from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
 from .transformer import TwoWayTransformer
 
 from label_anything.data.utils import Label
+from label_anything.utils.utils import ResultDict
 
 
 class PromptEncoder(nn.Module):
@@ -280,7 +281,7 @@ class PromptImageEncoder(PromptEncoder):
         self.no_sparse_embedding = nn.Embedding(
             1, embed_dim
         )  # For when no sparse embeddings in input
-        
+
         self.example_attention = None
         if example_attention:
             self.example_attention = AttentionMLPBlock(
@@ -556,7 +557,7 @@ class PromptImageEncoder(PromptEncoder):
         src = rearrange(src, "b d h w -> b d (h w)")
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
         src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
-        
+
         if self.class_example_attention is not None:
             src = rearrange(src, "b m c d -> b (m c) d", c=c)
             src = self.class_example_attention(src)
@@ -572,8 +573,11 @@ class PromptImageEncoder(PromptEncoder):
             src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
         # Average over examples
-        src = torch.mean(src, dim=1)  # (B, C, D)
-        return src
+        class_embeddings = torch.mean(src, dim=1)  # (B, C, D)
+        return {
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: src,
+        }
 
 
 class PromptMaskImageEncoder(PromptEncoder):

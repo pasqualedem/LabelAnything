@@ -36,9 +36,11 @@ parameters:
         #   rmi:
         #     weight: 0.485
         - focal:
-            weight: 0.95
+            weight: 0.5
           dice:
-            weight: 0.05
+            weight: 0.025
+          prompt_contrastive:
+            weight: 0.475
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
@@ -51,8 +53,8 @@ parameters:
       step_moment: [epoch]
       patience: [0]
       # warmup_steps: [2500] 
-    substitute: [True]
-    accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    substitute: [False]
+    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches

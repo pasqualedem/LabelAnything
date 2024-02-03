@@ -7,8 +7,9 @@ from io import StringIO
 import collections.abc
 from typing import Mapping
 import yaml
+from label_anything.data.utils import StrEnum
 
-from label_anything.models.lam import Lam
+# from label_anything.models.lam import Lam 
 
 
 FLOAT_PRECISIONS = {
@@ -40,27 +41,27 @@ def write_yaml(data, file_path):
         print(f"Error parsing YAML file: {e}")
 
 
-def unwrap_model_from_parallel(model, return_was_wrapped=False):
-    """
-    Unwrap a model from a DataParallel or DistributedDataParallel wrapper
-    :param model: the model
-    :return: the unwrapped model
-    """
-    if isinstance(
-        model,
-        (
-            torch.nn.DataParallel,
-            torch.nn.parallel.DistributedDataParallel,
-            Lam,
-        ),
-    ):
-        if return_was_wrapped:
-            return model.module, True
-        return model.module
-    else:
-        if return_was_wrapped:
-            return model, False
-        return model
+# def unwrap_model_from_parallel(model, return_was_wrapped=False):
+#     """
+#     Unwrap a model from a DataParallel or DistributedDataParallel wrapper
+#     :param model: the model
+#     :return: the unwrapped model
+#     """
+#     if isinstance(
+#         model,
+#         (
+#             torch.nn.DataParallel,
+#             torch.nn.parallel.DistributedDataParallel,
+#             Lam,
+#         ),
+#     ):
+#         if return_was_wrapped:
+#             return model.module, True
+#         return model.module
+#     else:
+#         if return_was_wrapped:
+#             return model, False
+#         return model
 
 
 def get_module_class_from_path(path):
@@ -222,3 +223,9 @@ class RunningAverage:
         
     def compute(self):
         return self.accumulator / self.steps
+
+
+class ResultDict(StrEnum):
+    CLASS_EMBS = "class_embeddings"
+    LOGITS = "logits"
+    EXAMPLES_CLASS_EMBS = "class_examples_embeddings"
