@@ -318,11 +318,11 @@ class Run:
                     ignore_index=-100,
                     sync_on_compute=False,
                 ),
-                "FBIoU": DistributedBinaryJaccardIndex(
-                    accelerator=self.accelerator,
-                    ignore_index=-100,
-                    sync_on_compute=False,
-                ),
+                # "FBIoU": DistributedBinaryJaccardIndex(
+                #     accelerator=self.accelerator,
+                #     ignore_index=-100,
+                #     sync_on_compute=False,
+                # ),
             },
             prefix="batch_"
         )
