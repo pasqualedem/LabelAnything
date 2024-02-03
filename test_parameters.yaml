@@ -64,6 +64,7 @@ parameters:
     use_sam_checkpoint: [True]
     example_attention: [True]
     class_attention: [True]
+    spatial_convs: [3]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

@@ -57,6 +57,7 @@ def _build_lam(
     vit_patch_size=16,
     example_attention=False,
     class_attention=False,
+    spatial_convs=None,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -81,6 +82,7 @@ def _build_lam(
         ),
         mask_decoder=MaskDecoderLam(
             transformer_dim=prompt_embed_dim,
+            spatial_convs=spatial_convs,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=prompt_embed_dim,
