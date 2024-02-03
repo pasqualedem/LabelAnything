@@ -22,6 +22,8 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
+      # resume: [True]
+      # run_id: [pg70tf8u]
 
   train_params:
     loss:
