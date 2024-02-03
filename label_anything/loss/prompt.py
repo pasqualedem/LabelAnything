@@ -11,6 +11,8 @@ class PromptContrastiveLoss(nn.Module):
         Computes the contrastive loss of the class prompts generated for each example in the support set. 
         """
         super().__init__()
+        self.t_prime = nn.Parameter(torch.tensor([torch.log(torch.tensor(10))]))
+        self.bias = nn.Parameter(torch.tensor([-10.0]))
         
     def forward(self, class_embeddings: torch.Tensor, flag_masks, flag_points, flag_boxes):
         """
@@ -30,12 +32,14 @@ class PromptContrastiveLoss(nn.Module):
         flags = torch.triu(flags)
         
         class_embeddings = rearrange(class_embeddings, "b m c d -> b (m c) d")
+        class_embeddings = normalize(class_embeddings, p=2, dim=-1)
         dot_products = class_embeddings @ rearrange(class_embeddings, " b c d -> b d c")
-        dot_products = torch.sigmoid(dot_products)
+        dot_products = dot_products * torch.exp(self.t_prime) + self.bias
         
         contrastive_matrix = torch.eye(C, device=class_embeddings.device)
         contrastive_matrix = contrastive_matrix.unsqueeze(0).repeat(B, M, M)
-        cross_entropy_loss = binary_cross_entropy(dot_products, contrastive_matrix, reduction="none")
+        contrastive_matrix = 2 * contrastive_matrix - 1
+        cross_entropy_loss = -torch.log(torch.sigmoid(dot_products * contrastive_matrix))
         return cross_entropy_loss[flags].mean()
         
         

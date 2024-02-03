@@ -124,6 +124,8 @@ class Run:
         logger.info("Start training loop...")
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        self.model.add_module("criterion", self.criterion) # If the loss has parameters, they will be added to the model
+        
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],

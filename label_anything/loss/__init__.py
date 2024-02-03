@@ -32,16 +32,20 @@ class LabelAnythingLoss(nn.Module):
     def __init__(self, components, class_weighting=None):
         super().__init__()
         self.weights = {k: v.pop("weight") for k, v in components.items()}
-        self.components = {
-            k: LOGITS_LOSSES[k](**v)
-            for k, v in components.items()
-            if k in LOGITS_LOSSES
-        }
-        self.prompt_components = {
-            k: PROMPT_LOSSES[k](**v)
-            for k, v in components.items()
-            if k in PROMPT_LOSSES
-        }
+        self.components = nn.ModuleDict(
+            [
+                [k, LOGITS_LOSSES[k](**v)]
+                for k, v in components.items()
+                if k in LOGITS_LOSSES
+            ]
+        )
+        self.prompt_components = nn.ModuleDict(
+            [
+                [k, PROMPT_LOSSES[k](**v)]
+                for k, v in components.items()
+                if k in PROMPT_LOSSES
+            ]
+        )
         if (
             set(components.keys())
             - set(self.components.keys())
@@ -70,12 +74,13 @@ class LabelAnythingLoss(nn.Module):
             for k, loss in self.components.items()
         )
         prompt_loss = sum(
-            self.weights[k] * loss(
+            self.weights[k]
+            * loss(
                 result[ResultDict.EXAMPLES_CLASS_EMBS],
                 result[BatchKeys.FLAG_MASKS],
                 result[BatchKeys.FLAG_POINTS],
-                result[BatchKeys.FLAG_BBOXES]
-                )
+                result[BatchKeys.FLAG_BBOXES],
+            )
             for k, loss in self.prompt_components.items()
         )
         return logits_loss + prompt_loss
