@@ -103,7 +103,9 @@ def to_global_multiclass(
     batch_size = len(classes)
     out_tensors = [tensor.clone() for tensor in tensors]
     for i in range(batch_size):
-        for j, v in enumerate(classes[i][0]):
+        # assign to longest_classes the longest list in classes[i]
+        longest_classes = max(classes[i], key=len)
+        for j, v in enumerate(longest_classes):
             for tensor in out_tensors:
                 tensor[i] = torch.where(tensor[i] == j + 1, v, tensor[i])
     return out_tensors

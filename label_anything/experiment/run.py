@@ -322,6 +322,7 @@ class Run:
                 ),
             },
             prefix="batch_",
+            sync_on_compute=False,
         )
         metrics.to(self.accelerator.device)
         loss_avg = RunningAverage()
