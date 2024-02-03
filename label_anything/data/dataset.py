@@ -8,7 +8,11 @@ from torch.utils.data import Dataset, BatchSampler
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.coco20i import Coco20iDataset
-from label_anything.utils.utils import get_divisors
+from label_anything.logger.text_logger import get_logger
+from label_anything.utils.utils import get_divisors, get
+
+logger = get_logger(__name__)
+
 
 datasets = {
     "coco": CocoLVISDataset,
@@ -278,6 +282,15 @@ class VariableBatchSampler(BatchSampler):
             num_processes=num_processes,
         )
         if num_steps is not None:
+            if num_steps % num_processes != 0:
+                logger.warning(
+                    "The number of steps is not divisible by the number of processes."
+                )
+                logger.warning(
+                    "The number of steps will be adjusted to be divisible by the number of processes."
+                )
+                num_steps = num_steps - (num_steps % num_processes)
+                logger.warning(f"The new number of steps is {num_steps}.")
             self.batch_sizes = self.batch_sizes[:num_steps]
             self.num_examples = self.num_examples[:num_steps]
         self.drop_last = drop_last
