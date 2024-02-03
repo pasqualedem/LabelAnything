@@ -11,8 +11,8 @@ from einops import rearrange
 
 from typing import Any, Optional, Tuple, Type
 
-from .common import LayerNorm2d, MLPBlock
-from .transformer import TwoWayTransformer, Attention
+from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
+from .transformer import TwoWayTransformer
 
 from label_anything.data.utils import Label
 
@@ -240,6 +240,9 @@ class PromptImageEncoder(PromptEncoder):
         input_image_size: Tuple[int, int],
         mask_in_chans: int,
         transformer: nn.Module,
+        class_example_attention: bool = True,
+        class_attention: bool = False,
+        example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -267,19 +270,44 @@ class PromptImageEncoder(PromptEncoder):
 
         self.transformer = transformer
 
-        self.sparse_embedding_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
+        self.sparse_embedding_attention = AttentionMLPBlock(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            downsample_rate=attention_downsample_rate,
+            mlp_dim=mlp_dim,
+            act=activation,
         )
         self.no_sparse_embedding = nn.Embedding(
             1, embed_dim
         )  # For when no sparse embeddings in input
-        self.norm_sparse_embedding_attention = nn.LayerNorm(embed_dim)
-        self.example_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
-        self.norm_example_attention = nn.LayerNorm(embed_dim)
-        self.example_mlp = MLPBlock(embed_dim, mlp_dim)
-        self.norm_example_mlp = nn.LayerNorm(embed_dim)
+        
+        self.example_attention = None
+        if example_attention:
+            self.example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+        self.class_attention = None
+        if class_attention:
+            self.class_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+
+        if class_example_attention:
+            self.class_example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
 
         self.not_a_mask_embed = nn.Embedding(
             1, embed_dim // 4
@@ -388,10 +416,7 @@ class PromptImageEncoder(PromptEncoder):
             m=n_examples,
             c=n_classes,
         )
-        sparse_embeddings = self.sparse_embedding_attention(
-            sparse_embeddings, sparse_embeddings, sparse_embeddings
-        )
-        sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
+        sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings)
         sparse_embeddings = rearrange(
             sparse_embeddings,
             "(b m) (c n) d -> b m c n d",
@@ -530,15 +555,23 @@ class PromptImageEncoder(PromptEncoder):
         )
         src = rearrange(src, "b d h w -> b d (h w)")
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
-        src = rearrange(src, "(b m c) d -> b (m c) d", b=b, m=m, c=c)
+        src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
+        
+        if self.class_example_attention is not None:
+            src = rearrange(src, "b m c d -> b (c m) d", c=c)
+            src = self.class_example_attention(src)
+            src = rearrange(src, "b (m c) d -> b m c d", c=c)
 
-        src = self.example_attention(src, src, src)
-        src = self.norm_example_attention(src)
-        src = self.example_mlp(src) + src
-        src = self.norm_example_mlp(src)
+        if self.example_attention is not None:
+            src = rearrange(src, "b (m c) d -> (b c) m d", c=c)
+            src = self.example_attention(src)
+            src = rearrange(src, "(b c) m d -> b c m d", c=c)
+        if self.class_attention is not None:
+            src = rearrange(src, "b c m d -> (b m) c d", c=c)
+            src = self.class_attention(src)
+            src = rearrange(src, "(b m) c d -> b c m d", c=c)
 
         # Average over examples
-        src = rearrange(src, "b (m c) d -> b m c d", c=c)
         src = torch.mean(src, dim=1)  # (B, C, D)
         return src
 
