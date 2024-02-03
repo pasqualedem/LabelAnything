@@ -313,16 +313,14 @@ class Run:
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
                     accelerator=self.accelerator,
-                    num_classes=num_classes,
+                    num_classes=num_classes + 1,
                     average="macro",
-                    ignore_index=-100,
-                    sync_on_compute=False,
+                    ignore_index=0,
                 ),
-                # "FBIoU": DistributedBinaryJaccardIndex(
-                #     accelerator=self.accelerator,
-                #     ignore_index=-100,
-                #     sync_on_compute=False,
-                # ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    accelerator=self.accelerator,
+                    ignore_index=-100,
+                ),
             },
             prefix="batch_"
         )
@@ -447,7 +445,7 @@ class Run:
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
                     accelerator=self.accelerator,
-                    num_classes=num_classes,
+                    num_classes=num_classes + 1,
                     average="macro",
                     ignore_index=0,
                 ),
