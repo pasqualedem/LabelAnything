@@ -27,6 +27,7 @@ class PromptContrastiveLoss(nn.Module):
         flags = (flag_masks + flag_points + flag_boxes)# B x M x C
         flags[:, :, 0] = 1 # The first class is always the background and no prompts are generated for it
         flags = rearrange(flags, "b m c -> b (m c) 1")
+        valid_elements = (flags > 0).sum(dim=1) # B x 1
         flags = (~(flags.repeat(1, 1, M*C).bool())).float()
         flags = (~(flags + rearrange(flags, " b c d -> b d c")).bool())
         flags = torch.triu(flags)
@@ -39,8 +40,8 @@ class PromptContrastiveLoss(nn.Module):
         contrastive_matrix = torch.eye(C, device=class_embeddings.device)
         contrastive_matrix = contrastive_matrix.unsqueeze(0).repeat(B, M, M)
         contrastive_matrix = 2 * contrastive_matrix - 1
-        cross_entropy_loss = -torch.log(torch.sigmoid(dot_products * contrastive_matrix))
-        return cross_entropy_loss[flags].mean()
+        loss = -torch.log(torch.sigmoid(dot_products * contrastive_matrix))
+        return (loss / valid_elements)[flags].sum() / B
         
         
         
