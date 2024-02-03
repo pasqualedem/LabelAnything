@@ -1,4 +1,5 @@
 import lovely_tensors as lt
+
 lt.monkey_patch()
 import torch
 from accelerate import Accelerator
@@ -104,7 +105,7 @@ def to_global_multiclass(
     for i in range(batch_size):
         for j, v in enumerate(classes[i][0]):
             for tensor in out_tensors:
-                tensor[i] = torch.where(tensor[i] == j, v, tensor[i])
+                tensor[i] = torch.where(tensor[i] == j + 1, v, tensor[i])
     return out_tensors
 
 

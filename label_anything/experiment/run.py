@@ -323,7 +323,7 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics = self.accelerator.prepare(metrics)
+        metrics.to(self.accelerator.device)
         loss_avg = RunningAverage()
 
         # prepare substitutor
@@ -454,8 +454,8 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics = self.accelerator.prepare(metrics)
-        
+        metrics.to(self.accelerator.device)
+
         tot_steps = 0
         tot_images = 0
         bar = tqdm(
