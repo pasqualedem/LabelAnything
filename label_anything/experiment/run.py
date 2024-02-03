@@ -144,6 +144,9 @@ class Run:
         )
         if self.val_loader:
             self.val_loader = self.accelerator.prepare(self.val_loader)
+            
+        if self.plat_logger.accelerator_state_dir:
+            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
 
         # Train the Model
         with self.plat_logger.train():
@@ -308,6 +311,7 @@ class Run:
         self,
         epoch: int,
     ):
+        self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False

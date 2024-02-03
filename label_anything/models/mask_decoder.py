@@ -157,6 +157,7 @@ class MaskDecoderLam(nn.Module):
         *,
         transformer_dim: int,
         transformer: nn.Module,
+        spatial_convs = None,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -180,7 +181,17 @@ class MaskDecoderLam(nn.Module):
             activation(),
         )
         self.transformer = transformer
-
+        self.spatial_convs = None
+        if spatial_convs is not None:
+            module_list = []
+            for i in range(spatial_convs):
+                module_list.append(
+                    nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=3, padding=1)
+                )
+                if i < spatial_convs - 1:
+                    module_list.append(LayerNorm2d(transformer_dim // 8))
+                module_list.append(activation())
+            self.spatial_convs = nn.Sequential(*module_list)
         self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
 
     def forward(
@@ -205,6 +216,8 @@ class MaskDecoderLam(nn.Module):
         image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)        
         
         upscaled_embeddings = self.output_upscaling(image_embeddings)
+        if self.spatial_convs is not None:
+            upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
         b, c, h, w = upscaled_embeddings.shape
 
         class_embeddings = self.class_mlp(class_embeddings)

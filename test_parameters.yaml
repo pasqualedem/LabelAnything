@@ -22,6 +22,8 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
+      # resume: [True]
+      # run_id: [pg70tf8u]
 
   train_params:
     loss:
@@ -60,6 +62,9 @@ parameters:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
     checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
     use_sam_checkpoint: [True]
+    example_attention: [True]
+    class_attention: [True]
+    spatial_convs: [3]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -106,5 +111,6 @@ parameters:
     batch_size: [1]
     num_workers: [0]
     possible_batch_example_nums: [[[1, 1]]]
+    num_steps: [10]
 
 other_grids:
