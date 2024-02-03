@@ -558,18 +558,18 @@ class PromptImageEncoder(PromptEncoder):
         src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
         
         if self.class_example_attention is not None:
-            src = rearrange(src, "b m c d -> b (c m) d", c=c)
+            src = rearrange(src, "b m c d -> b (m c) d", c=c)
             src = self.class_example_attention(src)
             src = rearrange(src, "b (m c) d -> b m c d", c=c)
 
         if self.example_attention is not None:
-            src = rearrange(src, "b (m c) d -> (b c) m d", c=c)
+            src = rearrange(src, "b m c d -> (b c) m d", c=c)
             src = self.example_attention(src)
-            src = rearrange(src, "(b c) m d -> b c m d", c=c)
+            src = rearrange(src, "(b c) m d -> b m c d", c=c)
         if self.class_attention is not None:
-            src = rearrange(src, "b c m d -> (b m) c d", c=c)
+            src = rearrange(src, "b m c d -> (b m) c d", c=c)
             src = self.class_attention(src)
-            src = rearrange(src, "(b m) c d -> b c m d", c=c)
+            src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
         # Average over examples
         src = torch.mean(src, dim=1)  # (B, C, D)
