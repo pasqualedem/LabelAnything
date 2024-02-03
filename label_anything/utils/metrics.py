@@ -51,7 +51,7 @@ class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
         self.accelerator = accelerator
 
     def update(self, preds: Tensor, target: Tensor) -> None:
-        target = target.where(target < 0, self.ignore_index, target)
+        target = target.where(target < 0, self.ignore_index)
         super().update(preds, target)
 
 
