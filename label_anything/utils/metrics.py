@@ -98,7 +98,7 @@ def to_global_multiclass(classes: list[list[list[int]]], *tensors: list[Tensor])
     batch_size = len(classes)
     out_tensors = [tensor.clone() for tensor in tensors]    
     for i in range(batch_size):
-        for j, v in classes[i][0]:
+        for j, v in enumerate(classes[i][0]):
             for tensor in out_tensors:
                 tensor[i] = torch.where(tensor[i] == j, v, tensor[i])
     return out_tensors  
