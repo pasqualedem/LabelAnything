@@ -14,7 +14,8 @@ __all__ = [
     "AverageMetricCollection",
     "fbiou",
     "binary_jaccard_index",
-    "multiclass_jaccard_index" "MetricCollection",
+    "multiclass_jaccard_index",
+    "MetricCollection",
 ]
 
 
