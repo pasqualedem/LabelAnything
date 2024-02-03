@@ -1,3 +1,5 @@
+import torch
+
 from accelerate import Accelerator
 from torch import Tensor
 from torchmetrics.classification import (
@@ -39,7 +41,7 @@ def to_global_multiclass(
         longest_classes = max(classes[i], key=len)
         for j, v in enumerate(longest_classes):
             for tensor in out_tensors:
-                tensor[i] = tensor[i].where(tensor[i] == j + 1, cats_map[v])
+                tensor[i] = torch.where(tensor[i] == j + 1, cats_map[v], tensor[i])
     return out_tensors
 
 
@@ -51,7 +53,7 @@ class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
         self.accelerator = accelerator
 
     def update(self, preds: Tensor, target: Tensor) -> None:
-        target = target.where(target < 0, self.ignore_index)
+        target = torch.where(target < 0, self.ignore_index, target)
         super().update(preds, target)
 
 
