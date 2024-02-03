@@ -32,7 +32,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [30]
+    max_epochs: [10]
     compile: [False]
     initial_lr: [0.0001]
     optimizer: [AdamW]
@@ -40,8 +40,6 @@ parameters:
       type: [reduce_lr_on_plateau]
       step_moment: [epoch]
       patience: [0]
-      factor: [0.1]
-
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
