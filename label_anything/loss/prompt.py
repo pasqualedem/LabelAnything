@@ -25,7 +25,7 @@ class PromptContrastiveLoss(nn.Module):
         flags = (flag_masks + flag_points + flag_boxes)# B x M x C
         flags[:, :, 0] = 1 # The first class is always the background and no prompts are generated for it
         flags = rearrange(flags, "b m c -> b (m c) 1")
-        flags = (~(flags.repeat(B, 1, M*C).bool())).float()
+        flags = (~(flags.repeat(1, 1, M*C).bool())).float()
         flags = (~(flags + rearrange(flags, " b c d -> b d c")).bool())
         flags = torch.triu(flags)
         
