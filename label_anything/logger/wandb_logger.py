@@ -98,6 +98,7 @@ class WandBLogger(AbstractLogger):
         """
         self.resume = resume
         resume = "must" if resume else None
+        self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
             os.environ["WANDB_ARTIFACT_LOCATION"] = offline_directory

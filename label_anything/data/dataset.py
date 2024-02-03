@@ -268,6 +268,7 @@ class VariableBatchSampler(BatchSampler):
         drop_last=False,
         shuffle=False,
         num_processes=1,
+        num_steps=None,
     ):
         self.data_source = data_source
 
@@ -276,6 +277,9 @@ class VariableBatchSampler(BatchSampler):
             possible_batch_example_nums,
             num_processes=num_processes,
         )
+        if num_steps is not None:
+            self.batch_sizes = self.batch_sizes[:num_steps]
+            self.num_examples = self.num_examples[:num_steps]
         self.drop_last = drop_last
         if shuffle:
             self.sampler = torch.utils.data.RandomSampler(data_source)
