@@ -76,6 +76,6 @@ parameters:
     num_workers: [24]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
-    num_steps: [500]
+    num_steps: [1000]
 
 other_grids:
