@@ -307,7 +307,7 @@ class Run:
             )
 
         # prepare metrics
-        num_classes = len(next(iter(self.train_loader.dataset.datasets)).categories)
+        num_classes = len(next(iter(self.train_loader.dataset.datasets.values())).categories)
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
@@ -437,7 +437,7 @@ class Run:
         self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        num_classes = len(next(iter(self.train_loader.dataset.datasets)).categories)
+        num_classes = len(next(iter(self.train_loader.dataset.datasets.values())).categories)
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
