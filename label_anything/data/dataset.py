@@ -9,7 +9,6 @@ import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.coco20i import Coco20iDataset
 from label_anything.logger.text_logger import get_logger
-from label_anything.utils.utils import get_divisors, get
 
 logger = get_logger(__name__)
 
