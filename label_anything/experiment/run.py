@@ -307,22 +307,24 @@ class Run:
             )
 
         # prepare metrics
-        num_classes = len(next(iter(self.train_loader.dataset.datasets.values())).categories)
+        dataset_categories = next(iter(self.train_loader.dataset.datasets.values())).categories
+        num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
                     accelerator=self.accelerator,
                     num_classes=num_classes,
                     average="macro",
-                    ignore_index=0,
+                    ignore_index=-100,
+                    sync_on_compute=False,
                 ),
                 "FBIoU": DistributedBinaryJaccardIndex(
                     accelerator=self.accelerator,
                     ignore_index=-100,
+                    sync_on_compute=False,
                 ),
             },
-            prefix="batch_",
-            sync_on_compute=False,
+            prefix="batch_"
         )
         metrics.to(self.accelerator.device)
         loss_avg = RunningAverage()
@@ -378,7 +380,7 @@ class Run:
                     loss_avg.update(loss.item())
                     self.plat_logger.log_metric("loss", loss.item())
                     glob_preds, glob_gt = to_global_multiclass(
-                        input_dict["classes"], preds, gt
+                        input_dict["classes"], dataset_categories, preds, gt
                     )
 
                     metric_values = self._update_train_metrics(
@@ -439,7 +441,8 @@ class Run:
         self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        num_classes = len(next(iter(self.train_loader.dataset.datasets.values())).categories)
+        dataset_categories = next(iter(self.val_loader.dataset.datasets.values())).categories
+        num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
@@ -479,7 +482,7 @@ class Run:
                 outputs = self.model(image_dict)
                 preds = outputs.argmax(dim=1)
                 glob_preds, glob_gt = to_global_multiclass(
-                    image_dict["classes"], preds, gt
+                    image_dict["classes"], dataset_categories, preds, gt
                 )
 
                 metrics_value = self._update_val_metrics(
