@@ -7,8 +7,9 @@ from io import StringIO
 import collections.abc
 from typing import Mapping
 import yaml
+from label_anything.data.utils import StrEnum
 
-from label_anything.models.lam import Lam
+# from label_anything.models.lam import Lam 
 
 
 FLOAT_PRECISIONS = {
@@ -30,7 +31,19 @@ def load_yaml(file_path):
         print(f"Error parsing YAML file: {e}")
         
 
-def write_yaml(data, file_path):
+def write_yaml(data: dict, file_path: str = None, file=None):
+    """ Write a dictionary to a YAML file.
+
+    Args:
+        data (dict): the data to write
+        file_path (str): the path to the file
+        file: the file object to write to (esclusive with file_path)
+    """
+    if file is not None:
+        file.write(yaml.dump(data))
+        return
+    if file_path is None:
+        raise ValueError("file_path or file must be specified")
     try:
         with open(file_path, "w") as yaml_file:
             yaml.dump(data, yaml_file)
@@ -40,27 +53,27 @@ def write_yaml(data, file_path):
         print(f"Error parsing YAML file: {e}")
 
 
-def unwrap_model_from_parallel(model, return_was_wrapped=False):
-    """
-    Unwrap a model from a DataParallel or DistributedDataParallel wrapper
-    :param model: the model
-    :return: the unwrapped model
-    """
-    if isinstance(
-        model,
-        (
-            torch.nn.DataParallel,
-            torch.nn.parallel.DistributedDataParallel,
-            Lam,
-        ),
-    ):
-        if return_was_wrapped:
-            return model.module, True
-        return model.module
-    else:
-        if return_was_wrapped:
-            return model, False
-        return model
+# def unwrap_model_from_parallel(model, return_was_wrapped=False):
+#     """
+#     Unwrap a model from a DataParallel or DistributedDataParallel wrapper
+#     :param model: the model
+#     :return: the unwrapped model
+#     """
+#     if isinstance(
+#         model,
+#         (
+#             torch.nn.DataParallel,
+#             torch.nn.parallel.DistributedDataParallel,
+#             Lam,
+#         ),
+#     ):
+#         if return_was_wrapped:
+#             return model.module, True
+#         return model.module
+#     else:
+#         if return_was_wrapped:
+#             return model, False
+#         return model
 
 
 def get_module_class_from_path(path):
@@ -222,3 +235,9 @@ class RunningAverage:
         
     def compute(self):
         return self.accumulator / self.steps
+
+
+class ResultDict(StrEnum):
+    CLASS_EMBS = "class_embeddings"
+    LOGITS = "logits"
+    EXAMPLES_CLASS_EMBS = "class_examples_embeddings"

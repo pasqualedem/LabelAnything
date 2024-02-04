@@ -68,7 +68,7 @@ class WandBLogger(AbstractLogger):
     def __init__(
         self,
         project_name: str,
-        resumed: bool = False,
+        resume: bool = False,
         offline_directory: str = None,
         save_checkpoints_remote: bool = True,
         save_tensorboard_remote: bool = True,
@@ -96,8 +96,9 @@ class WandBLogger(AbstractLogger):
         :param save_logs_remote: Saves log files in s3.
         :param save_code: save current code to wandb
         """
-        self.resumed = resumed
-        resume = "must" if resumed else None
+        self.resume = resume
+        resume = "must" if resume else None
+        self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
             os.environ["WANDB_ARTIFACT_LOCATION"] = offline_directory
@@ -105,6 +106,8 @@ class WandBLogger(AbstractLogger):
             os.environ["WANDB_CACHE_DIR"] = offline_directory
             os.environ["WANDB_CONFIG_DIR"] = offline_directory
             os.environ["WANDB_DATA_DIR"] = offline_directory
+        if resume:
+            self._resume(offline_directory, run_id)
         experiment = wandb.init(
             project=project_name,
             entity=entity,
@@ -114,6 +117,7 @@ class WandBLogger(AbstractLogger):
             dir=offline_directory,
             group=group,
         )
+            
         logger.info(f"wandb run id  : {experiment.id}")
         logger.info(f"wandb run name: {experiment.name}")
         logger.info(f"wandb run dir : {experiment.dir}")
@@ -142,7 +146,24 @@ class WandBLogger(AbstractLogger):
                     f"WANDB_BASE_URL environment parameter not set to {api_server}. Setting the parameter"
                 )
                 os.putenv("WANDB_BASE_URL", api_server)
-
+                
+    def _resume(self, offline_directory, run_id):
+        if not offline_directory:
+            offline_directory = "."
+        wandb_dir = os.path.join(offline_directory, "wandb")
+        runs = os.listdir(wandb_dir)
+        runs = list(filter(lambda x: run_id in x, runs))
+        if len(runs) == 0:
+            raise ValueError(f"Run {run_id} not found in {wandb_dir}")
+        if len(runs) > 1:
+            logger.warning(f"Multiple runs found for {run_id} in {wandb_dir}")
+            for run in runs:
+                logger.warning(run)
+            logger.warning(f"Using {runs[0]}")
+        run = runs[0]
+        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", "latest")
+        logger.info(f"Resuming from {self.accelerator_state_dir}")
+        
     def _save_code(self):
         """
         Save the current code to wandb.
@@ -181,7 +202,7 @@ class WandBLogger(AbstractLogger):
             wandb.run.log_code(".", include_fn=include_fn)
 
     def log_parameters(self, config: dict = None):
-        wandb.config.update(config, allow_val_change=self.resumed)
+        wandb.config.update(config, allow_val_change=self.resume)
 
     def add_tags(self, tags):
         wandb.run.tags = wandb.run.tags + tuple(tags)

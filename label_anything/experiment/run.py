@@ -14,6 +14,7 @@ from torchmetrics import MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
+from label_anything.data.utils import BatchKeys
 from label_anything.experiment.substitution import Substitutor
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
@@ -23,12 +24,18 @@ from label_anything.utils.metrics import (
     DistributedMulticlassJaccardIndex,
     to_global_multiclass,
 )
-from label_anything.utils.utils import FLOAT_PRECISIONS, RunningAverage, write_yaml
+from label_anything.utils.utils import (
+    FLOAT_PRECISIONS,
+    ResultDict,
+    RunningAverage,
+    write_yaml,
+)
 
 from .utils import (
     SchedulerStepMoment,
     allocate_memory,
     check_nan,
+    compose_loss_input,
     get_batch_size,
     get_experiment_logger,
     get_scheduler,
@@ -79,7 +86,7 @@ class Run:
         random.seed(42)
         self.seg_trainer = None
         logger.info("Parameters: ")
-        logger.info(params)
+        write_yaml(params, file=sys.stdout)
         self.parse_params(params)
         (
             self.train_params,
@@ -114,6 +121,8 @@ class Run:
         logger.info("Start training loop...")
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        self.model.add_module("criterion", self.criterion) # If the loss has parameters, they will be added to the model
+        
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -141,6 +150,9 @@ class Run:
         )
         if self.val_loader:
             self.val_loader = self.accelerator.prepare(self.val_loader)
+
+        if self.plat_logger.accelerator_state_dir:
+            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
 
         # Train the Model
         with self.plat_logger.train():
@@ -233,7 +245,8 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        loss = self.criterion(outputs, gt) / loss_normalizer
+        loss_dict = compose_loss_input(input_dict, outputs)
+        loss = self.criterion(loss_dict, gt) / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
             self.model,
@@ -292,7 +305,7 @@ class Run:
         self,
         epoch: int,
     ):
-        # prepare model for training
+        self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False
@@ -356,14 +369,15 @@ class Run:
             for i, (input_dict, gt) in enumerate(substitutor):
                 accumulating = accumulate_substitution and i != loss_normalizer - 1
                 with nosync_accumulation(accumulating, self.accelerator, self.model):
-                    outputs = self._forward(
+                    result_dict = self._forward(
                         batch_tuple, input_dict, gt, epoch, batch_idx
                     )
-                    if isinstance(outputs, RuntimeError):
+                    if isinstance(result_dict, RuntimeError):
                         break
                     loss = self._backward(
-                        batch_idx, input_dict, outputs, gt, loss_normalizer
+                        batch_idx, input_dict, result_dict, gt, loss_normalizer
                     )
+                    outputs = result_dict[ResultDict.LOGITS]
                     preds = outputs.argmax(dim=1)
 
                     if not accumulating:
@@ -473,7 +487,8 @@ class Run:
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
 
-                outputs = self.model(image_dict)
+                result_dict = self.model(image_dict)
+                outputs = result_dict[ResultDict.LOGITS]
                 preds = outputs.argmax(dim=1)
                 glob_preds, glob_gt = to_global_multiclass(
                     image_dict["classes"], dataset_categories, preds, gt
@@ -482,7 +497,14 @@ class Run:
                 metrics_value = self._update_val_metrics(
                     metrics, glob_preds, glob_gt, tot_steps
                 )
-                loss = torch.mean(self.accelerator.gather(self.criterion(outputs, gt)))
+                loss = torch.mean(
+                    self.accelerator.gather(
+                        self.criterion(
+                            compose_loss_input(image_dict, result_dict),
+                            gt,
+                        )
+                    )
+                )
 
                 avg_loss.update(loss.item())
                 bar.set_postfix(
@@ -566,10 +588,13 @@ class Run:
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
 
-                output = self.model.predict(image_dict)
-                total_loss += self.criterion(output, gt).item()  # sum up batch loss
-                output = torch.argmax(output, dim=1)
-                metrics.update(output, gt)
+                result_dict = self.model.predict(image_dict)
+                outputs = result_dict[ResultDict.LOGITS]
+                total_loss += self.criterion(
+                    compose_loss_input(image_dict, result_dict), gt
+                ).item()  # sum up batch loss
+                outputs = torch.argmax(outputs, dim=1)
+                metrics.update(outputs, gt)
 
             total_loss /= len(dataloader)
             metrics_values = metrics.compute()

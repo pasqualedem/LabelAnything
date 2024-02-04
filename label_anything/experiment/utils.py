@@ -10,7 +10,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from transformers import get_scheduler as get_transformers_scheduler
 
-from label_anything.data.utils import random_batch
+from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import find_divisor_pairs, get_divisors
@@ -62,7 +62,7 @@ def get_scheduler(optimizer, num_training_steps, scheduler_params):
             num_training_steps=num_training_steps,
         ),
         step_moment,
-    )    
+    )
 
 
 def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
@@ -82,6 +82,15 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+
+
+def compose_loss_input(input_dict: dict, result_dict: dict):
+    return {
+        **result_dict,
+        BatchKeys.FLAG_BBOXES: input_dict[BatchKeys.FLAG_BBOXES],
+        BatchKeys.FLAG_MASKS: input_dict[BatchKeys.FLAG_MASKS],
+        BatchKeys.FLAG_POINTS: input_dict[BatchKeys.FLAG_POINTS],
+    }
 
 
 def get_example_class_size(batch_input):
