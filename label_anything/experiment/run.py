@@ -271,6 +271,8 @@ class Run:
             for metric_name, metric_value in metrics_dict.items():
                 metric_value = torch.mean(self.accelerator.gather(metric_value))
                 self.plat_logger.log_metric(metric_name, metric_value)
+        # .item() to all values
+        metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
         return metrics_dict
 
     def _update_val_metrics(
