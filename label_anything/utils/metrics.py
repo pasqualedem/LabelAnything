@@ -50,10 +50,11 @@ class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
 
     def compute(self) -> Tensor:
         """Compute metric."""
-        confmat = self.confmat[1:, 1:]
-        return _jaccard_index_reduce(
-            confmat, average=self.average, ignore_index=self.ignore_index
-        )
+        metric = super().compute()
+        # compute the IoU of class 0 in the self.confmat
+        bg_iou = self.confmat[0, 0] / (self.confmat[0, 0] + self.confmat[0, 1:].sum() + self.confmat[1:, 0].sum())
+        metric = (metric * self.num_classes - bg_iou) / (self.num_classes - 1)
+        return metric
 
 
 class DistributedBinaryJaccardIndex(BinaryJaccardIndex):
