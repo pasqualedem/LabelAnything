@@ -1,5 +1,4 @@
 import torch
-
 from accelerate import Accelerator
 from torch import Tensor
 from torchmetrics.classification import (
@@ -8,6 +7,7 @@ from torchmetrics.classification import (
     MulticlassJaccardIndex,
 )
 from torchmetrics.functional.classification import binary_jaccard_index
+from torchmetrics.functional.classification.jaccard import _jaccard_index_reduce
 
 __all__ = [
     "JaccardIndex",
@@ -46,22 +46,18 @@ def to_global_multiclass(
 
 
 class DistributedMulticlassJaccardIndex(MulticlassJaccardIndex):
-    """Distributed version of the MulticlassJaccardIndex.
-    """
-    def __init__(self, accelerator: Accelerator, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.accelerator = accelerator
+    """Distributed version of the MulticlassJaccardIndex."""
 
-    def update(self, preds: Tensor, target: Tensor) -> None:
-        target = torch.where(target < 0, self.ignore_index, target)
-        super().update(preds, target)
+    def compute(self) -> Tensor:
+        """Compute metric."""
+        confmat = self.confmat[1:, 1:]
+        return _jaccard_index_reduce(
+            confmat, average=self.average, ignore_index=self.ignore_index
+        )
 
 
 class DistributedBinaryJaccardIndex(BinaryJaccardIndex):
     """Distributed version of the BinaryJaccardIndex."""
-    def __init__(self, accelerator: Accelerator, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.accelerator = accelerator
 
     def update(self, preds: Tensor, target: Tensor) -> None:
         preds, target = preds.clone(), target.clone()

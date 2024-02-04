@@ -310,13 +310,11 @@ class Run:
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
-                    accelerator=self.accelerator,
                     num_classes=num_classes + 1,
                     average="macro",
-                    ignore_index=0,
+                    ignore_index=-100,
                 ),
                 "FBIoU": DistributedBinaryJaccardIndex(
-                    accelerator=self.accelerator,
                     ignore_index=-100,
                 ),
             },
@@ -444,13 +442,11 @@ class Run:
         metrics = MetricCollection(
             {
                 "mIoU": DistributedMulticlassJaccardIndex(
-                    accelerator=self.accelerator,
                     num_classes=num_classes + 1,
                     average="macro",
-                    ignore_index=0,
+                    ignore_index=-100,
                 ),
                 "FBIoU": DistributedBinaryJaccardIndex(
-                    accelerator=self.accelerator,
                     ignore_index=-100,
                 ),
             },
