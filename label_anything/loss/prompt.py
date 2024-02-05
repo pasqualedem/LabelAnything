@@ -41,7 +41,7 @@ class PromptContrastiveLoss(nn.Module):
         contrastive_matrix = contrastive_matrix.unsqueeze(0).repeat(B, M, M)
         contrastive_matrix = 2 * contrastive_matrix - 1
         loss = -torch.log(torch.sigmoid(dot_products * contrastive_matrix))
-        return (loss / valid_elements)[flags].sum() / B
+        return (loss / valid_elements.unsqueeze(2))[flags].sum() / B
         
         
         
