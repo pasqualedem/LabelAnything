@@ -1,6 +1,8 @@
 import os
 import glob
 import cv2
+import torch
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
 from kaggle.api.kaggle_api_extended import KaggleApi
@@ -53,7 +55,7 @@ def generate_df(path):
         os.makedirs("data/processed")
 
     try:
-        df.to_csv("data/processed/df.csv", index=False)
+        df.to_csv("data/processed/brain_mri_df.csv", index=False)
     except Exception as e:
         print(e)
 
@@ -61,6 +63,22 @@ def generate_df(path):
 def diagnose(mask_path):
     value = np.max(cv2.imread(mask_path))
     return 1 if value > 0 else 0
+
+
+class BrainMriDataset(Dataset):
+    def __init__(self, df, transforms=None):
+
+        self.df = df
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.df)
+
+    def __getitem__(self, idx):
+        image = cv2.imread(self.df.iloc[idx, 1])
+        mask = cv2.imread(self.df.iloc[idx, 2], 0)  # grayscale
+
+        return image, mask
 
 
 if __name__ == "__main__":
