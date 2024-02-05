@@ -1,4 +1,3 @@
-import copy
 import os
 import random
 import subprocess
@@ -11,6 +10,7 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
+from torchmetrics import MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
@@ -20,12 +20,9 @@ from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
-    AverageMetricCollection,
-    MetricCollection,
-    FBIoU,
-    JaccardIndex,
-    fbiou,
-    multiclass_jaccard_index,
+    DistributedBinaryJaccardIndex,
+    DistributedMulticlassJaccardIndex,
+    to_global_multiclass,
 )
 from label_anything.utils.utils import (
     FLOAT_PRECISIONS,
@@ -40,12 +37,12 @@ from .utils import (
     check_nan,
     compose_loss_input,
     get_batch_size,
-    handle_oom,
-    set_class_embeddings,
-    parse_params,
     get_experiment_logger,
-    nosync_accumulation,
     get_scheduler,
+    handle_oom,
+    nosync_accumulation,
+    parse_params,
+    set_class_embeddings,
 )
 
 logger = get_logger(__name__)
@@ -264,57 +261,46 @@ class Run:
 
     def _update_metrics(
         self,
-        metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         preds: torch.tensor,
         gt: torch.tensor,
-        outputs,
-        tot_steps,
+        tot_steps: int,
     ):
-        metrics_dict = metrics.update(
-            preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-        )
+        metrics_dict = metrics(preds, gt)
         if tot_steps % self.plat_logger.log_frequency == 0:
             for metric_name, metric_value in metrics_dict.items():
+                metric_value = torch.mean(self.accelerator.gather(metric_value))
                 self.plat_logger.log_metric(metric_name, metric_value)
+        # .item() to all values
+        metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
         return metrics_dict
 
     def _update_val_metrics(
         self,
-        metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         preds: torch.tensor,
         gt: torch.tensor,
-        outputs,
         tot_steps,
     ):
         self.plat_logger.log_metric("step", self.global_val_step)
-        return self._update_metrics(metrics, preds, gt, outputs, tot_steps)
+        return self._update_metrics(metrics, preds, gt, tot_steps)
 
     def _update_train_metrics(
         self,
-        metrics: AverageMetricCollection,
-        first_step_metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         previous_metric_values: dict,
         preds: torch.tensor,
         gt: torch,
-        outputs: torch.tensor,
         tot_steps: int,
-        i: int,
-        loss: torch.tensor,
-        first_step_loss_avg: RunningAverage,
+        step: int,
     ):
         self.plat_logger.log_metric("step", self.global_train_step)
-        if tot_steps % self.plat_logger.log_frequency == 0:
-            metric_values = self._update_metrics(metrics, preds, gt, outputs, tot_steps)
-            if i == 0:
-                first_step_loss_avg.update(loss.item())
-                self.plat_logger.log_metric("first_step_loss", loss.item())
-                if tot_steps % self.plat_logger.log_frequency == 0:
-                    self._update_metrics(
-                        first_step_metrics, preds, gt, outputs, tot_steps
-                    )
-                    self.plat_logger.log_metric("lr", self._get_lr())
+        if step == 0:
+            metric_values = self._update_metrics(metrics, preds, gt, tot_steps)
         else:
             metric_values = previous_metric_values
+        if tot_steps % self.plat_logger.log_frequency == 0:
+            self.plat_logger.log_metric("lr", self._get_lr())
         return metric_values
 
     def train_epoch(
@@ -330,31 +316,37 @@ class Run:
             raise ValueError(
                 "accumulate_substitution can only be used when substitute is True"
             )
-        metrics = AverageMetricCollection(
+
+        # prepare metrics
+        dataset_categories = next(
+            iter(self.train_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
+            },
             prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
         )
-        first_step_metrics = AverageMetricCollection(
-            prefix="first_step_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
-        )
+        metrics.to(self.accelerator.device)
+        loss_avg = RunningAverage()
+
+        # prepare substitutor
         substitutor = Substitutor(
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
         )
-        loss_avg = RunningAverage()
-        first_step_loss_avg = RunningAverage()
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
+        # tqdm stuff
         bar = tqdm(
             enumerate(self.train_loader),
             total=len(self.train_loader),
@@ -397,18 +389,17 @@ class Run:
 
                     loss_avg.update(loss.item())
                     self.plat_logger.log_metric("loss", loss.item())
+                    glob_preds, glob_gt = to_global_multiclass(
+                        input_dict["classes"], dataset_categories, preds, gt
+                    )
 
                     metric_values = self._update_train_metrics(
                         metrics,
-                        first_step_metrics,
                         metric_values,
-                        preds,
-                        gt,
-                        outputs,
+                        glob_preds,
+                        glob_gt,
                         tot_steps,
                         i,
-                        loss,
-                        first_step_loss_avg,
                     )
                     self.plat_logger.log_batch(
                         batch_idx=batch_idx,
@@ -447,7 +438,6 @@ class Run:
                 for k, v in {**metrics.compute(), **metrics.compute()}.items()
             },
             "avg_loss": loss_avg.compute(),
-            "avg_first_step_loss": first_step_loss_avg.compute(),
         }
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
@@ -461,14 +451,24 @@ class Run:
         self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        metrics = AverageMetricCollection(
-            prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
+        dataset_categories = next(
+            iter(self.val_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
             },
-            accelerator=self.accelerator,
+            prefix="batch_",
         )
+        metrics.to(self.accelerator.device)
 
         tot_steps = 0
         tot_images = 0
@@ -492,9 +492,12 @@ class Run:
                 result_dict = self.model(image_dict)
                 outputs = result_dict[ResultDict.LOGITS]
                 preds = outputs.argmax(dim=1)
+                glob_preds, glob_gt = to_global_multiclass(
+                    image_dict["classes"], dataset_categories, preds, gt
+                )
 
                 metrics_value = self._update_val_metrics(
-                    metrics, preds, gt, outputs, tot_steps
+                    metrics, glob_preds, glob_gt, tot_steps
                 )
                 loss = torch.mean(
                     self.accelerator.gather(
@@ -538,6 +541,7 @@ class Run:
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
+
         logger.info(f"Validation epoch {epoch} finished")
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
