@@ -34,7 +34,7 @@ class AbstractLogger:
         self.experiment = experiment
         self.accelerator = accelerator
         self.tmp_dir = tmp_dir
-        self.local_dir = experiment.dir
+        self.local_dir = experiment.dir if hasattr(experiment, "dir") else None
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
         self.prefix_frequency_dict = {
