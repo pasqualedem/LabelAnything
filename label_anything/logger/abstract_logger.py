@@ -30,12 +30,11 @@ class AbstractLogger:
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
         experiment_save_delta: int = None,
-        local_dir: str = None,
     ):
         self.experiment = experiment
         self.accelerator = accelerator
         self.tmp_dir = tmp_dir
-        self.local_dir = local_dir
+        self.local_dir = experiment.dir
         os.makedirs(self.tmp_dir, exist_ok=True)
         self.log_frequency = log_frequency
         self.prefix_frequency_dict = {
@@ -198,11 +197,15 @@ class AbstractLogger:
     
     @property
     def name(self):
-        return self.experiment.name
+        if self.accelerator.is_local_main_process:
+            return self.experiment.name
+        return None
 
     @property
     def url(self):
-        return self.experiment.url
+        if self.accelerator.is_local_main_process:
+            return self.experiment.url
+        return None
 
 
 """

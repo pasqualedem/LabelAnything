@@ -130,7 +130,7 @@ class WandBLogger(AbstractLogger):
             # set all other validate/ metrics to use this step
             wandb.define_metric("validate/*", step_metric="validate/step")
             
-        super().__init__(experiment=experiment, **kwargs, local_dir=experiment.dir)
+        super().__init__(experiment=experiment, **kwargs)
         if save_code:
             self._save_code()
 
