@@ -10,6 +10,15 @@ from accelerate import Accelerator
 logger = get_logger(__name__)
 
 
+def main_process_only(func):
+    def wrapper(instance, *args, **kwargs):
+        accelerator = instance.accelerator
+        if accelerator.is_local_main_process:
+            return func(instance, *args, **kwargs)
+
+    return wrapper
+
+
 class AbstractLogger:
     def __init__(
         self,
