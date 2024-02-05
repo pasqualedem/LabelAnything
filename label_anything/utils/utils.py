@@ -241,3 +241,4 @@ class ResultDict(StrEnum):
     CLASS_EMBS = "class_embeddings"
     LOGITS = "logits"
     EXAMPLES_CLASS_EMBS = "class_examples_embeddings"
+    LOSS = "loss"

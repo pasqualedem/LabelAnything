@@ -16,6 +16,7 @@ from tqdm import tqdm
 from label_anything.data import get_dataloaders
 from label_anything.data.utils import BatchKeys
 from label_anything.experiment.substitution import Substitutor
+from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
@@ -121,7 +122,7 @@ class Run:
         logger.info("Start training loop...")
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
-        self.model.add_module("criterion", self.criterion) # If the loss has parameters, they will be added to the model
+        self.model = WrapperModule(self.model, self.criterion)
         
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
@@ -223,7 +224,7 @@ class Run:
     ):
         try:
             pass
-            outputs = self.model(input_dict)
+            outputs = self.model(input_dict, gt)
         except RuntimeError as e:
             if "out of memory" in str(e):
                 handle_oom(
@@ -245,8 +246,8 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        loss_dict = compose_loss_input(input_dict, outputs)
-        loss = self.criterion(loss_dict, gt) / loss_normalizer
+        # loss_dict = compose_loss_input(input_dict, outputs) 
+        loss = outputs["loss"] / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
             self.model,
@@ -489,7 +490,7 @@ class Run:
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
 
-                result_dict = self.model(image_dict)
+                result_dict = self.model(image_dict, gt)
                 outputs = result_dict[ResultDict.LOGITS]
                 preds = outputs.argmax(dim=1)
                 glob_preds, glob_gt = to_global_multiclass(
@@ -499,14 +500,7 @@ class Run:
                 metrics_value = self._update_val_metrics(
                     metrics, glob_preds, glob_gt, tot_steps
                 )
-                loss = torch.mean(
-                    self.accelerator.gather(
-                        self.criterion(
-                            compose_loss_input(image_dict, result_dict),
-                            gt,
-                        )
-                    )
-                )
+                loss = result_dict["loss"]
 
                 avg_loss.update(loss.item())
                 bar.set_postfix(

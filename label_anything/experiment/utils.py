@@ -230,3 +230,23 @@ def nosync_accumulation(accumulate=False, accelerator=None, model=None):
     else:
         with contextlib.nullcontext():
             yield
+
+
+class WrapperModule(torch.nn.Module):
+    def __init__(self, model, loss) -> None:
+        super().__init__()
+        self.model = model
+        self.loss = loss
+
+    def forward(self, input_dict, gt):
+        result_dict = self.model(input_dict)
+        loss = self.loss(compose_loss_input(input_dict, result_dict), gt)
+        return {"loss": loss, **result_dict}
+
+    def get_learnable_params(self, train_params):
+        model_params = list(self.model.get_learnable_params(train_params))
+        loss_params = list(self.loss.parameters())
+        return model_params + loss_params
+    
+    def predict(self, *args, **kwargs):
+        return self.model.predict(**args, **kwargs)
