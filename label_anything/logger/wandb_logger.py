@@ -108,21 +108,28 @@ class WandBLogger(AbstractLogger):
             os.environ["WANDB_DATA_DIR"] = offline_directory
         if resume:
             self._resume(offline_directory, run_id)
-        if not kwargs["accelerator"].is_local_main_process:
-            return
-        experiment = wandb.init(
-            project=project_name,
-            entity=entity,
-            resume=resume,
-            id=run_id,
-            tags=tags,
-            dir=offline_directory,
-            group=group,
-        )
+        experiment = None
+        if kwargs["accelerator"].is_local_main_process:
+            experiment = wandb.init(
+                project=project_name,
+                entity=entity,
+                resume=resume,
+                id=run_id,
+                tags=tags,
+                dir=offline_directory,
+                group=group,
+            )
+            logger.info(f"wandb run id  : {experiment.id}")
+            logger.info(f"wandb run name: {experiment.name}")
+            logger.info(f"wandb run dir : {experiment.dir}")
+            wandb.define_metric("train/step")
+            # set all other train/ metrics to use this step
+            wandb.define_metric("train/*", step_metric="train/step")
+
+            wandb.define_metric("validate/step")
+            # set all other validate/ metrics to use this step
+            wandb.define_metric("validate/*", step_metric="validate/step")
             
-        logger.info(f"wandb run id  : {experiment.id}")
-        logger.info(f"wandb run name: {experiment.name}")
-        logger.info(f"wandb run dir : {experiment.dir}")
         super().__init__(experiment=experiment, **kwargs, local_dir=experiment.dir)
         if save_code:
             self._save_code()
@@ -132,22 +139,6 @@ class WandBLogger(AbstractLogger):
         self.save_logs_wandb = save_logs_remote
         self.context = ""
         self.sequences = {}
-
-        wandb.define_metric("train/step")
-        # set all other train/ metrics to use this step
-        wandb.define_metric("train/*", step_metric="train/step")
-
-        wandb.define_metric("validate/step")
-        # set all other validate/ metrics to use this step
-        wandb.define_metric("validate/*", step_metric="validate/step")
-
-        # self._set_wandb_id(self.experiment.id)
-        if api_server is not None:
-            if api_server != os.getenv("WANDB_BASE_URL"):
-                logger.warning(
-                    f"WANDB_BASE_URL environment parameter not set to {api_server}. Setting the parameter"
-                )
-                os.putenv("WANDB_BASE_URL", api_server)
                 
     def _resume(self, offline_directory, run_id):
         if not offline_directory:
