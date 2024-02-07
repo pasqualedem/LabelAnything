@@ -1,7 +1,7 @@
 import os
 import glob
 import cv2
-import torch
+from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
 import pandas as pd
@@ -67,8 +67,7 @@ def diagnose(mask_path):
 
 class BrainMriDataset(Dataset):
     def __init__(self, df, transforms=None):
-
-        self.df = df
+        self.df = pd.read_csv(df, index_col=False)
         self.transforms = transforms
 
     def __len__(self):
@@ -76,9 +75,18 @@ class BrainMriDataset(Dataset):
 
     def __getitem__(self, idx):
         image = cv2.imread(self.df.iloc[idx, 1])
-        mask = cv2.imread(self.df.iloc[idx, 2], 0)  # grayscale
+        mask = cv2.imread(self.df.iloc[idx, 2], 0)
 
-        return image, mask
+        if self.transforms is not None:
+            image = self.transforms(image)
+            mask = self.transforms(mask)
+
+        data_dict = {
+            "image": image,
+            "mask": mask,
+        }
+
+        return data_dict
 
 
 if __name__ == "__main__":
@@ -89,3 +97,12 @@ if __name__ == "__main__":
 
     path = "data/raw/lgg-mri-segmentation/kaggle_3m/"
     generate_df(path)
+    dataset = BrainMriDataset(
+        "data/processed/brain_mri_df.csv",
+        transforms=transforms.ToTensor(),
+    )
+
+    dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
+    i = next(iter(dataloader))
+    print(f'image: {i["image"].shape}, mask: {i["mask"].shape}')
+    # image: torch.Size([4, 3, 256, 256]), mask: torch.Size([4, 1, 256, 256])
