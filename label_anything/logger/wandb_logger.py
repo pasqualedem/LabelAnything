@@ -13,7 +13,7 @@ import torch
 import wandb
 from PIL import Image
 from matplotlib import pyplot as plt
-from label_anything.logger.abstract_logger import AbstractLogger
+from label_anything.logger.abstract_logger import AbstractLogger, main_process_only
 
 from label_anything.logger.text_logger import get_logger
 from accelerate import Accelerator
@@ -68,7 +68,7 @@ class WandBLogger(AbstractLogger):
     def __init__(
         self,
         project_name: str,
-        resumed: bool = False,
+        resume: bool = False,
         offline_directory: str = None,
         save_checkpoints_remote: bool = True,
         save_tensorboard_remote: bool = True,
@@ -96,20 +96,41 @@ class WandBLogger(AbstractLogger):
         :param save_logs_remote: Saves log files in s3.
         :param save_code: save current code to wandb
         """
-        self.resumed = resumed
-        resume = "must" if resumed else None
+        self.resume = resume
+        resume = "must" if resume else None
+        self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
-        experiment = wandb.init(
-            project=project_name,
-            entity=entity,
-            resume=resume,
-            id=run_id,
-            tags=tags,
-            dir=offline_directory,
-            group=group,
-        )
-        super().__init__(experiment=experiment, **kwargs, local_dir=experiment.dir)
+            os.environ["WANDB_ARTIFACT_LOCATION"] = offline_directory
+            os.environ["WANDB_ARTIFACT_DIR"] = offline_directory
+            os.environ["WANDB_CACHE_DIR"] = offline_directory
+            os.environ["WANDB_CONFIG_DIR"] = offline_directory
+            os.environ["WANDB_DATA_DIR"] = offline_directory
+        if resume:
+            self._resume(offline_directory, run_id)
+        experiment = None
+        if kwargs["accelerator"].is_local_main_process:
+            experiment = wandb.init(
+                project=project_name,
+                entity=entity,
+                resume=resume,
+                id=run_id,
+                tags=tags,
+                dir=offline_directory,
+                group=group,
+            )
+            logger.info(f"wandb run id  : {experiment.id}")
+            logger.info(f"wandb run name: {experiment.name}")
+            logger.info(f"wandb run dir : {experiment.dir}")
+            wandb.define_metric("train/step")
+            # set all other train/ metrics to use this step
+            wandb.define_metric("train/*", step_metric="train/step")
+
+            wandb.define_metric("validate/step")
+            # set all other validate/ metrics to use this step
+            wandb.define_metric("validate/*", step_metric="validate/step")
+            
+        super().__init__(experiment=experiment, **kwargs)
         if save_code:
             self._save_code()
 
@@ -118,23 +139,24 @@ class WandBLogger(AbstractLogger):
         self.save_logs_wandb = save_logs_remote
         self.context = ""
         self.sequences = {}
-
-        wandb.define_metric("train/step")
-        # set all other train/ metrics to use this step
-        wandb.define_metric("train/*", step_metric="train/step")
-
-        wandb.define_metric("validate/step")
-        # set all other validate/ metrics to use this step
-        wandb.define_metric("validate/*", step_metric="validate/step")
-
-        # self._set_wandb_id(self.experiment.id)
-        if api_server is not None:
-            if api_server != os.getenv("WANDB_BASE_URL"):
-                logger.warning(
-                    f"WANDB_BASE_URL environment parameter not set to {api_server}. Setting the parameter"
-                )
-                os.putenv("WANDB_BASE_URL", api_server)
-
+                
+    def _resume(self, offline_directory, run_id):
+        if not offline_directory:
+            offline_directory = "."
+        wandb_dir = os.path.join(offline_directory, "wandb")
+        runs = os.listdir(wandb_dir)
+        runs = list(filter(lambda x: run_id in x, runs))
+        if len(runs) == 0:
+            raise ValueError(f"Run {run_id} not found in {wandb_dir}")
+        if len(runs) > 1:
+            logger.warning(f"Multiple runs found for {run_id} in {wandb_dir}")
+            for run in runs:
+                logger.warning(run)
+            logger.warning(f"Using {runs[0]}")
+        run = runs[0]
+        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", "latest")
+        logger.info(f"Resuming from {self.accelerator_state_dir}")
+        
     def _save_code(self):
         """
         Save the current code to wandb.
@@ -172,21 +194,26 @@ class WandBLogger(AbstractLogger):
         else:
             wandb.run.log_code(".", include_fn=include_fn)
 
+    @main_process_only
     def log_parameters(self, config: dict = None):
-        wandb.config.update(config, allow_val_change=self.resumed)
+        wandb.config.update(config, allow_val_change=self.resume)
 
+    @main_process_only
     def add_tags(self, tags):
         wandb.run.tags = wandb.run.tags + tuple(tags)
 
+    @main_process_only
     def add_scalar(self, tag: str, scalar_value: float, global_step: int = 0):
         wandb.log(data={tag: scalar_value}, step=global_step)
 
+    @main_process_only
     def add_scalars(self, tag_scalar_dict: dict, global_step: int = 0):
         for name, value in tag_scalar_dict.items():
             if isinstance(value, dict):
                 tag_scalar_dict[name] = value["value"]
         wandb.log(data=tag_scalar_dict, step=global_step)
 
+    @main_process_only
     def add_image(
         self,
         tag: str,
@@ -200,6 +227,7 @@ class WandBLogger(AbstractLogger):
             image = image.transpose([1, 2, 0])
         wandb.log(data={tag: wandb.Image(image, caption=tag)}, step=global_step)
 
+    @main_process_only
     def add_images(
         self,
         tag: str,
@@ -217,6 +245,7 @@ class WandBLogger(AbstractLogger):
             wandb_images.append(wandb.Image(im))
         wandb.log({tag: wandb_images}, step=global_step)
 
+    @main_process_only
     def add_video(
         self, tag: str, video: Union[torch.Tensor, np.array], global_step: int = 0
     ):
@@ -228,6 +257,7 @@ class WandBLogger(AbstractLogger):
                 video = video.cpu().detach().numpy()
             wandb.log({tag: wandb.Video(video, fps=4)}, step=global_step)
 
+    @main_process_only
     def add_histogram(
         self,
         tag: str,
@@ -237,6 +267,7 @@ class WandBLogger(AbstractLogger):
     ):
         wandb.log({tag: wandb.Histogram(values, num_bins=bins)}, step=global_step)
 
+    @main_process_only
     def add_plot(self, tag: str, values: pd.DataFrame, xtitle, ytitle, classes_marker):
         table = wandb.Table(columns=[classes_marker, xtitle, ytitle], dataframe=values)
         plt = wandb.plot_table(
@@ -251,24 +282,30 @@ class WandBLogger(AbstractLogger):
         )
         wandb.log({tag: plt})
 
+    @main_process_only
     def add_text(self, tag: str, text_string: str, global_step: int = 0):
         wandb.log({tag: text_string}, step=global_step)
 
+    @main_process_only
     def add_figure(self, tag: str, figure: plt.figure, global_step: int = 0):
         wandb.log({tag: figure}, step=global_step)
 
+    @main_process_only
     def add_mask(self, tag: str, image, mask_dict, global_step: int = 0):
         wandb.log({tag: wandb.Image(image, masks=mask_dict)}, step=global_step)
 
+    @main_process_only
     def add_table(self, tag, data, columns, rows):
         if isinstance(data, torch.Tensor):
             data = [[x.item() for x in row] for row in data]
         table = wandb.Table(data=data, rows=rows, columns=columns)
         wandb.log({tag: table})
 
+    @main_process_only
     def end(self):
         wandb.finish()
 
+    @main_process_only
     def add_file(self, file_name: str = None):
         wandb.save(
             glob_str=os.path.join(self._local_dir, file_name),
@@ -276,9 +313,11 @@ class WandBLogger(AbstractLogger):
             policy="now",
         )
 
+    @main_process_only
     def add_summary(self, metrics: dict):
         wandb.summary.update(metrics)
 
+    @main_process_only
     def upload(self):
         if self.save_tensorboard_wandb:
             wandb.save(
@@ -292,6 +331,7 @@ class WandBLogger(AbstractLogger):
                 glob_str=self.log_file_path, base_path=self._local_dir, policy="now"
             )
 
+    @main_process_only
     def add_checkpoint(self, tag: str, state_dict: dict, global_step: int = 0):
         name = f"ckpt_{global_step}.pth" if tag is None else tag
         if not name.endswith(".pth"):
@@ -307,6 +347,7 @@ class WandBLogger(AbstractLogger):
                 )
             wandb.save(glob_str=path, base_path=self._local_dir, policy="now")
 
+    @main_process_only
     def _get_tensorboard_file_name(self):
         try:
             tb_file_path = self.tensorboard_writer.file_writer.event_writer._file_name
@@ -316,19 +357,23 @@ class WandBLogger(AbstractLogger):
 
         return tb_file_path
 
+    @main_process_only
     def _get_wandb_id(self):
         for file in os.listdir(self._local_dir):
             if file.startswith(WANDB_ID_PREFIX):
                 return file.replace(WANDB_ID_PREFIX, "")
 
+    @main_process_only
     def _set_wandb_id(self, id):
         for file in os.listdir(self._local_dir):
             if file.startswith(WANDB_ID_PREFIX):
                 os.remove(os.path.join(self._local_dir, file))
 
+    @main_process_only
     def add(self, tag: str, obj: Any, global_step: int = None):
         pass
 
+    @main_process_only
     def _get_include_paths(self):
         """
         Look for .wandbinclude file in parent dirs and return the list of paths defined in the file.
@@ -379,6 +424,7 @@ class WandBLogger(AbstractLogger):
 
         return None
 
+    @main_process_only
     def log_batch(
         self,
         batch_idx,
@@ -437,6 +483,7 @@ class WandBLogger(AbstractLogger):
             )
             self.add_image_sequence(sequence_name)
 
+    @main_process_only
     def log_gt_pred(
         self,
         batch_idx,
@@ -494,6 +541,7 @@ class WandBLogger(AbstractLogger):
                 metadata=[epoch, dataset_names[b]],
             )
 
+    @main_process_only
     def log_prompts(
         self,
         batch_idx,
@@ -641,26 +689,32 @@ class WandBLogger(AbstractLogger):
                     metadata=[epoch, dataset_names[i]],
                 )
 
+    @main_process_only
     def create_image_sequence(self, name, columns=[]):
         self.sequences[name] = wandb.Table(["ID", "Image"] + columns)
 
+    @main_process_only
     def add_image_to_sequence(
         self, sequence_name, name, wandb_image: wandb.Image, metadata=[]
     ):
         self.sequences[sequence_name].add_data(name, wandb_image, *metadata)
 
+    @main_process_only
     def add_image_sequence(self, name):
         wandb.log({f"{self.context}_{name}": self.sequences[name]})
         del self.sequences[name]
 
+    @main_process_only
     def log_asset_folder(self, folder, base_path=None, step=None):
         files = os.listdir(folder)
         for file in files:
             wandb.save(os.path.join(folder, file), base_path=base_path)
 
+    @main_process_only
     def log_metric(self, name, metric, epoch=None):
         wandb.log({f"{self.context}/{name}": metric})
 
+    @main_process_only
     def log_metrics(self, metrics: dict, epoch=None):
         wandb.log({f"{self.context}/{k}": v for k, v in metrics.items()})
 

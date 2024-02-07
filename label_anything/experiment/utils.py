@@ -10,7 +10,7 @@ from accelerate import Accelerator
 from accelerate.logging import get_logger
 from transformers import get_scheduler as get_transformers_scheduler
 
-from label_anything.data.utils import random_batch
+from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import find_divisor_pairs, get_divisors
@@ -62,7 +62,7 @@ def get_scheduler(optimizer, num_training_steps, scheduler_params):
             num_training_steps=num_training_steps,
         ),
         step_moment,
-    )    
+    )
 
 
 def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
@@ -82,6 +82,15 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+
+
+def compose_loss_input(input_dict: dict, result_dict: dict):
+    return {
+        **result_dict,
+        BatchKeys.FLAG_BBOXES: input_dict[BatchKeys.FLAG_BBOXES],
+        BatchKeys.FLAG_MASKS: input_dict[BatchKeys.FLAG_MASKS],
+        BatchKeys.FLAG_POINTS: input_dict[BatchKeys.FLAG_POINTS],
+    }
 
 
 def get_example_class_size(batch_input):
@@ -222,3 +231,23 @@ def nosync_accumulation(accumulate=False, accelerator=None, model=None):
     else:
         with contextlib.nullcontext():
             yield
+
+
+class WrapperModule(torch.nn.Module):
+    def __init__(self, model, loss) -> None:
+        super().__init__()
+        self.model = model
+        self.loss = loss
+
+    def forward(self, input_dict, gt):
+        result_dict = self.model(input_dict)
+        loss = self.loss(compose_loss_input(input_dict, result_dict), gt)
+        return {"loss": loss, **result_dict}
+
+    def get_learnable_params(self, train_params):
+        model_params = list(self.model.get_learnable_params(train_params))
+        loss_params = list(self.loss.parameters())
+        return model_params + loss_params
+    
+    def predict(self, *args, **kwargs):
+        return self.model.predict(**args, **kwargs)

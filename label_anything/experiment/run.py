@@ -1,4 +1,3 @@
-import copy
 import os
 import random
 import subprocess
@@ -11,34 +10,40 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
+from torchmetrics import MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
+from label_anything.data.utils import BatchKeys
 from label_anything.experiment.substitution import Substitutor
+from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
-    AverageMetricCollection,
-    MetricCollection,
-    FBIoU,
-    JaccardIndex,
-    fbiou,
-    multiclass_jaccard_index,
+    DistributedBinaryJaccardIndex,
+    DistributedMulticlassJaccardIndex,
+    to_global_multiclass,
 )
-from label_anything.utils.utils import FLOAT_PRECISIONS, RunningAverage, write_yaml
+from label_anything.utils.utils import (
+    FLOAT_PRECISIONS,
+    ResultDict,
+    RunningAverage,
+    write_yaml,
+)
 
 from .utils import (
     SchedulerStepMoment,
     allocate_memory,
     check_nan,
+    compose_loss_input,
     get_batch_size,
-    handle_oom,
-    set_class_embeddings,
-    parse_params,
     get_experiment_logger,
-    nosync_accumulation,
     get_scheduler,
+    handle_oom,
+    nosync_accumulation,
+    parse_params,
+    set_class_embeddings,
 )
 
 logger = get_logger(__name__)
@@ -81,6 +86,8 @@ class Run:
         np.random.seed(42)
         random.seed(42)
         self.seg_trainer = None
+        logger.info("Parameters: ")
+        write_yaml(params, file=sys.stdout)
         self.parse_params(params)
         (
             self.train_params,
@@ -115,6 +122,8 @@ class Run:
         logger.info("Start training loop...")
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        self.model = WrapperModule(self.model, self.criterion)
+        
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -142,6 +151,9 @@ class Run:
         )
         if self.val_loader:
             self.val_loader = self.accelerator.prepare(self.val_loader)
+
+        if self.plat_logger.accelerator_state_dir:
+            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
 
         # Train the Model
         with self.plat_logger.train():
@@ -209,7 +221,7 @@ class Run:
     ):
         try:
             pass
-            outputs = self.model(input_dict)
+            outputs = self.model(input_dict, gt)
         except RuntimeError as e:
             if "out of memory" in str(e):
                 handle_oom(
@@ -231,7 +243,8 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        loss = self.criterion(outputs, gt) / loss_normalizer
+        # loss_dict = compose_loss_input(input_dict, outputs) 
+        loss = outputs["loss"] / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
             self.model,
@@ -246,63 +259,53 @@ class Run:
 
     def _update_metrics(
         self,
-        metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         preds: torch.tensor,
         gt: torch.tensor,
-        outputs,
-        tot_steps,
+        tot_steps: int,
     ):
-        metrics_dict = metrics.update(
-            preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-        )
+        metrics_dict = metrics(preds, gt)
         if tot_steps % self.plat_logger.log_frequency == 0:
             for metric_name, metric_value in metrics_dict.items():
+                metric_value = torch.mean(self.accelerator.gather(metric_value))
                 self.plat_logger.log_metric(metric_name, metric_value)
+        # .item() to all values
+        metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
         return metrics_dict
 
     def _update_val_metrics(
         self,
-        metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         preds: torch.tensor,
         gt: torch.tensor,
-        outputs,
         tot_steps,
     ):
         self.plat_logger.log_metric("step", self.global_val_step)
-        return self._update_metrics(metrics, preds, gt, outputs, tot_steps)
+        return self._update_metrics(metrics, preds, gt, tot_steps)
 
     def _update_train_metrics(
         self,
-        metrics: AverageMetricCollection,
-        first_step_metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         previous_metric_values: dict,
         preds: torch.tensor,
         gt: torch,
-        outputs: torch.tensor,
         tot_steps: int,
-        i: int,
-        loss: torch.tensor,
-        first_step_loss_avg: RunningAverage,
+        step: int,
     ):
         self.plat_logger.log_metric("step", self.global_train_step)
-        if tot_steps % self.plat_logger.log_frequency == 0:
-            metric_values = self._update_metrics(metrics, preds, gt, outputs, tot_steps)
-            if i == 0:
-                first_step_loss_avg.update(loss.item())
-                self.plat_logger.log_metric("first_step_loss", loss.item())
-                if tot_steps % self.plat_logger.log_frequency == 0:
-                    self._update_metrics(
-                        first_step_metrics, preds, gt, outputs, tot_steps
-                    )
-                    self.plat_logger.log_metric("lr", self._get_lr())
+        if step == 0:
+            metric_values = self._update_metrics(metrics, preds, gt, tot_steps)
         else:
             metric_values = previous_metric_values
+        if tot_steps % self.plat_logger.log_frequency == 0:
+            self.plat_logger.log_metric("lr", self._get_lr())
         return metric_values
 
     def train_epoch(
         self,
         epoch: int,
     ):
+        self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False
@@ -311,31 +314,37 @@ class Run:
             raise ValueError(
                 "accumulate_substitution can only be used when substitute is True"
             )
-        metrics = AverageMetricCollection(
+
+        # prepare metrics
+        dataset_categories = next(
+            iter(self.train_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
+            },
             prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
         )
-        first_step_metrics = AverageMetricCollection(
-            prefix="first_step_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
-        )
+        metrics.to(self.accelerator.device)
+        loss_avg = RunningAverage()
+
+        # prepare substitutor
         substitutor = Substitutor(
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
         )
-        loss_avg = RunningAverage()
-        first_step_loss_avg = RunningAverage()
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
+        # tqdm stuff
         bar = tqdm(
             enumerate(self.train_loader),
             total=len(self.train_loader),
@@ -360,14 +369,15 @@ class Run:
             for i, (input_dict, gt) in enumerate(substitutor):
                 accumulating = accumulate_substitution and i != loss_normalizer - 1
                 with nosync_accumulation(accumulating, self.accelerator, self.model):
-                    outputs = self._forward(
+                    result_dict = self._forward(
                         batch_tuple, input_dict, gt, epoch, batch_idx
                     )
-                    if isinstance(outputs, RuntimeError):
+                    if isinstance(result_dict, RuntimeError):
                         break
                     loss = self._backward(
-                        batch_idx, input_dict, outputs, gt, loss_normalizer
+                        batch_idx, input_dict, result_dict, gt, loss_normalizer
                     )
+                    outputs = result_dict[ResultDict.LOGITS]
                     preds = outputs.argmax(dim=1)
 
                     if not accumulating:
@@ -377,18 +387,17 @@ class Run:
 
                     loss_avg.update(loss.item())
                     self.plat_logger.log_metric("loss", loss.item())
+                    glob_preds, glob_gt = to_global_multiclass(
+                        input_dict["classes"], dataset_categories, preds, gt
+                    )
 
                     metric_values = self._update_train_metrics(
                         metrics,
-                        first_step_metrics,
                         metric_values,
-                        preds,
-                        gt,
-                        outputs,
+                        glob_preds,
+                        glob_gt,
                         tot_steps,
                         i,
-                        loss,
-                        first_step_loss_avg,
                     )
                     self.plat_logger.log_batch(
                         batch_idx=batch_idx,
@@ -427,7 +436,6 @@ class Run:
                 for k, v in {**metrics.compute(), **metrics.compute()}.items()
             },
             "avg_loss": loss_avg.compute(),
-            "avg_first_step_loss": first_step_loss_avg.compute(),
         }
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
@@ -441,14 +449,24 @@ class Run:
         self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        metrics = AverageMetricCollection(
-            prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
+        dataset_categories = next(
+            iter(self.val_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
             },
-            accelerator=self.accelerator,
+            prefix="batch_",
         )
+        metrics.to(self.accelerator.device)
 
         tot_steps = 0
         tot_images = 0
@@ -469,13 +487,17 @@ class Run:
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
 
-                outputs = self.model(image_dict)
+                result_dict = self.model(image_dict, gt)
+                outputs = result_dict[ResultDict.LOGITS]
                 preds = outputs.argmax(dim=1)
+                glob_preds, glob_gt = to_global_multiclass(
+                    image_dict["classes"], dataset_categories, preds, gt
+                )
 
                 metrics_value = self._update_val_metrics(
-                    metrics, preds, gt, outputs, tot_steps
+                    metrics, glob_preds, glob_gt, tot_steps
                 )
-                loss = torch.mean(self.accelerator.gather(self.criterion(outputs, gt)))
+                loss = result_dict["loss"]
 
                 avg_loss.update(loss.item())
                 bar.set_postfix(
@@ -510,6 +532,7 @@ class Run:
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
+
         logger.info(f"Validation epoch {epoch} finished")
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
@@ -553,10 +576,13 @@ class Run:
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
 
-                output = self.model.predict(image_dict)
-                total_loss += self.criterion(output, gt).item()  # sum up batch loss
-                output = torch.argmax(output, dim=1)
-                metrics.update(output, gt)
+                result_dict = self.model.predict(image_dict)
+                outputs = result_dict[ResultDict.LOGITS]
+                total_loss += self.criterion(
+                    compose_loss_input(image_dict, result_dict), gt
+                ).item()  # sum up batch loss
+                outputs = torch.argmax(outputs, dim=1)
+                metrics.update(outputs, gt)
 
             total_loss /= len(dataloader)
             metrics_values = metrics.compute()

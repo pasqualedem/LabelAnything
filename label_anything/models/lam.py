@@ -12,6 +12,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from label_anything.data.utils import get_preprocess_shape
+from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
@@ -84,7 +85,7 @@ class Lam(nn.Module):
         )
         points, boxes, masks = self.prepare_prompts(batched_input)
 
-        class_embeddings = self.prompt_encoder(
+        pe_result = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
@@ -94,13 +95,16 @@ class Lam(nn.Module):
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            class_embeddings=class_embeddings,
+            class_embeddings=pe_result[ResultDict.CLASS_EMBS],
         )
 
         seg = self.postprocess_masks(seg, batched_input["dims"])
         if "flag_gts" in batched_input:
             seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-        return seg
+        return {
+            ResultDict.LOGITS: seg,
+            ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
+        }
 
     def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
@@ -251,7 +255,7 @@ class Lam(nn.Module):
             boxes=boxes,
             masks=masks,
             chunk_size=chunk_size,
-        )
+        )[ResultDict.CLASS_EMBS]
         return class_embeddings
 
     def predict(self, batched_input, class_embeddings=None):

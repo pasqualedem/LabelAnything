@@ -28,6 +28,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     val_possible_batch_example_nums = dataloader_args.pop(
         "val_possible_batch_example_nums", possible_batch_example_nums
     )
+    num_steps = dataloader_args.pop("num_steps", None)
 
     val_datasets_params = {
         k: v for k, v in datasets_params.items() if k.startswith("val_")
@@ -50,6 +51,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         possible_batch_example_nums=possible_batch_example_nums,
         num_processes=num_processes,
         shuffle=True,
+        num_steps=num_steps,
     )
     train_dataloader = DataLoader(
         dataset=train_dataset,

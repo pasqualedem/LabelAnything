@@ -22,6 +22,8 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
+      # resume: [True]
+      # run_id: [pg70tf8u]
 
   train_params:
     loss:
@@ -34,9 +36,11 @@ parameters:
         #   rmi:
         #     weight: 0.485
         - focal:
-            weight: 0.95
+            weight: 0.5
           dice:
-            weight: 0.05
+            weight: 0.025
+          prompt_contrastive:
+            weight: 0.475
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
@@ -54,12 +58,14 @@ parameters:
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
-    precision: ["bf16"] # fp16 or bf16 or fp32
 
   model:
     # name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
     # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
     # use_sam_checkpoint: [True]
+    # example_attention: [True]
+    # class_attention: [True]
+    # spatial_convs: [3]
     name: [dummy]
 
   dataset: # parameters depending on the class you defined for the dataset
@@ -109,6 +115,7 @@ parameters:
   dataloader:
     batch_size: [1]
     num_workers: [0]
-    possible_batch_example_nums: [[[1, 1]]]
+    possible_batch_example_nums: [[[1,1]]]
+    num_steps: [10]
 
 other_grids:
