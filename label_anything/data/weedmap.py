@@ -2,33 +2,37 @@ import os
 import torch
 import torchvision
 
-from label_anything.data.utils import BatchKeys, collate_gts
-from label_anything.data.dataset import LabelAnythingTestDataset
+from PIL import Image
+from torch.nn.functional import one_hot
+
+from label_anything.data.utils import BatchKeys
+from label_anything.data.test import LabelAnythingTestDataset
 
 
-class WeedMapDataset(LabelAnythingTestDataset):
+class WeedMapTestDataset(LabelAnythingTestDataset):
+    num_classes = 3
     def __init__(
         self,
         train_root,
         test_root,
-        channels,
-        transform=None,
-        target_transform=None,
-        return_path=False,
+        preprocess=None,
         prompt_images=None,
     ):
-        super().__init__(self)
+        super().__init__()
         self.train_root = train_root
         self.test_root = test_root
-        self.channels = channels
-        self.transform = transform
-        self.target_transform = target_transform
-        self.return_path = return_path
+        self.transform = preprocess
         if prompt_images is None:
             prompt_images = [
                 # List of selected images from the training set
+                "frame0009_2.png",
+                "frame0021_2.png",
+                "frame0033_3.png",
+                "frame0034_1.png",
+                "frame0048_0.png",
             ]
         self.prompt_images = prompt_images
+        self.channels = ["R", "G", "B"]
 
         self.train_gt_folder = os.path.join(self.train_root, "groundtruth")
         self.test_gt_folder = os.path.join(self.test_root, "groundtruth")
@@ -44,11 +48,22 @@ class WeedMapDataset(LabelAnythingTestDataset):
 
     def __len__(self):
         return len(os.listdir(self.gt_folder))
+    
+    def _transform(self, image):
+        image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
+        image = self.transform(image)
+        return image
+        
 
     def extract_prompts(self):
         images = [
             self._get_image(self.train_channels_folder, filename)
             for filename in self.prompt_images
+        ]
+        sizes = torch.stack([torch.tensor(x.shape[1:]) for x in images])
+        images = [
+            self._transform(image)
+            for image in images
         ]
         images = torch.stack(images)
         masks = [
@@ -56,11 +71,10 @@ class WeedMapDataset(LabelAnythingTestDataset):
             for filename in self.prompt_images
         ]
         masks = torch.stack(masks)
+        masks = one_hot(masks.long(), 3).permute(0, 3, 1, 2).float()
         contains_crop = (masks == 1).sum(dim=(1, 2)) > 0
         contains_weed = (masks == 2).sum(dim=(1, 2)) > 0
-        flag_masks = torch.stack([contains_crop, contains_weed]).T 
-        
-        sizes = torch.stack([x.shape[1:] for x in images])
+        flag_masks = torch.stack([contains_crop, contains_weed]).T
         
         prompt_dict = {
             BatchKeys.IMAGES: images,
@@ -75,25 +89,25 @@ class WeedMapDataset(LabelAnythingTestDataset):
         for channel_folder in channels_folder:
             channel_path = os.path.join(channel_folder, filename)
             channel = torchvision.io.read_image(channel_path)
-            channel = self.transform(channel)
             channels.append(channel)
         channels = torch.cat(channels).float()
         return channels
     
     def _get_gt(self, gt_folder, img_filename):
-        gt_filename = f"003_{img_filename.split('.')[0]}_GroundTruth_iMap.png"
+        field_id = gt_folder.split("/")[-2]
+        gt_filename = f"{field_id}_{img_filename.split('.')[0]}_GroundTruth_iMap.png"
         path = os.path.join(gt_folder, gt_filename)
-        gt = torchvision.io.read_image(path)
-        gt = gt[[2, 1, 0], ::]
-        gt = gt.argmax(dim=0)
-        gt = self.target_transform(gt)
+        gt = Image.open(path)
+        gt = torchvision.transforms.PILToTensor()(gt)[0]
+        # Convert crop value 10000 to 1
+        gt[gt == 10000] = 1
         return gt
 
     def __getitem__(self, i):
         filename = self.test_images[i]
-        gt = self._get_gt(i, self.train_gt_folder, filename)
-        image = self._get_image(i)
-        
+        gt = self._get_gt(self.test_gt_folder, filename)
+        image = self._get_image(self.test_channels_folder, filename)
+        image = self._transform(image)
         return {
             BatchKeys.IMAGES: image,
             BatchKeys.DIMS: image.shape[1:],

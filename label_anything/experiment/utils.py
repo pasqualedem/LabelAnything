@@ -174,10 +174,11 @@ def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
 
 
 def set_class_embeddings(
+    accelerator,
     model,
     examples,
 ):
-    examples = {k: v.unsqueeze(dim=0).to(model.device) for k, v in examples.items()}
+    examples = {k: v.unsqueeze(dim=0).to(accelerator.device) for k, v in examples.items()}
     example_size, num_classes = get_example_class_size(examples)
     chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
     chunk_sizes = [1]

@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, BatchSampler
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.coco20i import Coco20iDataset
-from label_anything.utils.utils import get_divisors
+from label_anything.data.weedmap import WeedMapTestDataset
 
 datasets = {
     "coco": CocoLVISDataset,
@@ -299,14 +299,3 @@ class VariableBatchSampler(BatchSampler):
 
     def get_max_num_images(self):
         return self.batch_sizes[0] * self.num_examples[0]
-
-
-class LabelAnythingTestDataset(Dataset):
-    def __init__(self):
-        super().__init__()
-
-    def __getitem__(self, item):
-        raise NotImplementedError()
-
-    def __len__(self):
-        raise NotImplementedError()

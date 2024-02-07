@@ -164,12 +164,9 @@ class Run:
 
         if self.test_loader:
             with self.plat_logger.test():
-                for dataloader, support_dataset in self.test_loader:
+                for dataloader in self.test_loader:
                     dataloader = self.accelerator.prepare(dataloader)
-                    self.test(
-                        dataloader=dataloader,
-                        train_dataset=support_dataset,
-                    )
+                    self.test(dataloader=dataloader)
 
         logger.info("Ending run")
         self.plat_logger.end()
@@ -520,7 +517,7 @@ class Run:
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
         return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
 
-    def test(self, dataloader, train_dataset):
+    def test(self, dataloader):
         self.model.eval()
         total_loss = 0
         metrics = MetricCollection(
@@ -541,13 +538,8 @@ class Run:
             )
             self.model.predict = self.model.module.predict
 
-        examples = dataloader.dataset.extract_prompts(
-            train_dataset.cat2img,
-            train_dataset.img2cat,
-            train_dataset.images,
-            train_dataset.img2cat_annotations,
-        )
-        self.model = set_class_embeddings(self.model, examples)
+        examples = dataloader.dataset.extract_prompts()
+        self.model = set_class_embeddings(self.accelerator, self.model, examples)
 
         bar = tqdm(
             enumerate(dataloader),

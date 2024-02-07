@@ -6,7 +6,7 @@ from label_anything.data.utils import BatchKeys, collate_gts
 from PIL import Image
 import random
 from label_anything.data.transforms import PromptsProcessor
-from label_anything.data.dataset import LabelAnythingTestDataset
+from label_anything.data.test import LabelAnythingTestDataset
 
 
 def collate_fn(batched_input):

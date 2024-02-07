@@ -57,9 +57,10 @@ parameters:
     precision: ["bf16"] # fp16 or bf16 or fp32
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    # name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    # use_sam_checkpoint: [True]
+    name: [dummy]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -97,6 +98,9 @@ parameters:
       #   img_dir: *img_dir
       #   seed: *seed
       #   add_box_noise: [False]
+      test_weedmap:
+        train_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000"]
+        test_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003"]
     common:
       do_subsample: [True]
       add_box_noise: [True]
