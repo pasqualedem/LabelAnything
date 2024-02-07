@@ -53,19 +53,19 @@ parameters:
       step_moment: [epoch]
       patience: [0]
       # warmup_steps: [2500] 
-    substitute: [False]
-    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+    substitute: [True]
+    accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [dummy] # path to model class or model name contained in EzDL or super-gradients
-    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    # use_sam_checkpoint: [True]
-    # example_attention: [True]
-    # class_attention: [True]
-    # spatial_convs: [3]
+    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    use_sam_checkpoint: [True]
+    example_attention: [True]
+    class_attention: [True]
+    spatial_convs: [3]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -111,7 +111,7 @@ parameters:
   dataloader:
     batch_size: [1]
     num_workers: [0]
-    possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
+    possible_batch_example_nums: [[[1,1]]]
     num_steps: [10]
 
 other_grids:

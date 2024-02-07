@@ -96,6 +96,8 @@ target/
 
 # Checkpoints
 *.pth
+*.bin
+*.pkl
 
 /label_anything/data/*.json
 exp_log.csv
