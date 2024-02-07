@@ -47,7 +47,7 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
         
 
     def __len__(self):
-        return len(os.listdir(self.gt_folder))
+        return len(os.listdir(self.test_gt_folder))
     
     def _transform(self, image):
         image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
@@ -101,15 +101,15 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
         gt = torchvision.transforms.PILToTensor()(gt)[0]
         # Convert crop value 10000 to 1
         gt[gt == 10000] = 1
-        return gt
+        return gt.long()
 
     def __getitem__(self, i):
         filename = self.test_images[i]
         gt = self._get_gt(self.test_gt_folder, filename)
         image = self._get_image(self.test_channels_folder, filename)
+        size = torch.tensor(image.shape[1:]).unsqueeze(0) # Example dimension
         image = self._transform(image)
         return {
             BatchKeys.IMAGES: image,
-            BatchKeys.DIMS: image.shape[1:],
-            BatchKeys.GROUND_TRUTHS: gt,
-        }
+            BatchKeys.DIMS: size,
+        }, gt

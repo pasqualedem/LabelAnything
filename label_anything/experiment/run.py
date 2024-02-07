@@ -123,7 +123,7 @@ class Run:
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
-        
+
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -243,7 +243,7 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        # loss_dict = compose_loss_input(input_dict, outputs) 
+        # loss_dict = compose_loss_input(input_dict, outputs)
         loss = outputs["loss"] / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
@@ -546,13 +546,15 @@ class Run:
         metrics = MetricCollection(
             metrics=[
                 self.accelerator.prepare(
-                    JaccardIndex(
-                        task="multiclass",
+                    DistributedMulticlassJaccardIndex(
+                        # task="multiclass",
                         num_classes=dataloader.dataset.num_classes,
                         ignore_index=-100,
                     )
                 ),
-                self.accelerator.prepare(FBIoU(ignore_index=-100)),
+                self.accelerator.prepare(
+                    DistributedBinaryJaccardIndex(ignore_index=-100)
+                ),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -576,11 +578,8 @@ class Run:
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
 
-                result_dict = self.model.predict(image_dict)
-                outputs = result_dict[ResultDict.LOGITS]
-                total_loss += self.criterion(
-                    compose_loss_input(image_dict, result_dict), gt
-                ).item()  # sum up batch loss
+                outputs = self.model.predict(image_dict)
+                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
 

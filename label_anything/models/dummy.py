@@ -90,6 +90,37 @@ class Dummy(nn.Module):
             ResultDict.LOGITS: seg,
             ResultDict.EXAMPLES_CLASS_EMBS: class_example_embeddings,
         }
+        
+    def generate_class_embeddings(self, example_dict, chunk_size: int = None) -> torch.Tensor:
+        if "prompt_points" in example_dict and example_dict["prompt_points"].flatten().shape[0] > 0:
+            b, m, c, n, _ = example_dict["prompt_points"].shape
+            device = example_dict["prompt_points"].device
+            class_example_embeddings = example_dict["prompt_points"].mean(dim=(3, 4)).unsqueeze(3)
+            class_example_embeddings = class_example_embeddings @ self.param.weight
+        elif "prompt_bboxes" in example_dict:
+            b, m, c, n, _ = example_dict["prompt_bboxes"].shape
+            device = example_dict["prompt_bboxes"].device
+            class_example_embeddings = example_dict["prompt_bboxes"].mean(dim=(3, 4)).unsqueeze(3)
+            class_example_embeddings = class_example_embeddings @ self.param.weight
+        elif "prompt_masks" in example_dict:
+            b, m, c, h, w = example_dict["prompt_masks"].shape
+            device = example_dict["prompt_masks"].device
+            class_example_embeddings = example_dict["prompt_masks"].mean(dim=(3, 4)).unsqueeze(3)
+            class_example_embeddings = class_example_embeddings @ self.param.weight
+        return class_example_embeddings.mean(dim=1)
+    
+    def predict(self, batched_input):
+        c = self.class_embeddings.shape[1]
+        if "embeddings" in batched_input:
+            seg = self.emb_conv(batched_input["embeddings"]).repeat(1, c, 1, 1)
+        else:
+            seg = self.rgb_conv(batched_input["images"]).repeat(1, c, 1, 1)      
+
+        seg = self.postprocess_masks(seg, batched_input["dims"])
+        if "flag_gts" in batched_input:
+            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
+        return seg
+        
     
     def get_learnable_params(self, training_params: dict) -> list:
         """

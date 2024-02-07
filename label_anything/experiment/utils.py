@@ -238,6 +238,9 @@ class WrapperModule(torch.nn.Module):
         super().__init__()
         self.model = model
         self.loss = loss
+        
+        self.predict = self.model.predict
+        self.generate_class_embeddings = self.model.generate_class_embeddings
 
     def forward(self, input_dict, gt):
         result_dict = self.model(input_dict)
@@ -249,5 +252,10 @@ class WrapperModule(torch.nn.Module):
         loss_params = list(self.loss.parameters())
         return model_params + loss_params
     
-    def predict(self, *args, **kwargs):
-        return self.model.predict(**args, **kwargs)
+    @property
+    def class_embeddings(self):
+        return self.model.class_embeddings
+
+    @class_embeddings.setter
+    def class_embeddings(self, value):
+        self.model.class_embeddings = value
