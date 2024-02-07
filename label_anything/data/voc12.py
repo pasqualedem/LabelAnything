@@ -189,7 +189,6 @@ if __name__ == "__main__":
         labels,
         instances_voc12,
     )
-    print(annotations["annotations"])
 
     with open(f"data/annotations/instances_voc12.json", "w") as f:
         json.dump(annotations, f)
