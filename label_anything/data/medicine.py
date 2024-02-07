@@ -39,15 +39,12 @@ def generate_data(path):
 
 
 def generate_mask_bbox(mask_file) -> (dict, list):
-    mask_array = np.array(Image.open(mask_file))
-    rle_masks = {}
-    for key, value in masks.items():
-        rle = mask_utils.encode(np.asfortranarray(value.astype(np.uint8)))
-        rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
-        rle_masks[key] = rle
+    mask = np.array(Image.open(mask_file))
+    rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
+    rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
 
     # Get the non-zero pixel coordinates
-    y_indices, x_indices = np.nonzero(mask_array)
+    y_indices, x_indices = np.nonzero(mask)
 
     # Check if there are any non-zero pixels
     if y_indices.size > 0 and x_indices.size > 0:
@@ -59,7 +56,7 @@ def generate_mask_bbox(mask_file) -> (dict, list):
         # If there are no non-zero pixels, return an empty bounding box
         bbox = None
 
-    return rle_masks, bbox
+    return rle, bbox
 
 
 def generate_annotations(images, masks, annotations):
@@ -68,12 +65,13 @@ def generate_annotations(images, masks, annotations):
 
     for idx, (image, mask) in enumerate(zip(images, masks)):
         image_name = image.split("/")[-1].split(".")[0]
+        width, height = Image.open(image).size
         annotations_images.append(
             {
                 "file_name": image_name,
                 "url": image,
-                "height": Image.open(image).size[1],
-                "width": Image.open(image).size[0],
+                "height": int(width),
+                "width": int(height),
                 "id": idx,
             }
         )
@@ -81,8 +79,10 @@ def generate_annotations(images, masks, annotations):
         rle, bbox = generate_mask_bbox(mask)
         if bbox is None:
             category_id = 0
+            bbox = [0, 0, 0, 0]
         else:
             category_id = 1
+            bbox = [int(b) for b in bbox]
         annotations_segmentations.append(
             {
                 "segmentation": rle["counts"],
@@ -113,6 +113,7 @@ if __name__ == "__main__":
     path = "data/raw/lgg-mri-segmentation/kaggle_3m/"
     images, masks = generate_data(path)
     data_dict = generate_annotations(images, masks, data_dict)
-    print(data_dict)
     with open("data/annotations/brain_mri.json", "w") as f:
         json.dump(data_dict, f)
+    
+    print("Done!")
