@@ -1,9 +1,10 @@
+from datetime import datetime
+import os
+import pathlib
 import cv2
 import numpy as np
-import os
 from pycocotools import mask as mask_utils
 import xml.etree.ElementTree as ET
-import pathlib
 from scipy.ndimage import label, binary_dilation
 from PIL import Image
 import json
@@ -17,7 +18,7 @@ instances_voc12 = {
         "version": "1.0",
         "year": 2024,
         "contributor": "CILAB",
-        "date_created": "02/01/2024",
+        "date_created": datetime.now().strftime("%Y-%m-%d"),
     },
     "images": [],
     "annotations": [],
@@ -82,6 +83,7 @@ def _get_masks(root, image_id):
     for key, value in masks.items():
         rle = mask_utils.encode(np.asfortranarray(value.astype(np.uint8)))
         rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
+        rle_masks[key] = rle
 
     return rle_masks
 
@@ -105,7 +107,7 @@ def _get_annotations(root, image_id):
     return (np.array(boxes, dtype=np.float32), np.array(labels))
 
 
-def create_lvis_style_annotation(ids, images, boxes, rle_masks, labels, annotations):
+def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     # generate set of categories
     annotations_images = []
     annotations_segmentations = []
@@ -148,24 +150,6 @@ def create_lvis_style_annotation(ids, images, boxes, rle_masks, labels, annotati
     return annotations
 
 
-def gen(file):
-    ids = _read_image_ids(file)
-    images, boxes, polygons, labels = get_items(VOC2012, ids)
-
-    # generate file, if you want to use it in the future
-    annotations = create_lvis_style_annotation(
-        ids,
-        images,
-        boxes,
-        polygons,
-        labels,
-        instances_voc12,
-    )
-
-    with open(f"instances_voc12_{os.path.basename(file).split('.')[0]}.json", "w") as f:
-        json.dump(annotations, f)
-
-
 def generate_dataset_file(voc_folder):
     files = os.listdir(os.path.join(voc_folder, "ImageSets/Segmentation/"))
     contents = ""
@@ -186,10 +170,27 @@ if __name__ == "__main__":
     else:
         print("VOC2012 dataset already exists!")
 
-    train = os.path.join(VOC2012, "ImageSets/Segmentation/train.txt")
-    val = os.path.join(VOC2012, "ImageSets/Segmentation/val.txt")
+    if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
+        print("Generating dataset file...")
+        dataset = generate_dataset_file(VOC2012)
+    else:
+        print("Dataset file already exists!")
 
-    gen(train)
-    gen(val)
+    dataset = os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")
 
+    ids = _read_image_ids(dataset)
+    print(f"len ids: {len(ids)}")
+    images, boxes, polygons, labels = get_items(VOC2012, ids)
+    annotations = create_annotation(
+        ids,
+        images,
+        boxes,
+        polygons,
+        labels,
+        instances_voc12,
+    )
+    print(annotations["annotations"])
+
+    with open(f"data/annotations/instances_voc12.json", "w") as f:
+        json.dump(annotations, f)
     print("Done!")
