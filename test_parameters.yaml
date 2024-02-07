@@ -60,12 +60,13 @@ parameters:
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
-    example_attention: [True]
-    class_attention: [True]
-    spatial_convs: [3]
+    # name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    # use_sam_checkpoint: [True]
+    # example_attention: [True]
+    # class_attention: [True]
+    # spatial_convs: [3]
+    name: [dummy]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -103,6 +104,9 @@ parameters:
       #   img_dir: *img_dir
       #   seed: *seed
       #   add_box_noise: [False]
+      test_weedmap:
+        train_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000"]
+        test_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003"]
     common:
       do_subsample: [True]
       add_box_noise: [True]

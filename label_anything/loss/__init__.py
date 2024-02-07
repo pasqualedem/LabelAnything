@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 from label_anything.data.utils import BatchKeys
 
@@ -55,10 +56,8 @@ class LabelAnythingLoss(nn.Module):
                 f"Unknown loss components: {set(components.keys()) - set(self.components.keys())}"
             )
         self.class_weighting = class_weighting
-
-    def forward(self, result, target):
-        logits = result[ResultDict.LOGITS]
-
+        
+    def logits_loss(self, logits, target):
         weight_matrix, class_weights = None, None
         if self.class_weighting:
             num_classes = logits.shape[1]
@@ -66,14 +65,16 @@ class LabelAnythingLoss(nn.Module):
                 target, num_classes
             )
 
-        logits_loss = sum(
+        return sum(
             self.weights[k]
             * loss(
                 logits, target, weight_matrix=weight_matrix, class_weights=class_weights
             )
             for k, loss in self.components.items()
         )
-        prompt_loss = sum(
+    
+    def prompt_loss(self, result):
+        return sum(
             self.weights[k]
             * loss(
                 result[ResultDict.EXAMPLES_CLASS_EMBS],
@@ -83,4 +84,12 @@ class LabelAnythingLoss(nn.Module):
             )
             for k, loss in self.prompt_components.items()
         )
+
+    def forward(self, result, target):
+        if isinstance(result, torch.Tensor): # Only logits
+            logits_loss = self.logits_loss(result, target)
+            return logits_loss
+        
+        logits_loss = self.logits_loss(result[ResultDict.LOGITS], target)
+        prompt_loss = self.prompt_loss(result)
         return logits_loss + prompt_loss

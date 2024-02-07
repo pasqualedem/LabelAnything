@@ -123,7 +123,7 @@ class Run:
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
-        
+
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -176,12 +176,9 @@ class Run:
 
         if self.test_loader:
             with self.plat_logger.test():
-                for dataloader, support_dataset in self.test_loader:
+                for dataloader in self.test_loader:
                     dataloader = self.accelerator.prepare(dataloader)
-                    self.test(
-                        dataloader=dataloader,
-                        train_dataset=support_dataset,
-                    )
+                    self.test(dataloader=dataloader)
 
         logger.info("Ending run")
         self.plat_logger.end()
@@ -246,7 +243,7 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        # loss_dict = compose_loss_input(input_dict, outputs) 
+        # loss_dict = compose_loss_input(input_dict, outputs)
         loss = outputs["loss"] / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
@@ -543,19 +540,21 @@ class Run:
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
         return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
 
-    def test(self, dataloader, train_dataset):
+    def test(self, dataloader):
         self.model.eval()
         total_loss = 0
         metrics = MetricCollection(
             metrics=[
                 self.accelerator.prepare(
-                    JaccardIndex(
-                        task="multiclass",
+                    DistributedMulticlassJaccardIndex(
+                        # task="multiclass",
                         num_classes=dataloader.dataset.num_classes,
                         ignore_index=-100,
                     )
                 ),
-                self.accelerator.prepare(FBIoU(ignore_index=-100)),
+                self.accelerator.prepare(
+                    DistributedBinaryJaccardIndex(ignore_index=-100)
+                ),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -564,13 +563,8 @@ class Run:
             )
             self.model.predict = self.model.module.predict
 
-        examples = dataloader.dataset.extract_prompts(
-            train_dataset.cat2img,
-            train_dataset.img2cat,
-            train_dataset.images,
-            train_dataset.img2cat_annotations,
-        )
-        self.model = set_class_embeddings(self.model, examples)
+        examples = dataloader.dataset.extract_prompts()
+        self.model = set_class_embeddings(self.accelerator, self.model, examples)
 
         bar = tqdm(
             enumerate(dataloader),
@@ -584,11 +578,8 @@ class Run:
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
 
-                result_dict = self.model.predict(image_dict)
-                outputs = result_dict[ResultDict.LOGITS]
-                total_loss += self.criterion(
-                    compose_loss_input(image_dict, result_dict), gt
-                ).item()  # sum up batch loss
+                outputs = self.model.predict(image_dict)
+                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
 
