@@ -140,7 +140,6 @@ class Run:
 
         if self.train_params.get("compile", False):
             self.model = torch.compile(self.model)
-
         (
             self.model,
             self.optimizer,
@@ -199,9 +198,14 @@ class Run:
     def _get_lr(self):
         if self.scheduler is None:
             return self.train_params["initial_lr"]
-        if hasattr(self.scheduler, "get_lr"):
-            return self.scheduler.get_lr()[0]
-        return self.scheduler.optimizer.param_groups[0]["lr"]
+        try:
+            if hasattr(self.scheduler, "get_lr"):
+                return self.scheduler.get_lr()[0]
+        except NotImplementedError:
+            pass
+        if hasattr(self.scheduler, "optimizer"):
+            return self.scheduler.optimizer.param_groups[0]["lr"]
+        return self.scheduler.optimizers[0].param_groups[0]["lr"]
 
     def _scheduler_step(self, moment, metrics=None):
         if moment != self.scheduler_step_moment or self.scheduler is None:
