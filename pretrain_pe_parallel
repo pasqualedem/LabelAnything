@@ -11,7 +11,7 @@
 #SBATCH --mem=0
 #SBATCH --exclusive
 #SBATCH --job-name=run
-#SBATCH --out=out/run.log
-#SBATCH --err=out/run.log
+#SBATCH --out=out/run_pretraining.log
+#SBATCH --err=out/run_pretraining.log
 
 srun ./launch_run_exe $1
