@@ -6,6 +6,7 @@ from label_anything.preprocess import (
 from label_anything.experiment.experiment import experiment as run_experiment, run as run_single
 from label_anything.preprocess_clip import main as exe_clip_preprocess
 import click
+from label_anything.experiment.pretraining import main as exe_pretrain_pe
 
 
 @click.group()
@@ -168,3 +169,13 @@ def benchmark():
 )
 def preprocess_clip(parameters):
     exe_clip_preprocess(params_path=parameters)
+
+
+@main.command("pretrain_pe")
+@click.option(
+    "--parameters",
+    default='pretraining_parameters.yaml',
+    help='Path to yaml file'
+)
+def pretrain_pe(parameters):
+    exe_pretrain_pe(parameters)

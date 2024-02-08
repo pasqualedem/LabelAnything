@@ -1,0 +1,53 @@
+model:
+  prompt_encoder:
+    name: lam_no_vit
+    checkpoint: checkpoints/sam_vit_h_4b8939.pth
+    use_sam_checkpoint: True
+  hidden_size: 256
+  pe_in_channels: 256
+  clip_in_channels: 1024
+dataset:
+  train:
+    name: coco
+    instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2017.json
+    emb_dir: &emb_dir /leonardo_scratch/large/userexternal/nfanelli/embeddings
+    clip_emb_dir: &clip_emb_dir /leonardo_scratch/large/userexternal/rscaring/embeddings
+    img_dir: &img_dir /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+    num_examples: &num_examples 8
+    seed: &seed 42
+    do_subsample: False
+    add_bbox_noise: True
+    max_points_annotations: 50
+    max_points_per_annotation: 10
+    load_gts: False
+  val:
+    name: coco
+    instance_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json
+    emb_dir: *emb_dir
+    clip_emb_dir: *clip_emb_dir
+    num_examples: *num_examples
+    img_dir: *img_dir
+    seed: *seed
+    do_subsample: False
+    add_box_noise: False
+    max_points_annotations: 50
+    max_points_per_annotation: 10
+    load_gts: False
+dataloader:
+  num_workers: 20
+  batch_size: 8
+  drop_last: False
+  shuffle: True
+criterion:
+  t: .7
+  norm: True
+optimizer:
+  lr: 1e-4
+scheduler:
+  patience: 2
+  factor: 0.1
+early_stopping:
+  out_dir: /leonardo_work/IscrC_PENELOPE/raffaele/LabelAnything/data/experiment/pretrain_pe
+  patience: 5
+train_loop:
+  num_epochs: 50
