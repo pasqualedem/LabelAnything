@@ -1,0 +1,1 @@
+from label_anything.models.contrastive_pe import ContrastivePromptEncoder
