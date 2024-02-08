@@ -49,8 +49,8 @@ def train(
 
 
 def init_model(model_params: dict) -> dict:
-    model_name = model_params.pop('name')
-    lam = model_registry[model_name](**model_params)
+    model_name = model_params.get('prompt_encoder').pop('name')
+    lam = model_registry[model_name](**model_params['prompt_encoder'])
     prompt_encoder = lam.prompt_encoder
     model_params['prompt_encoder'] = prompt_encoder
     return model_params
