@@ -8,6 +8,7 @@ from label_anything.data.prompt_encoder_dataset import PromptEncoderDataset
 import torch
 from label_anything.utils.early_stopping import ParallelEarlyStopping
 from tqdm import tqdm
+from label_anything.models import model_registry
 
 
 def train(
@@ -48,9 +49,9 @@ def train(
 
 
 def init_model(model_params: dict) -> dict:
-    prompt_encoder = PromptImageEncoder(**model_params['prompt_encoder']['params'])
-    state_dict = torch.load(model_params['prompt_encoder']['state_dict'])
-    prompt_encoder.load_state_dict(state_dict)
+    model_name = model_params.pop('name')
+    lam = model_registry[model_name](**model_params)
+    prompt_encoder = lam.prompt_encoder
     model_params['prompt_encoder'] = prompt_encoder
     return model_params
 
@@ -58,7 +59,6 @@ def init_model(model_params: dict) -> dict:
 def main(params):
     params['model'] = init_model(params['model'])
     model = ContrastivePromptEncoder(**params['model'])
-    # TODO: set frozen components
 
     train_data = PromptEncoderDataset(**params['dataset']['train'])
     train_loader = DataLoader(dataset=train_data, **params['dataloader'])
