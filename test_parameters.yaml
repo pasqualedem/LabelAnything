@@ -107,6 +107,9 @@ parameters:
       test_weedmap:
         train_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000"]
         test_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003"]
+      test_brain:
+        annotations: [data/annotations/brain_mri.json]
+        img_dir: [data/raw/lgg-mri-segmentation/kaggle_3m]
     common:
       do_subsample: [True]
       add_box_noise: [True]
