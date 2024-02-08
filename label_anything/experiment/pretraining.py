@@ -9,7 +9,7 @@ import torch
 from label_anything.utils.early_stopping import ParallelEarlyStopping
 from tqdm import tqdm
 from label_anything.models import model_registry
-
+from label_anything.preprocess_clip import load_ruamel
 
 def train(
         model: ContrastivePromptEncoder,
@@ -56,7 +56,8 @@ def init_model(model_params: dict) -> dict:
     return model_params
 
 
-def main(params):
+def main(params_path):
+    params = load_ruamel(params_path)
     params['model'] = init_model(params['model'])
     model = ContrastivePromptEncoder(**params['model'])
 
