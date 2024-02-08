@@ -10,7 +10,7 @@ class PromptEncoderDataset(CocoLVISDataset):
     def __init__(
             self,
             name,
-            instance_path,
+            instances_path,
             clip_emb_dir,
             num_examples,
             img_dir=None,
@@ -31,7 +31,7 @@ class PromptEncoderDataset(CocoLVISDataset):
     ):
         super().__init__(
             name=name,
-            instances_path=instance_path,
+            instances_path=instances_path,
             img_dir=img_dir,
             emb_dir=emb_dir,
             max_points_per_annotation=max_points_per_annotation,
