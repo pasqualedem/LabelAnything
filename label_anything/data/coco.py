@@ -816,6 +816,7 @@ class LabelAnyThingOnlyImageDataset(Dataset):
         self.preprocess = preprocess
 
     def __len__(self):
+        return 5
         return len(self.files)
 
     def __getitem__(self, item):
