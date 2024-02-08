@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: PromptContrastiveLoss # name of group of experiments for the logger platform
+  group: HalfPrecision # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -11,7 +11,7 @@ parameters:
   # Each value should be a dict or a list
   
   logger:
-    log_frequency: [250]
+    log_frequency: [10]
     train_image_log_frequency: [10000]
     val_image_log_frequency: [50]
     experiment_save_delta: [null] # save experiment every n seconds
@@ -20,21 +20,20 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      tags: [[half_precision]]
 
   train_params:
     loss:
       class_weighting: [True]
       components:
         focal:
-          weight: [0.5]
+          weight: [0.95]
         dice: 
-          weight: [0.025]
-        prompt_contrastive:
-          weight: [0.475]
+          weight: [0.05]
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [10]
+    max_epochs: [20]
     compile: [False]
     initial_lr: [0.0001]
     optimizer: [AdamW]
@@ -46,6 +45,8 @@ parameters:
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
+    precision: ["fp16", "bf16"] # fp16 or bf16
+
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
@@ -73,8 +74,8 @@ parameters:
       max_points_per_annotation: [10]
       load_gts: [True]
   dataloader:
-    num_workers: [24]
+    num_workers: [28]
     prefetch_factor: [2]
-    possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
+    possible_batch_example_nums: [[[2, 16], [4, 8], [8, 4], [16, 2], [32, 1]]]
 
 other_grids:

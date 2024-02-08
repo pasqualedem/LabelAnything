@@ -72,3 +72,11 @@ pip install -r requirements.txt
 
 
 <p><small>Project based on the <a target="_blank" href="https://drivendata.github.io/cookiecutter-data-science/">cookiecutter data science project template</a>. #cookiecutterdatascience</small></p>
+
+
+* DOWNLOAD DRAM DATASET
+```
+wget -P  ./data/raw https://faculty.runi.ac.il/arik/site/artseg/DRAM_processed.zip
+unzip ./data/raw/DRAM_processed.zip -d ./data/raw
+unrar x ./data/raw/DRAM_processed.rar ./data/raw
+```

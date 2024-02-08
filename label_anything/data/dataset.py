@@ -7,7 +7,11 @@ from torch.utils.data import Dataset, BatchSampler
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
-from label_anything.utils.utils import get_divisors
+from label_anything.data.coco20i import Coco20iDataset
+from label_anything.logger.text_logger import get_logger
+
+logger = get_logger(__name__)
+
 
 datasets = {
     "coco": CocoLVISDataset,
@@ -15,6 +19,9 @@ datasets = {
     "val_coco": CocoLVISDataset,
     "val_lvis": CocoLVISDataset,
     "ade20k": None,
+    "voc": CocoLVISDataset,
+    "coco20i": Coco20iDataset,
+    "val_coco20i": Coco20iDataset,
 }
 
 
@@ -27,8 +34,6 @@ class LabelAnythingDataset(Dataset):
             datasets_params (Dict): A dictionary containing the parameters for each dataset.
             common_params (Dict): A dictionary containing the common parameters for all datasets.
         """
-        self._log_images = True  # logs the first batch
-        self.load_embeddings = common_params.get("load_embeddings")
 
         self.datasets = {
             dataset_name: datasets[dataset_name](**{**common_params, **params})
@@ -204,10 +209,6 @@ class LabelAnythingDataset(Dataset):
             "flag_gts": flag_gts,
         }
 
-        if self._log_images and self.load_embeddings:
-            log_images = torch.stack([x["images"] for x in batched_input])
-            data_dict["images"] = log_images
-
         return (data_dict, ground_truths), dataset_names
 
     def reset_seed(self, seed):
@@ -215,19 +216,16 @@ class LabelAnythingDataset(Dataset):
             dataset.reset_seed(seed)
 
 
-def get_example_num_list(dataset_len, batch_size, max_num_examples, num_processes=1):
+def get_example_num_list(dataset_len, possible_batch_example_nums, num_processes=1):
     """
     Returns a list of number of examples per batch and a list of batch sizes
     such that the total number of examples is `batch_size * max_num_examples`
     """
-    target_examples_num = batch_size * max_num_examples
-    possible_target_examples_len = get_divisors(max_num_examples)
     examples_nums = []
     batch_sizes = []
     remaining_images = dataset_len // num_processes
     while remaining_images > 0:
-        examples_num = random.choice(possible_target_examples_len)
-        cur_batch_size = target_examples_num // examples_num
+        cur_batch_size, examples_num = random.choice(possible_batch_example_nums)
         if cur_batch_size > remaining_images:
             cur_batch_size = remaining_images
         examples_nums.append(examples_num)
@@ -265,23 +263,35 @@ class VariableBatchSampler(BatchSampler):
         Iterator: An iterator that yields variable-sized batches.
 
     """
+
     def __init__(
         self,
         data_source,
-        max_batch_size,
-        max_num_examples,
+        possible_batch_example_nums,
         drop_last=False,
         shuffle=False,
         num_processes=1,
+        num_steps=None,
     ):
         self.data_source = data_source
 
         self.batch_sizes, self.num_examples = get_example_num_list(
             len(data_source),
-            max_batch_size,
-            max_num_examples,
+            possible_batch_example_nums,
             num_processes=num_processes,
         )
+        if num_steps is not None:
+            if num_steps % num_processes != 0:
+                logger.warning(
+                    "The number of steps is not divisible by the number of processes."
+                )
+                logger.warning(
+                    "The number of steps will be adjusted to be divisible by the number of processes."
+                )
+                num_steps = num_steps - (num_steps % num_processes)
+                logger.warning(f"The new number of steps is {num_steps}.")
+            self.batch_sizes = self.batch_sizes[:num_steps]
+            self.num_examples = self.num_examples[:num_steps]
         self.drop_last = drop_last
         if shuffle:
             self.sampler = torch.utils.data.RandomSampler(data_source)

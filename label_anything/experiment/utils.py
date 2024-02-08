@@ -1,3 +1,4 @@
+from enum import Enum
 import gc
 import os
 import contextlib
@@ -7,10 +8,11 @@ import comet_ml
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
+from transformers import get_scheduler as get_transformers_scheduler
 
-from label_anything.data.utils import random_batch
-from label_anything.logger.image_logger import Logger
+from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
+from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import find_divisor_pairs, get_divisors
 
 logger = get_logger(__name__)
@@ -25,45 +27,54 @@ def parse_params(params_dict):
     return train_params, dataset_params, dataloader_params, model_params
 
 
-def comet_experiment(comet_information: dict, accelerator: Accelerator, params: dict):
-    global logger
-    logger_params = deepcopy(params.get("logger", {}))
-    logger_params.pop("comet", None)
-    if (
-        os.environ.get("TMPDIR", None)
-        or os.environ.get("TMP", None)
-        or os.environ.get("TEMP", None)
-    ):
-        if os.environ.get("TMPDIR", None):
-            tmp_dir = os.environ.get("TMPDIR")
-        elif os.environ.get("TMP", None):
-            tmp_dir = os.environ.get("TMP")
-        else:
-            tmp_dir = os.environ.get("TEMP")
-        logger.info(
-            f"Using {tmp_dir} as temporary directory from environment variables"
-        )
-        logger_params["tmp_dir"] = tmp_dir
-    else:
-        tmp_dir = logger_params.get("tmp_dir", None)
-        logger.info(
-            f"No temporary directory found in environment variables, using {tmp_dir} for images"
-        )
-    os.makedirs(tmp_dir, exist_ok=True)
-    tags = comet_information.pop("tags", [])
+def cast_model(model: torch.nn.Module, precision=torch.float32):
+    if precision == torch.float32:
+        return model
+    model = model.type(precision)
+    for module in model.modules():
+        if isinstance(module, torch.nn.BatchNorm2d):
+            module.float()
+    return model
 
-    if comet_information.pop("offline"):
-        offdir = comet_information.pop("offline_directory", None)
-        experiment = comet_ml.OfflineExperiment(
-            offline_directory=offdir, **comet_information
-        )
-    else:
-        experiment = comet_ml.Experiment(**comet_information)
-    comet_ml.init(comet_information)
-    experiment.add_tags(tags)
-    experiment.log_parameters(params)
 
-    return Logger(experiment, accelerator, **logger_params)
+class SchedulerStepMoment(Enum):
+    BATCH = "batch"
+    EPOCH = "epoch"
+
+
+def get_scheduler(optimizer, num_training_steps, scheduler_params):
+    scheduler_params = deepcopy(scheduler_params)
+    scheduler_type = scheduler_params.pop("type")
+    if scheduler_type is None:
+        logger.warning("No scheduler type specified, using None")
+        return None, None
+    step_moment = scheduler_params.pop("step_moment", None)
+    if step_moment is None:
+        raise ValueError("step_moment must be specified, choose (batch, epoch)")
+    step_moment = SchedulerStepMoment(step_moment)
+    num_warmup_steps = scheduler_params.pop("num_warmup_steps", None)
+    return (
+        get_transformers_scheduler(
+            scheduler_type,
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            scheduler_specific_kwargs=scheduler_params,
+            num_training_steps=num_training_steps,
+        ),
+        step_moment,
+    )
+
+
+def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
+    if params.get("logger", {}).get("comet") is not None:
+        from label_anything.logger.comet_logger import (
+            comet_experiment as platform_logger,
+        )
+    elif params.get("logger", {}).get("wandb") is not None:
+        from label_anything.logger.wandb_logger import (
+            wandb_experiment as platform_logger,
+        )
+    return platform_logger(accelerator, params)
 
 
 def get_batch_size(batch_tuple):
@@ -71,6 +82,15 @@ def get_batch_size(batch_tuple):
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
         return batch_tuple[0]["embeddings"].shape[0]
+
+
+def compose_loss_input(input_dict: dict, result_dict: dict):
+    return {
+        **result_dict,
+        BatchKeys.FLAG_BBOXES: input_dict[BatchKeys.FLAG_BBOXES],
+        BatchKeys.FLAG_MASKS: input_dict[BatchKeys.FLAG_MASKS],
+        BatchKeys.FLAG_POINTS: input_dict[BatchKeys.FLAG_POINTS],
+    }
 
 
 def get_example_class_size(batch_input):
@@ -163,10 +183,11 @@ def allocate_memory(model, accelerator, optimizer, criterion, dataloader):
 
 
 def set_class_embeddings(
+    accelerator,
     model,
     examples,
 ):
-    examples = {k: v.unsqueeze(dim=0).to(model.device) for k, v in examples.items()}
+    examples = {k: v.unsqueeze(dim=0).to(accelerator.device) for k, v in examples.items()}
     example_size, num_classes = get_example_class_size(examples)
     chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
     chunk_sizes = [1]
@@ -210,3 +231,31 @@ def nosync_accumulation(accumulate=False, accelerator=None, model=None):
     else:
         with contextlib.nullcontext():
             yield
+
+
+class WrapperModule(torch.nn.Module):
+    def __init__(self, model, loss) -> None:
+        super().__init__()
+        self.model = model
+        self.loss = loss
+        
+        self.predict = self.model.predict
+        self.generate_class_embeddings = self.model.generate_class_embeddings
+
+    def forward(self, input_dict, gt):
+        result_dict = self.model(input_dict)
+        loss = self.loss(compose_loss_input(input_dict, result_dict), gt)
+        return {"loss": loss, **result_dict}
+
+    def get_learnable_params(self, train_params):
+        model_params = list(self.model.get_learnable_params(train_params))
+        loss_params = list(self.loss.parameters())
+        return model_params + loss_params
+    
+    @property
+    def class_embeddings(self):
+        return self.model.class_embeddings
+
+    @class_embeddings.setter
+    def class_embeddings(self, value):
+        self.model.class_embeddings = value

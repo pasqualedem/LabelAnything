@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: PromptContrastiveLoss # name of group of experiments for the logger platform
+  group: FirstTry # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -11,41 +11,46 @@ parameters:
   # Each value should be a dict or a list
   
   logger:
-    log_frequency: [250]
+    log_frequency: [10]
     train_image_log_frequency: [10000]
-    val_image_log_frequency: [50]
-    experiment_save_delta: [null] # save experiment every n seconds
+    val_image_log_frequency: [1000]
+    experiment_save_delta: [3600] # save experiment every n seconds
     tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
-    wandb:
-      offline: [False]
-      entity: [cilabuniba]
+    comet:
+      tags: [[FirstParallelTry]] # list of tags to attach to the run in logger platform
+      offline: [True]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
     loss:
       class_weighting: [True]
       components:
-        focal:
-          weight: [0.5]
-        dice: 
-          weight: [0.025]
-        prompt_contrastive:
-          weight: [0.475]
+        - 
+          focal:
+            weight: 0.485
+          dice: 
+            weight: 0.05
+          rmi:
+            weight: 0.485
+        -
+          focal:
+            weight: 0.95
+          dice: 
+            weight: 0.05
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [10]
+    max_epochs: [5]
     compile: [False]
-    initial_lr: [0.0001]
+    initial_lr: [0.0001, 0.00005, 0.00001, 0.000005]
     optimizer: [AdamW]
     scheduler:
-      type: [reduce_lr_on_plateau]
-      step_moment: [epoch]
-      patience: [0]
+      type: [constant_with_warmup]
+      warmup_steps: [500]
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
-    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
+
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
@@ -66,15 +71,27 @@ parameters:
         seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
+      test_coco:
+        support: [coco]
+        name: [ coco ]
+        instances_path: *instance_dir
+        img_dir: *img_dir
+        emb_dir: *emb_dir
+        seed: *seed
+        add_box_noise: [ False ]
+        load_embeddings: [True]
+        load_gts: [True]
     common:
       do_subsample: [True]
       add_box_noise: [True]
+      max_num_examples: [4]
       max_points_annotations: [50]
-      max_points_per_annotation: [10]
+      max_points_per_annotation: [1]
+      load_embeddings: [True]
       load_gts: [True]
   dataloader:
-    num_workers: [24]
+    batch_size: [4]
+    num_workers: [32]
     prefetch_factor: [2]
-    possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
 
 other_grids:

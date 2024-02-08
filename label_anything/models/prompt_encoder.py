@@ -11,10 +11,11 @@ from einops import rearrange
 
 from typing import Any, Optional, Tuple, Type
 
-from .common import LayerNorm2d, MLPBlock
-from .transformer import TwoWayTransformer, Attention
+from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
+from .transformer import TwoWayTransformer
 
-from label_anything.data.coco import Label
+from label_anything.data.utils import Label
+from label_anything.utils.utils import ResultDict
 
 
 class PromptEncoder(nn.Module):
@@ -200,6 +201,9 @@ class PositionEmbeddingRandom(nn.Module):
     def _pe_encoding(self, coords: torch.Tensor) -> torch.Tensor:
         """Positionally encode points that are normalized to [0,1]."""
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coords = coords.type(
+            self.positional_encoding_gaussian_matrix.dtype
+        )  # Ensure same type
         coords = 2 * coords - 1
         coords = coords @ self.positional_encoding_gaussian_matrix
         coords = 2 * np.pi * coords
@@ -226,7 +230,7 @@ class PositionEmbeddingRandom(nn.Module):
         coords = coords_input.clone()
         coords[:, :, 0] = coords[:, :, 0] / image_size[1]
         coords[:, :, 1] = coords[:, :, 1] / image_size[0]
-        return self._pe_encoding(coords.to(torch.float))  # B x N x C
+        return self._pe_encoding(coords)  # B x N x C
 
 
 class PromptImageEncoder(PromptEncoder):
@@ -237,6 +241,9 @@ class PromptImageEncoder(PromptEncoder):
         input_image_size: Tuple[int, int],
         mask_in_chans: int,
         transformer: nn.Module,
+        class_example_attention: bool = True,
+        class_attention: bool = False,
+        example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -264,19 +271,44 @@ class PromptImageEncoder(PromptEncoder):
 
         self.transformer = transformer
 
-        self.sparse_embedding_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
+        self.sparse_embedding_attention = AttentionMLPBlock(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            downsample_rate=attention_downsample_rate,
+            mlp_dim=mlp_dim,
+            act=activation,
         )
         self.no_sparse_embedding = nn.Embedding(
             1, embed_dim
         )  # For when no sparse embeddings in input
-        self.norm_sparse_embedding_attention = nn.LayerNorm(embed_dim)
-        self.example_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
-        self.norm_example_attention = nn.LayerNorm(embed_dim)
-        self.example_mlp = MLPBlock(embed_dim, mlp_dim)
-        self.norm_example_mlp = nn.LayerNorm(embed_dim)
+
+        self.example_attention = None
+        if example_attention:
+            self.example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+        self.class_attention = None
+        if class_attention:
+            self.class_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+
+        if class_example_attention:
+            self.class_example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
 
         self.not_a_mask_embed = nn.Embedding(
             1, embed_dim // 4
@@ -293,7 +325,7 @@ class PromptImageEncoder(PromptEncoder):
         else:
             for i in range(0, masks.shape[0], chunk_size):
                 mask_embedding = torch.zeros(
-                    B*M*C, self.embed_dim, H // 4, W // 4, device=self._get_device()
+                    B * M * C, self.embed_dim, H // 4, W // 4, device=self._get_device()
                 )
                 mask_embedding[i : i + chunk_size] = self.mask_downscaling(
                     masks[i : i + chunk_size]
@@ -326,7 +358,7 @@ class PromptImageEncoder(PromptEncoder):
             masks = masks[0]
             return masks.shape[0], masks.shape[1], masks.shape[2]
         else:
-            return 1
+            raise ValueError("No prompts provided")
 
     def embed_points_masks(
         self,
@@ -359,7 +391,9 @@ class PromptImageEncoder(PromptEncoder):
         bs = B * n_examples * n_classes
 
         sparse_embeddings = torch.empty(
-            (bs, 0, self.embed_dim), device=self._get_device()
+            (bs, 0, self.embed_dim),
+            device=self._get_device(),
+            dtype=self.no_sparse_embedding.weight.dtype,
         )
         if points is not None:
             coords, labels = points
@@ -383,10 +417,7 @@ class PromptImageEncoder(PromptEncoder):
             m=n_examples,
             c=n_classes,
         )
-        sparse_embeddings = self.sparse_embedding_attention(
-            sparse_embeddings, sparse_embeddings, sparse_embeddings
-        )
-        sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
+        sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings)
         sparse_embeddings = rearrange(
             sparse_embeddings,
             "(b m) (c n) d -> b m c n d",
@@ -525,17 +556,28 @@ class PromptImageEncoder(PromptEncoder):
         )
         src = rearrange(src, "b d h w -> b d (h w)")
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
-        src = rearrange(src, "(b m c) d -> b (m c) d", b=b, m=m, c=c)
+        src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
 
-        src = self.example_attention(src, src, src)
-        src = self.norm_example_attention(src)
-        src = self.example_mlp(src) + src
-        src = self.norm_example_mlp(src)
+        if self.class_example_attention is not None:
+            src = rearrange(src, "b m c d -> b (m c) d", c=c)
+            src = self.class_example_attention(src)
+            src = rearrange(src, "b (m c) d -> b m c d", c=c)
+
+        if self.example_attention is not None:
+            src = rearrange(src, "b m c d -> (b c) m d", c=c)
+            src = self.example_attention(src)
+            src = rearrange(src, "(b c) m d -> b m c d", c=c)
+        if self.class_attention is not None:
+            src = rearrange(src, "b m c d -> (b m) c d", c=c)
+            src = self.class_attention(src)
+            src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
         # Average over examples
-        src = rearrange(src, "b (m c) d -> b m c d", c=c)
-        src = torch.mean(src, dim=1)  # (B, C, D)
-        return src
+        class_embeddings = torch.mean(src, dim=1)  # (B, C, D)
+        return {
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: src,
+        }
 
 
 class PromptMaskImageEncoder(PromptEncoder):

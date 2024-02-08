@@ -1,80 +1,88 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: FirstTry # name of group of experiments for the logger platform
+  group: Test # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
   search: grid
-  # n_trials: 5 
+  # n_trials: 5
 
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
 
   logger:
-    log_frequency: [10]
-    train_image_log_frequency: [10000]
-    val_image_log_frequency: [1000]
-    experiment_save_delta: [3600] # save experiment every n seconds
+    log_frequency: [1]
+    tags: [[Test]] # list of tags to attach to the run in logger platform
+    train_image_log_frequency: [5]
+    val_image_log_frequency: [5]
+    experiment_save_delta: [null] # save experiment every n seconds
     tmp_dir: [tmp]
-    comet:
-      tags: [[Test]] # list of tags to attach to the run in logger platform
+    wandb:
       offline: [False]
+      entity: [cilabuniba]
+      # resume: [True]
+      # run_id: [pg70tf8u]
 
   train_params:
     loss:
       class_weighting: [True]
       components:
-        - 
-          focal:
-            weight: 0.485
-          dice: 
-            weight: 0.05
-          rmi:
-            weight: 0.485
-        -
-          focal:
-            weight: 0.95
-          dice: 
-            weight: 0.05
+        # - focal:
+        #     weight: 0.485
+        #   dice:
+        #     weight: 0.05
+        #   rmi:
+        #     weight: 0.485
+        - focal:
+            weight: 0.5
+          dice:
+            weight: 0.025
+          prompt_contrastive:
+            weight: 0.475
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [1]
+    max_epochs: [2]
     compile: [False]
     initial_lr: [0.00001]
     optimizer: [AdamW]
     scheduler:
-      type: [cosine]
-      warmup_steps: [2500]
-    substitute: [False]
+      type: [reduce_lr_on_plateau]
+      step_moment: [epoch]
+      patience: [0]
+      # warmup_steps: [2500] 
+    substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    # name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    # use_sam_checkpoint: [True]
+    # example_attention: [True]
+    # class_attention: [True]
+    # spatial_convs: [3]
+    name: [dummy]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
-      lvis:
-        name: [lvis]
-        instances_path: [data/annotations/lvis_v1_train.json]
-        img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
+      # voc:
+      #   name: [voc] #voc
+      #   instances_path: [data/raw/instances_voc12train.json]
+      #   img_dir: [data/raw/VOCdevkit/VOC2012/JPEGImages]
       coco:
         name: [coco]
-        instances_path: [data/annotations/instances_train2017.json]
-        img_dir: *img_dir
-      val_lvis:
-        name: [lvis]
-        instances_path: [data/annotations/lvis_v1_val.json]
-        img_dir: *img_dir
         seed: *seed
-        do_subsample: [False]
-        add_box_noise: [False]
+        instances_path: [data/annotations/instances_train2017.json]
+        img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
+      # lvis:
+      #   name: [lvis]
+      #   instances_path: [data/annotations/lvis_v1_train.json]
+      #   img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
       val_coco:
         name: [coco]
         instances_path: [data/annotations/instances_val2017.json]
@@ -82,21 +90,32 @@ parameters:
         seed: *seed
         do_subsample: [False]
         add_box_noise: [False]
-      test_coco:
-        support: [coco]
-        name: [ coco ]
-        instances_path: [ data/annotations/instances_val2017.json ]
-        img_dir: *img_dir
-        seed: *seed
-        add_box_noise: [ False ]
+      # val_lvis:
+      #   name: [lvis]
+      #   instances_path: [data/annotations/lvis_v1_val.json]
+      #   img_dir: *img_dir
+      #   seed: *seed
+      #   do_subsample: [False]
+      #   add_box_noise: [False]
+      # test_coco:
+      #   support: [coco]
+      #   name: [coco]
+      #   instances_path: [data/annotations/instances_val2017.json]
+      #   img_dir: *img_dir
+      #   seed: *seed
+      #   add_box_noise: [False]
+      test_weedmap:
+        train_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000"]
+        test_root: ["/ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003"]
     common:
       do_subsample: [True]
       add_box_noise: [True]
       max_points_annotations: [50]
-      max_num_examples: [1]
-      load_embeddings: [False]
+      max_points_per_annotation: [10]
   dataloader:
     batch_size: [1]
     num_workers: [0]
+    possible_batch_example_nums: [[[1,1]]]
+    num_steps: [10]
 
 other_grids:

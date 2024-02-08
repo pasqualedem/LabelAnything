@@ -1,4 +1,3 @@
-import copy
 import os
 import random
 import subprocess
@@ -11,34 +10,40 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from torch.optim import AdamW
+from torchmetrics import MetricCollection
 from tqdm import tqdm
-from transformers import get_scheduler
 
 from label_anything.data import get_dataloaders
+from label_anything.data.utils import BatchKeys
 from label_anything.experiment.substitution import Substitutor
-from label_anything.logger.image_logger import Logger
+from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.text_logger import get_logger
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
-    AverageMetricCollection,
-    MetricCollection,
-    FBIoU,
-    JaccardIndex,
-    fbiou,
-    multiclass_jaccard_index,
+    DistributedBinaryJaccardIndex,
+    DistributedMulticlassJaccardIndex,
+    to_global_multiclass,
 )
-from label_anything.utils.utils import RunningAverage, write_yaml
+from label_anything.utils.utils import (
+    FLOAT_PRECISIONS,
+    ResultDict,
+    RunningAverage,
+    write_yaml,
+)
 
 from .utils import (
+    SchedulerStepMoment,
     allocate_memory,
     check_nan,
+    compose_loss_input,
     get_batch_size,
+    get_experiment_logger,
+    get_scheduler,
     handle_oom,
-    set_class_embeddings,
+    nosync_accumulation,
     parse_params,
-    comet_experiment,
-    nosync_accumulation
+    set_class_embeddings,
 )
 
 logger = get_logger(__name__)
@@ -50,15 +55,20 @@ class Run:
         self.params = None
         self.dataset = None
         self.experiment = None
-        self.comet_logger = None
+        self.plat_logger = None
         self.dataset_params = None
         self.train_params = None
         self.model = None
         self.scheduler = None
         self.criterion = None
         self.oom = None
+        self.best_metric = None
+        self.scheduler_step_moment = None
+        self.watch_metric = None
         if "." not in sys.path:
             sys.path.extend(".")
+        self.global_train_step = 0
+        self.global_val_step = 0
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -76,6 +86,8 @@ class Run:
         np.random.seed(42)
         random.seed(42)
         self.seg_trainer = None
+        logger.info("Parameters: ")
+        write_yaml(params, file=sys.stdout)
         self.parse_params(params)
         (
             self.train_params,
@@ -84,34 +96,34 @@ class Run:
             self.model_params,
         ) = parse_params(params)
 
-        comet_params = self.params.get("logger", {}).get("comet", {})
-        comet_information = {
-            "api_key": os.getenv("COMET_API_KEY"),
-            "project_name": self.params["experiment"]["name"],
-            **comet_params,
-        }
         kwargs = [
             DistributedDataParallelKwargs(find_unused_parameters=True),
         ]
         self.accelerator = Accelerator(
-            even_batches=False, kwargs_handlers=kwargs, split_batches=False
+            even_batches=False,
+            kwargs_handlers=kwargs,
+            split_batches=False,
+            mixed_precision=self.train_params.get("precision", None),
         )
-        self.comet_logger = comet_experiment(
-            comet_information, self.accelerator, self.params
-        )
-        self.url = self.comet_logger.experiment.url
-        self.name = self.comet_logger.experiment.name
-
+        self.plat_logger = get_experiment_logger(self.accelerator, self.params)
+        self.url = self.plat_logger.url
+        self.name = self.plat_logger.name
         self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
-            self.dataset_params, self.dataloader_params, self.accelerator.num_processes
+            self.dataset_params,
+            self.dataloader_params,
+            self.accelerator.num_processes,
         )
         model_name = self.model_params.pop("name")
         self.model = model_registry[model_name](**self.model_params)
+
+        self.watch_metric = self.train_params["watch_metric"]
 
     def launch(self):
         logger.info("Start training loop...")
 
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        self.model = WrapperModule(self.model, self.criterion)
+
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -119,10 +131,9 @@ class Run:
 
         scheduler_params = self.train_params.get("scheduler", None)
         if scheduler_params:
-            self.scheduler = get_scheduler(
-                scheduler_params["type"],
+            self.scheduler, self.scheduler_step_moment = get_scheduler(
+                scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
-                num_warmup_steps=scheduler_params["warmup_steps"],
                 num_training_steps=self.train_params["max_epochs"]
                 * len(self.train_loader),
             )
@@ -141,8 +152,11 @@ class Run:
         if self.val_loader:
             self.val_loader = self.accelerator.prepare(self.val_loader)
 
+        if self.plat_logger.accelerator_state_dir:
+            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+
         # Train the Model
-        with self.comet_logger.experiment.train():
+        with self.plat_logger.train():
             logger.info(
                 f"Running Model Training {self.params.get('experiment').get('name')}"
             )
@@ -152,32 +166,50 @@ class Run:
                 )
                 self.train_epoch(epoch)
 
-                self.comet_logger.log_training_state(epoch=epoch)
+                metrics = None
                 if self.val_loader:
-                    with self.comet_logger.experiment.validate():
+                    with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
-                        self.validate(epoch)
-                        self.comet_logger.save_experiment()
+                        metrics = self.validate(epoch)
+                        self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
+                self.save_training_state(epoch, metrics)
 
         if self.test_loader:
-            with self.comet_logger.experiment.test():
-                for dataloader, support_dataset in self.test_loader:
+            with self.plat_logger.test():
+                for dataloader in self.test_loader:
                     dataloader = self.accelerator.prepare(dataloader)
-                    self.test(
-                        dataloader=dataloader,
-                        train_dataset=support_dataset,
-                    )
+                    self.test(dataloader=dataloader)
 
         logger.info("Ending run")
-        self.comet_logger.end()
+        self.plat_logger.end()
         logger.info("Run ended")
 
+    def save_training_state(self, epoch, metrics=None):
+        if metrics:
+            if self.best_metric is None:
+                self.best_metric = metrics[self.watch_metric]
+            if metrics[self.watch_metric] >= self.best_metric:
+                logger.info(
+                    f"Saving best model with metric {metrics[self.watch_metric]} as given that metric is greater than {self.best_metric}"
+                )
+                self.best_metric = metrics[self.watch_metric]
+                self.plat_logger.log_training_state(epoch=epoch, subfolder="best")
+        self.plat_logger.log_training_state(epoch=epoch, subfolder="latest")
+
     def _get_lr(self):
-        return (
-            self.scheduler.get_lr()[0]
-            if self.scheduler
-            else self.train_params["initial_lr"]
-        )
+        if self.scheduler is None:
+            return self.train_params["initial_lr"]
+        if hasattr(self.scheduler, "get_lr"):
+            return self.scheduler.get_lr()[0]
+        return self.scheduler.optimizer.param_groups[0]["lr"]
+
+    def _scheduler_step(self, moment, metrics=None):
+        if moment != self.scheduler_step_moment or self.scheduler is None:
+            return
+        if moment == SchedulerStepMoment.BATCH:
+            self.scheduler.step()
+        elif moment == SchedulerStepMoment.EPOCH:
+            self.scheduler.step(metrics[self.watch_metric])
 
     def _forward(
         self,
@@ -189,7 +221,7 @@ class Run:
     ):
         try:
             pass
-            outputs = self.model(input_dict)
+            outputs = self.model(input_dict, gt)
         except RuntimeError as e:
             if "out of memory" in str(e):
                 handle_oom(
@@ -211,7 +243,8 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        loss = self.criterion(outputs, gt) / loss_normalizer
+        # loss_dict = compose_loss_input(input_dict, outputs)
+        loss = outputs["loss"] / loss_normalizer
         self.accelerator.backward(loss)
         check_nan(
             self.model,
@@ -226,80 +259,92 @@ class Run:
 
     def _update_metrics(
         self,
-        metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         preds: torch.tensor,
         gt: torch.tensor,
-        outputs,
+        tot_steps: int,
+    ):
+        metrics_dict = metrics(preds, gt)
+        if tot_steps % self.plat_logger.log_frequency == 0:
+            for metric_name, metric_value in metrics_dict.items():
+                metric_value = torch.mean(self.accelerator.gather(metric_value))
+                self.plat_logger.log_metric(metric_name, metric_value)
+        # .item() to all values
+        metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
+        return metrics_dict
+
+    def _update_val_metrics(
+        self,
+        metrics: MetricCollection,
+        preds: torch.tensor,
+        gt: torch.tensor,
         tot_steps,
     ):
-        metrics_dict = metrics.update(
-            preds, gt, num_classes=outputs.shape[1], ignore_index=-100
-        )
-        if tot_steps % self.comet_logger.log_frequency == 0:
-            for metric_name, metric_value in metrics_dict.items():
-                self.comet_logger.log_metric(metric_name, metric_value)
-        return metrics_dict
+        self.plat_logger.log_metric("step", self.global_val_step)
+        return self._update_metrics(metrics, preds, gt, tot_steps)
 
     def _update_train_metrics(
         self,
-        metrics: AverageMetricCollection,
-        first_step_metrics: AverageMetricCollection,
+        metrics: MetricCollection,
         previous_metric_values: dict,
         preds: torch.tensor,
         gt: torch,
-        outputs: torch.tensor,
         tot_steps: int,
-        i: int,
-        loss: torch.tensor,
-        first_step_loss_avg: RunningAverage,
+        step: int,
     ):
-        if tot_steps % self.comet_logger.log_frequency == 0:
-            metric_values = self._update_metrics(metrics, preds, gt, outputs, tot_steps)
-            if i == 0:
-                first_step_loss_avg.update(loss.item())
-                self.comet_logger.log_metric("first_step_loss", loss.item())
-                if tot_steps % self.comet_logger.log_frequency == 0:
-                    self._update_metrics(
-                        first_step_metrics, preds, gt, outputs, tot_steps
-                    )
-                    self.comet_logger.log_metric("lr", self._get_lr())
+        self.plat_logger.log_metric("step", self.global_train_step)
+        if step == 0:
+            metric_values = self._update_metrics(metrics, preds, gt, tot_steps)
         else:
             metric_values = previous_metric_values
+        if tot_steps % self.plat_logger.log_frequency == 0:
+            self.plat_logger.log_metric("lr", self._get_lr())
         return metric_values
 
     def train_epoch(
         self,
         epoch: int,
     ):
+        self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False
         )
-        metrics = AverageMetricCollection(
+        if accumulate_substitution and not self.train_params.get("substitute", True):
+            raise ValueError(
+                "accumulate_substitution can only be used when substitute is True"
+            )
+
+        # prepare metrics
+        dataset_categories = next(
+            iter(self.train_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
+            },
             prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
         )
-        first_step_metrics = AverageMetricCollection(
-            prefix="first_step_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
-            },
-            accelerator=self.accelerator,
-        )
+        metrics.to(self.accelerator.device)
+        loss_avg = RunningAverage()
+
+        # prepare substitutor
         substitutor = Substitutor(
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
         )
-        loss_avg = RunningAverage()
-        first_step_loss_avg = RunningAverage()
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
+        # tqdm stuff
         bar = tqdm(
             enumerate(self.train_loader),
             total=len(self.train_loader),
@@ -324,36 +369,37 @@ class Run:
             for i, (input_dict, gt) in enumerate(substitutor):
                 accumulating = accumulate_substitution and i != loss_normalizer - 1
                 with nosync_accumulation(accumulating, self.accelerator, self.model):
-                    outputs = self._forward(batch_tuple, input_dict, gt, epoch, batch_idx)
-                    if isinstance(outputs, RuntimeError):
+                    result_dict = self._forward(
+                        batch_tuple, input_dict, gt, epoch, batch_idx
+                    )
+                    if isinstance(result_dict, RuntimeError):
                         break
                     loss = self._backward(
-                        batch_idx, input_dict, outputs, gt, loss_normalizer
+                        batch_idx, input_dict, result_dict, gt, loss_normalizer
                     )
+                    outputs = result_dict[ResultDict.LOGITS]
                     preds = outputs.argmax(dim=1)
 
                     if not accumulating:
                         self.optimizer.step()
-                        if self.scheduler is not None:
-                            self.scheduler.step()
+                        self._scheduler_step(SchedulerStepMoment.BATCH)
                         self.optimizer.zero_grad()
 
                     loss_avg.update(loss.item())
-                    self.comet_logger.log_metric("loss", loss.item())
+                    self.plat_logger.log_metric("loss", loss.item())
+                    glob_preds, glob_gt = to_global_multiclass(
+                        input_dict["classes"], dataset_categories, preds, gt
+                    )
 
                     metric_values = self._update_train_metrics(
                         metrics,
-                        first_step_metrics,
                         metric_values,
-                        preds,
-                        gt,
-                        outputs,
+                        glob_preds,
+                        glob_gt,
                         tot_steps,
                         i,
-                        loss,
-                        first_step_loss_avg,
                     )
-                    self.comet_logger.log_batch(
+                    self.plat_logger.log_batch(
                         batch_idx=batch_idx,
                         image_idx=tot_images,
                         batch_size=cur_batch_size,
@@ -376,7 +422,8 @@ class Run:
                         }
                     )
                     tot_steps += 1
-            self.comet_logger.save_experiment_timed()
+                    self.global_train_step += 1
+            self.plat_logger.save_experiment_timed()
             tot_images += cur_batch_size
 
         logger.info(f"Waiting for everyone")
@@ -384,31 +431,42 @@ class Run:
         logger.info(f"Finished Epoch {epoch}")
         logger.info(f"Metrics")
         metric_dict = {
-            **first_step_metrics.compute(),
-            **metrics.compute(),
-            "loss": loss_avg.compute(),
-            "first_step_loss": first_step_loss_avg.compute(),
+            **{
+                "avg_" + k: v
+                for k, v in {**metrics.compute(), **metrics.compute()}.items()
+            },
+            "avg_loss": loss_avg.compute(),
         }
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
 
-        self.comet_logger.log_metrics(
+        self.plat_logger.log_metrics(
             metrics=metric_dict,
             epoch=epoch,
         )
 
     def validate(self, epoch):
-        self.val_loader.dataset.reset_seed(42)
+        self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
-        metrics = AverageMetricCollection(
-            prefix="batch_",
-            metrics={
-                "mIoU": multiclass_jaccard_index,
-                "FBIoU": fbiou,
+        dataset_categories = next(
+            iter(self.val_loader.dataset.datasets.values())
+        ).categories
+        num_classes = len(dataset_categories)
+        metrics = MetricCollection(
+            {
+                "mIoU": DistributedMulticlassJaccardIndex(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                "FBIoU": DistributedBinaryJaccardIndex(
+                    ignore_index=-100,
+                ),
             },
-            accelerator=self.accelerator,
+            prefix="batch_",
         )
+        metrics.to(self.accelerator.device)
 
         tot_steps = 0
         tot_images = 0
@@ -429,13 +487,17 @@ class Run:
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
 
-                outputs = self.model(image_dict)
+                result_dict = self.model(image_dict, gt)
+                outputs = result_dict[ResultDict.LOGITS]
                 preds = outputs.argmax(dim=1)
-
-                metrics_value = self._update_metrics(
-                    metrics, preds, gt, outputs, tot_steps
+                glob_preds, glob_gt = to_global_multiclass(
+                    image_dict["classes"], dataset_categories, preds, gt
                 )
-                loss = torch.mean(self.accelerator.gather(self.criterion(outputs, gt)))
+
+                metrics_value = self._update_val_metrics(
+                    metrics, glob_preds, glob_gt, tot_steps
+                )
+                loss = result_dict["loss"]
 
                 avg_loss.update(loss.item())
                 bar.set_postfix(
@@ -444,7 +506,7 @@ class Run:
                         "loss": loss.item(),
                     }
                 )
-                self.comet_logger.log_batch(
+                self.plat_logger.log_batch(
                     batch_idx=batch_idx,
                     image_idx=tot_images,
                     batch_size=cur_batch_size,
@@ -459,34 +521,40 @@ class Run:
                     phase="val",
                 )
                 tot_steps += 1
+                self.global_val_step += 1
                 tot_images += cur_batch_size
 
-            self.comet_logger.log_metrics(
+            self.plat_logger.log_metrics(
                 {
-                    **metrics.compute(),
-                    "loss": avg_loss.compute(),
+                    **{"avg_" + k: v for k, v in metrics.compute().items()},
+                    "avg_loss": avg_loss.compute(),
                 },
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
+
         logger.info(f"Validation epoch {epoch} finished")
-        for k, v in metrics.compute().items():
+        metrics_value = metrics.compute()
+        for k, v in metrics_value.items():
             logger.info(f"Validation epoch {epoch} - {k}: {v}")
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
+        return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
 
-    def test(self, dataloader, train_dataset):
+    def test(self, dataloader):
         self.model.eval()
         total_loss = 0
         metrics = MetricCollection(
             metrics=[
                 self.accelerator.prepare(
-                    JaccardIndex(
-                        task="multiclass",
+                    DistributedMulticlassJaccardIndex(
+                        # task="multiclass",
                         num_classes=dataloader.dataset.num_classes,
                         ignore_index=-100,
                     )
                 ),
-                self.accelerator.prepare(FBIoU(ignore_index=-100)),
+                self.accelerator.prepare(
+                    DistributedBinaryJaccardIndex(ignore_index=-100)
+                ),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -495,13 +563,8 @@ class Run:
             )
             self.model.predict = self.model.module.predict
 
-        examples = dataloader.dataset.extract_prompts(
-            train_dataset.cat2img,
-            train_dataset.img2cat,
-            train_dataset.images,
-            train_dataset.img2cat_annotations,
-        )
-        self.model = set_class_embeddings(self.model, examples)
+        examples = dataloader.dataset.extract_prompts()
+        self.model = set_class_embeddings(self.accelerator, self.model, examples)
 
         bar = tqdm(
             enumerate(dataloader),
@@ -515,15 +578,15 @@ class Run:
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
 
-                output = self.model.predict(image_dict)
-                total_loss += self.criterion(output, gt).item()  # sum up batch loss
-                output = torch.argmax(output, dim=1)
-                metrics.update(output, gt)
+                outputs = self.model.predict(image_dict)
+                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
+                outputs = torch.argmax(outputs, dim=1)
+                metrics.update(outputs, gt)
 
             total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
-            self.comet_logger.log_metrics(metrics=metrics_values)
+            self.plat_logger.log_metrics(metrics=metrics_values)
             for k, v in metrics_values.items():
                 logger.info(f"Test - {k}: {v}")
             logger.info(f"Test - Loss: {total_loss}")
