@@ -16,7 +16,7 @@ TEST_DATASETS = {
     "test_lvis": CocoLVISTestDataset,
     "test_weedmap": WeedMapTestDataset,
     "test_dram": DramTestDataset,
-    "test_brain_mri": BrainMriTestDataset,
+    "test_brain": BrainMriTestDataset,
 }
 
 
