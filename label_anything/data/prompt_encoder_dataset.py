@@ -16,7 +16,7 @@ class PromptEncoderDataset(CocoLVISDataset):
             name,
             instance_path,
             clip_emb_dir,
-            max_num_examples,
+            num_examples,
             img_dir=None,
             emb_dir: Optional[str] = None,
             max_points_per_annotation: int = 10,
@@ -46,10 +46,10 @@ class PromptEncoderDataset(CocoLVISDataset):
             do_subsample=do_subsample,
             add_box_noise=add_box_noise,
             prompt_types=prompt_types,
-            dtype=dtype
+            dtype=dtype,
         )
-        self.max_num_examples = max_num_examples
         self.clip_emb_dir = clip_emb_dir
+        self.n_images = num_examples
 
     def _load_clip_embeddings(self, img_id):
         f = load_file(f"{self.clip_emb_dir}/{img_id}.safetensors")
@@ -58,8 +58,7 @@ class PromptEncoderDataset(CocoLVISDataset):
     def __getitem__(self, class_idx) -> dict:
         # extract randon images for class class_id
         cat_id = self.categories[class_idx]
-        n_images = self.rng.randint(1, self.max_num_examples)
-        img_ids = self.rng.choices(population=self.cat2img[cat_id], k=n_images)
+        img_ids = self.rng.choices(population=self.cat2img[cat_id], k=self.n_images)
 
         # get base image data
         images, image_key, ground_truths = self._get_images_or_embeddings(img_ids)
