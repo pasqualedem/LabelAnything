@@ -54,6 +54,7 @@ class BatchKeys(StrEnum):
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
+    CLIP_EMBEDDINGS = "clip_embeddings"
 
 
 def cast_type(input, dtype) -> dict:

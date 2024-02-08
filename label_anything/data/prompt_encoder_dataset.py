@@ -6,10 +6,6 @@ from label_anything.data.utils import PromptType, BatchKeys
 from safetensors.torch import load_file
 
 
-class PromptEncoderBatchKeys(BatchKeys):
-    CLIP_EMBEDDINGS = 'clip_embeddings'
-
-
 class PromptEncoderDataset(CocoLVISDataset):
     def __init__(
             self,
@@ -83,14 +79,14 @@ class PromptEncoderDataset(CocoLVISDataset):
         clip_embeddings = torch.stack([self._load_clip_embeddings(img_id) for img_id in img_ids])
         return {
             image_key: images,
-            PromptEncoderBatchKeys.PROMPT_MASKS: masks,
-            PromptEncoderBatchKeys.FLAG_MASKS: flag_masks,
-            PromptEncoderBatchKeys.PROMPT_POINTS: points,
-            PromptEncoderBatchKeys.FLAG_POINTS: flag_points,
-            PromptEncoderBatchKeys.PROMPT_BBOXES: bboxes,
-            PromptEncoderBatchKeys.FLAG_BBOXES: flag_bboxes,
-            PromptEncoderBatchKeys.DIMS: dims,
-            PromptEncoderBatchKeys.CLIP_EMBEDDINGS: clip_embeddings
+            BatchKeys.PROMPT_MASKS: masks,
+            BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.PROMPT_POINTS: points,
+            BatchKeys.FLAG_POINTS: flag_points,
+            BatchKeys.PROMPT_BBOXES: bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.DIMS: dims,
+            BatchKeys.CLIP_EMBEDDINGS: clip_embeddings
         }
 
     def __len__(self):
