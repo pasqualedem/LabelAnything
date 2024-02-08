@@ -71,10 +71,13 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
             for filename in self.prompt_images
         ]
         masks = torch.stack(masks)
-        masks = one_hot(masks.long(), 3).permute(0, 3, 1, 2).float()
+        # Background flags are always 0
+        backflag = torch.zeros(masks.shape[0])
         contains_crop = (masks == 1).sum(dim=(1, 2)) > 0
         contains_weed = (masks == 2).sum(dim=(1, 2)) > 0
-        flag_masks = torch.stack([contains_crop, contains_weed]).T
+        flag_masks = torch.stack([backflag, contains_crop, contains_weed]).T
+        
+        masks = one_hot(masks.long(), 3).permute(0, 3, 1, 2).float() 
         
         prompt_dict = {
             BatchKeys.IMAGES: images,
