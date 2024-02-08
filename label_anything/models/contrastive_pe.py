@@ -1,5 +1,6 @@
 import torch
 from label_anything.models.prompt_encoder import PromptImageEncoder
+from label_anything.data.prompt_encoder_dataset import PromptEncoderBatchKeys
 
 
 class ContrastivePromptEncoder(torch.nn.Module):
@@ -19,5 +20,5 @@ class ContrastivePromptEncoder(torch.nn.Module):
         self.clip_proj = torch.nn.Linear(self.clip_in_channels, self.hidden_size)
 
     def forward(self, data_dict):
-        clip_embeddings = data_dict.pop('clip_embeddings')
+        clip_embeddings = data_dict.pop(PromptEncoderBatchKeys.CLIP_EMBEDDINGS)
         return self.prompt_proj(self.prompt_encoder(data_dict)), self.clip_proj(clip_embeddings).mean(dim=1)

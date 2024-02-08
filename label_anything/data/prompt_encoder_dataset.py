@@ -1,4 +1,3 @@
-from torch.utils.data import Dataset
 from label_anything.data.coco import CocoLVISDataset
 from torchvision.transforms import ToTensor
 import torch
