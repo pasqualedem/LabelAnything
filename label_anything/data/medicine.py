@@ -2,13 +2,24 @@ import json
 import os
 import glob
 import numpy as np
+from datetime import datetime
 from PIL import Image
 from pycocotools import mask as mask_utils
-import pandas as pd
 from kaggle.api.kaggle_api_extended import KaggleApi
 
 
-data_dict = {"images": [], "annotations": [], "categories": []}
+data_dict = {
+    "info": {
+        "description": "Brain MRI Dataset Annotations files",
+        "version": "1.0",
+        "year": 2024,
+        "contributor": "CILAB",
+        "date_created": datetime.now().strftime("%Y-%m-%d"),
+    },
+    "images": [],
+    "annotations": [],
+    "categories": [],
+}
 
 
 def download_and_extract_dataset(
@@ -66,6 +77,7 @@ def generate_annotations(images, masks, annotations):
     for idx, (image, mask) in enumerate(zip(images, masks)):
         image_name = image.split("/")[-1].split(".")[0]
         width, height = Image.open(image).size
+        image = image.replace("data/raw/lgg-mri-segmentation/kaggle_3m/", "")
         annotations_images.append(
             {
                 "file_name": image_name,
@@ -85,7 +97,7 @@ def generate_annotations(images, masks, annotations):
             bbox = [int(b) for b in bbox]
         annotations_segmentations.append(
             {
-                "segmentation": rle["counts"],
+                "segmentation": rle,
                 "area": int(mask_utils.area(rle)),
                 "image_id": idx,
                 "bbox": bbox,
@@ -115,5 +127,5 @@ if __name__ == "__main__":
     data_dict = generate_annotations(images, masks, data_dict)
     with open("data/annotations/brain_mri.json", "w") as f:
         json.dump(data_dict, f)
-    
+
     print("Done!")

@@ -8,6 +8,7 @@ from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
 from label_anything.data.dram import DramTestDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.data.weedmap import WeedMapTestDataset
+from label_anything.data.brain_mri import BrainMriTestDataset
 
 
 TEST_DATASETS = {
@@ -15,6 +16,7 @@ TEST_DATASETS = {
     "test_lvis": CocoLVISTestDataset,
     "test_weedmap": WeedMapTestDataset,
     "test_dram": DramTestDataset,
+    "test_brain": BrainMriTestDataset,
 }
 
 
