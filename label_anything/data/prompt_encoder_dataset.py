@@ -48,7 +48,7 @@ class PromptEncoderDataset(CocoLVISDataset):
         self.n_images = num_examples
 
     def _load_clip_embeddings(self, img_id):
-        f = load_file(f"{self.clip_emb_dir}/{img_id}.safetensors")
+        f = load_file(f"{self.clip_emb_dir}/{str(img_id).zfill(12)}.safetensors")
         return f['clip_embedding']
 
     def __getitem__(self, class_idx) -> dict:
