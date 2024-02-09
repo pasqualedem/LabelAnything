@@ -16,7 +16,7 @@ dataset:
     num_examples: &num_examples 8
     seed: &seed 42
     do_subsample: False
-    add_bbox_noise: True
+    add_box_noise: True
     max_points_annotations: 50
     max_points_per_annotation: 10
     load_gts: False
