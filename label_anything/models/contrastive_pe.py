@@ -3,34 +3,6 @@ from label_anything.models.prompt_encoder import PromptImageEncoder
 from label_anything.data.utils import BatchKeys
 
 
-def prepare_prompts(batched_input):
-    if (
-            "prompt_points" in batched_input
-            and (batched_input["flag_points"] == 0).all().logical_not()
-    ):
-        points = (batched_input["prompt_points"], batched_input["flag_points"])
-    else:
-        points = None
-    if (
-            "prompt_bboxes" in batched_input
-            and (batched_input["flag_bboxes"] == 0).all().logical_not()
-    ):
-        boxes = batched_input["prompt_bboxes"]
-        box_flag = batched_input["flag_bboxes"]
-        boxes = (boxes, box_flag)
-    else:
-        boxes = None
-    if (
-            "prompt_masks" in batched_input
-            and (batched_input["flag_masks"] == 0).all().logical_not()
-    ):
-        masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
-    else:
-        masks = None
-
-    return points, boxes, masks
-
-
 class ContrastivePromptEncoder(torch.nn.Module):
     def __init__(
             self,
@@ -47,9 +19,36 @@ class ContrastivePromptEncoder(torch.nn.Module):
         self.prompt_proj = torch.nn.Linear(self.pe_in_channels, self.hidden_size)
         self.clip_proj = torch.nn.Linear(self.clip_in_channels, self.hidden_size)
 
+    def prepare_prompts(self, batched_input):
+        if (
+                "prompt_points" in batched_input
+                and (batched_input["flag_points"] == 0).all().logical_not()
+        ):
+            points = (batched_input["prompt_points"], batched_input["flag_points"])
+        else:
+            points = None
+        if (
+                "prompt_bboxes" in batched_input
+                and (batched_input["flag_bboxes"] == 0).all().logical_not()
+        ):
+            boxes = batched_input["prompt_bboxes"]
+            box_flag = batched_input["flag_bboxes"]
+            boxes = (boxes, box_flag)
+        else:
+            boxes = None
+        if (
+                "prompt_masks" in batched_input
+                and (batched_input["flag_masks"] == 0).all().logical_not()
+        ):
+            masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
+        else:
+            masks = None
+
+        return points, boxes, masks
+
     def forward(self, data_dict):
         clip_embeddings = data_dict.pop(BatchKeys.CLIP_EMBEDDINGS)
-        points, boxes, masks = prepare_prompts(data_dict)
+        points, boxes, masks = self.prepare_prompts(data_dict)
         class_embeddings = self.prompt_encoder(image_embeddings=data_dict[BatchKeys.EMBEDDINGS],
                                                points=points,
                                                boxes=boxes,
