@@ -137,13 +137,13 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
     # collate dims
     dims = torch.stack([x[BatchKeys.DIMS] for x in batched_input])
     return {
-        image_key: images,
-        BatchKeys.PROMPT_MASKS: masks,
-        BatchKeys.FLAG_MASKS: flag_masks,
-        BatchKeys.PROMPT_BBOXES: bboxes,
-        BatchKeys.FLAG_BBOXES: flag_bboxes,
-        BatchKeys.PROMPT_POINTS: points,
-        BatchKeys.FLAG_POINTS: flag_points,
-        BatchKeys.DIMS: dims,
+        image_key: images.unsqueeze(),
+        BatchKeys.PROMPT_MASKS: masks.unsqueeze(),
+        BatchKeys.FLAG_MASKS: flag_masks.unsqueeze(),
+        BatchKeys.PROMPT_BBOXES: bboxes.unsqueeze(),
+        BatchKeys.FLAG_BBOXES: flag_bboxes.unsqueeze(),
+        BatchKeys.PROMPT_POINTS: points.unsqueeze(),
+        BatchKeys.FLAG_POINTS: flag_points.unsqueeze(),
+        BatchKeys.DIMS: dims.unsqueeze(),
         BatchKeys.CLIP_EMBEDDINGS: clip_embeddings,
     }
