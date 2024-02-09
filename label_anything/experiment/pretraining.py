@@ -10,6 +10,9 @@ from label_anything.utils.early_stopping import ParallelEarlyStopping
 from tqdm import tqdm
 from label_anything.models import model_registry
 from label_anything.preprocess_clip import load_ruamel
+from label_anything.data.prompt_encoder_dataset import collate_fn
+
+from torchvision.transforms import ToTensor, Compose, CenterCrop
 
 
 def train(
@@ -69,12 +72,12 @@ def main(params_path):
 
     print('Initializing training data...')
     train_data = PromptEncoderDataset(**params['dataset']['train'])
-    train_loader = DataLoader(dataset=train_data, **params['dataloader'])
+    train_loader = DataLoader(dataset=train_data, collate_fn=collate_fn, **params['dataloader'])
     print('Done"')
 
     print('Initializing validation data...')
     val_data = PromptEncoderDataset(**params['dataset']['val'])
-    val_loader = DataLoader(dataset=val_data, **params['dataloader'])
+    val_loader = DataLoader(dataset=val_data, collate_fn=collate_fn, **params['dataloader'])
     print('Done!')
 
     print('Initializing criterion...')

@@ -3,6 +3,7 @@ from torchvision.transforms import ToTensor
 import torch
 from typing import Optional
 from label_anything.data.utils import PromptType, BatchKeys
+import label_anything.data.utils as data_utils
 from safetensors.torch import load_file
 
 
@@ -92,3 +93,57 @@ class PromptEncoderDataset(CocoLVISDataset):
 
     def __len__(self):
         return len(self.categories)
+
+
+def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[BatchKeys, torch.Tensor]:
+    # collate images or embeddings
+    image_key = BatchKeys.IMAGES if BatchKeys.IMAGES in batched_input[0].keys() else BatchKeys.EMBEDDINGS
+    images = torch.stack([x[image_key] for x in batched_input])
+
+    # collate masks
+    masks = [x[BatchKeys.PROMPT_MASKS] for x in batched_input]
+    flags = [x[BatchKeys.FLAG_MASKS] for x in batched_input]
+    masks_flags = [
+        data_utils.collate_mask(m, f, 1) for (m, f) in zip(masks, flags)
+    ]
+    masks = torch.cat([x[0] for x in masks_flags], dim=1)
+    flag_masks = torch.cat([x[1] for x in masks_flags], dim=1)
+
+    # collate bbox
+    bboxes = [x[BatchKeys.PROMPT_BBOXES] for x in batched_input]
+    flags = [x[BatchKeys.FLAG_BBOXES] for x in batched_input]
+    max_annotations = max(x.size(2) for x in bboxes)
+    bboxes_flags = [
+        data_utils.collate_bbox(bboxes[i], flags[i], 1, max_annotations)
+        for i in range(len(bboxes))
+    ]
+    bboxes = torch.cat([x[0] for x in bboxes_flags], dim=1)
+    flag_bboxes = torch.cat([x[1] for x in bboxes_flags], dim=1)
+
+    # collate coords
+    points = [x[BatchKeys.PROMPT_POINTS] for x in batched_input]
+    flags = [x[BatchKeys.FLAG_POINTS] for x in batched_input]
+    max_annotations = max(x.size(2) for x in points)
+    points_flags = [
+        data_utils.collate_coords(points[i], flags[i], 1, max_annotations)
+        for i in range(len(points))
+    ]
+    points = torch.cat([x[0] for x in points_flags], dim=1)
+    flag_points = torch.cat([x[1] for x in points_flags], dim=1)
+
+    # collate clip embeddings
+    clip_embeddings = torch.stack([x[BatchKeys.CLIP_EMBEDDINGS] for x in batched_input])
+
+    # collate dims
+    dims = torch.stack([x[BatchKeys.DIMS] for x in batched_input])
+    return {
+        image_key: images,
+        BatchKeys.PROMPT_MASKS: masks,
+        BatchKeys.FLAG_MASKS: flag_masks,
+        BatchKeys.PROMPT_BBOXES: bboxes,
+        BatchKeys.FLAG_BBOXES: flag_bboxes,
+        BatchKeys.PROMPT_POINTS: points,
+        BatchKeys.FLAG_POINTS: flag_points,
+        BatchKeys.DIMS: dims,
+        BatchKeys.CLIP_EMBEDDINGS: clip_embeddings,
+    }
