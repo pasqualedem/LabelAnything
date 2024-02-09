@@ -78,7 +78,7 @@ class PromptEncoderDataset(CocoLVISDataset):
         )
 
         # load clip embeddings
-        #clip_embeddings = torch.stack([self._load_clip_embeddings(img_id) for img_id in img_ids])
+        clip_embeddings = torch.stack([self._load_clip_embeddings(img_id) for img_id in img_ids])
         return {
             image_key: images,
             BatchKeys.PROMPT_MASKS: masks,
@@ -87,7 +87,7 @@ class PromptEncoderDataset(CocoLVISDataset):
             BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.PROMPT_BBOXES: bboxes,
             BatchKeys.FLAG_BBOXES: flag_bboxes,
-            #BatchKeys.CLIP_EMBEDDINGS: clip_embeddings
+            BatchKeys.CLIP_EMBEDDINGS: clip_embeddings
         }
 
     def __len__(self):
@@ -136,7 +136,7 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
     points, flag_points = data_utils.collate_class_points(points, flags, len(points), max_annotations)
 
     # collate clip embeddings
-    #clip_embeddings = torch.stack([x[BatchKeys.CLIP_EMBEDDINGS] for x in batched_input])
+    clip_embeddings = torch.stack([x[BatchKeys.CLIP_EMBEDDINGS] for x in batched_input])
 
     return {
         image_key: images.unsqueeze(dim=0),
@@ -146,5 +146,5 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
         BatchKeys.FLAG_BBOXES: flag_bboxes,
         BatchKeys.PROMPT_POINTS: points,
         BatchKeys.FLAG_POINTS: flag_points,
-        #BatchKeys.CLIP_EMBEDDINGS: clip_embeddings,
+        BatchKeys.CLIP_EMBEDDINGS: clip_embeddings,
     }
