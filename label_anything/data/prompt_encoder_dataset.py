@@ -53,7 +53,8 @@ class PromptEncoderDataset(CocoLVISDataset):
 
     def __getitem__(self, class_idx) -> dict:
         # extract randon images for class class_id
-        cat_id = self.categories[class_idx + 1].get('id')
+        class_idx = list(self.categories.keys())[class_idx]
+        cat_id = self.categories[class_idx].get('id')
         img_ids = self.rng.choices(population=list(self.cat2img[cat_id]), k=self.n_images)
 
         # get base image data
