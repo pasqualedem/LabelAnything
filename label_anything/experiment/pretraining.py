@@ -12,8 +12,6 @@ from label_anything.models import model_registry
 from label_anything.preprocess_clip import load_ruamel
 from label_anything.data.prompt_encoder_dataset import collate_fn
 
-from torchvision.transforms import ToTensor, Compose, CenterCrop
-
 
 def train(
         model: ContrastivePromptEncoder,
@@ -107,9 +105,10 @@ def main(params_path):
         val_loader,
         criterion,
         optimizer,
-        scheduler
+        scheduler,
+        model,
     ) = accelerator.prepare(
-        train_loader, val_loader, criterion, optimizer, scheduler
+        train_loader, val_loader, criterion, optimizer, scheduler, model,
     )
 
     train(
