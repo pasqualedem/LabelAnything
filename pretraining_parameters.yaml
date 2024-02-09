@@ -22,7 +22,7 @@ dataset:
     load_gts: False
   val:
     name: coco
-    instance_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json
+    instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2017.json
     emb_dir: *emb_dir
     clip_emb_dir: *clip_emb_dir
     num_examples: *num_examples
