@@ -11,6 +11,7 @@ from tqdm import tqdm
 from label_anything.models import model_registry
 from label_anything.preprocess_clip import load_ruamel
 
+
 def train(
         model: ContrastivePromptEncoder,
         train_loader: DataLoader,
@@ -57,25 +58,47 @@ def init_model(model_params: dict) -> dict:
 
 
 def main(params_path):
+    print('Load parameters...')
     params = load_ruamel(params_path)
+    print('Done!')
+
+    print('Initializing model...')
     params['model'] = init_model(params['model'])
     model = ContrastivePromptEncoder(**params['model'])
+    print('Done!')
 
+    print('Initializing training data...')
     train_data = PromptEncoderDataset(**params['dataset']['train'])
     train_loader = DataLoader(dataset=train_data, **params['dataloader'])
+    print('Done"')
 
+    print('Initializing validation data...')
     val_data = PromptEncoderDataset(**params['dataset']['val'])
     val_loader = DataLoader(dataset=val_data, **params['dataloader'])
+    print('Done!')
 
+    print('Initializing criterion...')
     criterion = SymmetricLoss(**params.get('criterion', {}))
+    print('Done!')
+
+    print('Initializing optimizer...')
     optimizer = AdamW(params=model.parameters(), **params.get('optimizer', {}))
+    print('Done!')
 
+    print('Initializing scheduler...')
     scheduler = ReduceLROnPlateau(optimizer=optimizer, **params.get('scheduler', {}))
+    print('DOne!')
 
+    print('Initializing early stop mechanism...')
     early_stop = ParallelEarlyStopping(**params['early_stopping'])
+    print('Done!')
 
+    print('Initializing accelerator...')
     accelerator = Accelerator(**params.get('accelerator', {}))
+    print('Done!')
 
+    if accelerator.is_main_process:
+        print('Starting training!')
     (
         train_loader,
         val_loader,
