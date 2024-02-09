@@ -268,7 +268,8 @@ class Run:
         gt: torch.tensor,
         tot_steps: int,
     ):
-        metrics_dict = metrics(preds, gt)
+        with self.accelerator.no_sync(model=metrics):
+            metrics_dict = metrics(preds, gt)
         if tot_steps % self.plat_logger.log_frequency == 0:
             for metric_name, metric_value in metrics_dict.items():
                 metric_value = torch.mean(self.accelerator.gather(metric_value))
@@ -337,7 +338,7 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics.to(self.accelerator.device)
+        metrics = self.accelerator.prepare(metrics)
         loss_avg = RunningAverage()
 
         # prepare substitutor
@@ -470,7 +471,7 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics.to(self.accelerator.device)
+        metrics = self.accelerator.prepare(metrics)
 
         tot_steps = 0
         tot_images = 0
