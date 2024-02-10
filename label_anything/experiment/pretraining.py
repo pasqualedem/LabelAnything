@@ -42,6 +42,7 @@ def train(
                         optimizer.zero_grad()
             if phase == 'val' and accelerator.is_main_process:
                 cumulated_loss = accelerator.gather(cumulated_loss).mean().cpu().item()
+                print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
                 early_stop(cumulated_loss, accelerator)
                 scheduler.step(cumulated_loss)
                 if early_stop.early_stop:
@@ -49,6 +50,8 @@ def train(
                     print(f'early stopping at epoch {epoch:03d}')
         if accelerator.check_trigger():
             break
+        else:
+            print('No trigger')
 
 
 def init_model(model_params: dict) -> dict:
