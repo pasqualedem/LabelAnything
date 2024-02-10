@@ -1,3 +1,6 @@
+import accelerate
+from numpy.distutils.system_info import accelerate_info
+
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder, PromptImageEncoder
 from torch.utils.data import DataLoader
 from label_anything.loss.symmetric import SymmetricLoss
@@ -95,7 +98,8 @@ def main(params_path):
     print('Done!')
 
     print('Initializing accelerator...')
-    accelerator = Accelerator(**params.get('accelerator', {}))
+    kwargs = [accelerate.DistributedDataParallelKwargs(find_unused_parameters=True)]
+    accelerator = Accelerator(kwargs_handlers=kwargs, **params.get('accelerator', {}))
     print('Done!')
 
     if accelerator.is_main_process:
