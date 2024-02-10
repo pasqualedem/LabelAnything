@@ -44,16 +44,17 @@ def train(
             if phase == 'val' and accelerator.is_main_process:
                 accelerator.print('In')
                 cumulated_loss = accelerator.gather(cumulated_loss).mean().cpu().item()
-                accelerator.print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
-                early_stop(cumulated_loss, accelerator)
-                scheduler.step(cumulated_loss)
-                if early_stop.early_stop:
-                    accelerator.set_trigger()
-                    accelerator.print(f'early stopping at epoch {epoch:03d}')
-        if accelerator.check_trigger():
-            break
-        else:
-            accelerator.print('No trigger')
+                accelerator.print('After the calculation')
+        #         accelerator.print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
+        #         early_stop(cumulated_loss, accelerator)
+        #         scheduler.step(cumulated_loss)
+        #         if early_stop.early_stop:
+        #             accelerator.set_trigger()
+        #             accelerator.print(f'early stopping at epoch {epoch:03d}')
+        # if accelerator.check_trigger():
+        #     break
+        # else:
+        #     accelerator.print('No trigger')
 
 
 def init_model(model_params: dict) -> dict:
