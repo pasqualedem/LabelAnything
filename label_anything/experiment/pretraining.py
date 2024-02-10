@@ -47,9 +47,9 @@ def train(
                 early_stop(cumulated_loss, accelerator)
                 scheduler.step(cumulated_loss)
                 if early_stop.early_stop:
-                    accelerator.set_breakpoint()
+                    accelerator.set_trigger()
                     print(f'early stopping at epoch {epoch:03d}')
-        if accelerator.check_breakpoint():
+        if accelerator.check_trigger():
             break
 
 
