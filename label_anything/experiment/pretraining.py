@@ -29,6 +29,7 @@ def train(
     optimizer.zero_grad()
     for epoch in range(1, num_epochs + 1):
         for phase, loader in loaders.items():
+            accelerator.print(f'Phase: {phase}')
             cumulated_loss = torch.as_tensor([0.0]).to(accelerator.device)
             with torch.set_grad_enabled(phase == 'train'):
                 for data_dict in tqdm(loader):
@@ -41,17 +42,18 @@ def train(
                         optimizer.step()
                         optimizer.zero_grad()
             if phase == 'val' and accelerator.is_main_process:
+                accelerator.print('In')
                 cumulated_loss = accelerator.gather(cumulated_loss).mean().cpu().item()
-                print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
+                accelerator.print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
                 early_stop(cumulated_loss, accelerator)
                 scheduler.step(cumulated_loss)
                 if early_stop.early_stop:
                     accelerator.set_trigger()
-                    print(f'early stopping at epoch {epoch:03d}')
+                    accelerator.print(f'early stopping at epoch {epoch:03d}')
         if accelerator.check_trigger():
             break
         else:
-            print('No trigger')
+            accelerator.print('No trigger')
 
 
 def init_model(model_params: dict) -> dict:
