@@ -281,7 +281,6 @@ def collate_batch_gts(gt, dims, fill_value=-100):
     return out
 
 
-# TODO: how to collate in class dataset -> out tensor of shape 1, N_EX x B_S, B_S, h, w
 def collate_class_masks(masks, flags, n_classes):
     n_ex, _, h, w = masks[0].size()
     out_mask = torch.zeros(n_ex * n_classes, n_classes, h, w, dtype=masks[0].dtype)
@@ -292,7 +291,6 @@ def collate_class_masks(masks, flags, n_classes):
     return out_mask.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
 
 
-# TODO: how to collate in class dataset -> out tensor of shape 1, N_EX x B_S, B_S, ANN, 4
 def collate_class_bbox(bboxes, flags, n_classes, max_annotations):
     n_ex = bboxes[0].size(0)
     out_bbox = torch.zeros(n_ex * n_classes, n_classes, max_annotations, 4, dtype=bboxes[0].dtype)

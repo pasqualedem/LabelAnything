@@ -52,7 +52,6 @@ class PromptEncoderDataset(CocoLVISDataset):
         f = load_file(f"{self.clip_emb_dir}/{str(img_id).zfill(12)}.safetensors")
         return f['clip_embedding']
 
-    # TODO: fix dimensions
     def __getitem__(self, class_idx) -> dict:
         # extract randon images for class class_id
         class_idx = list(self.categories.keys())[class_idx]
@@ -102,11 +101,6 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
     # collate masks
     masks = [x[BatchKeys.PROMPT_MASKS] for x in batched_input]
     flags = [x[BatchKeys.FLAG_MASKS] for x in batched_input]
-    # masks_flags = [
-    #     data_utils.collate_mask(m, f, 1) for (m, f) in zip(masks, flags)
-    # ]
-    # masks = torch.cat([x[0] for x in masks_flags], dim=1)
-    # flag_masks = torch.cat([x[1] for x in masks_flags], dim=1)
 
     masks, flag_masks = data_utils.collate_class_masks(masks, flags, len(masks))
 
@@ -114,24 +108,12 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
     bboxes = [x[BatchKeys.PROMPT_BBOXES] for x in batched_input]
     flags = [x[BatchKeys.FLAG_BBOXES] for x in batched_input]
     max_annotations = max(x.size(2) for x in bboxes)
-    # bboxes_flags = [
-    #     data_utils.collate_bbox(bboxes[i], flags[i], 1, max_annotations)
-    #     for i in range(len(bboxes))
-    # ]
-    # bboxes = torch.cat([x[0] for x in bboxes_flags], dim=1)
-    # flag_bboxes = torch.cat([x[1] for x in bboxes_flags], dim=1)
     bboxes, flag_bboxes = data_utils.collate_class_bbox(bboxes, flags, len(bboxes), max_annotations)
 
     # collate coords
     points = [x[BatchKeys.PROMPT_POINTS] for x in batched_input]
     flags = [x[BatchKeys.FLAG_POINTS] for x in batched_input]
     max_annotations = max(x.size(2) for x in points)
-    # points_flags = [
-    #     data_utils.collate_coords(points[i], flags[i], 1, max_annotations)
-    #     for i in range(len(points))
-    # ]
-    # points = torch.cat([x[0] for x in points_flags], dim=1)
-    # flag_points = torch.cat([x[1] for x in points_flags], dim=1)
 
     points, flag_points = data_utils.collate_class_points(points, flags, len(points), max_annotations)
 

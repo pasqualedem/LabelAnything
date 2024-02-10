@@ -1,6 +1,4 @@
 import accelerate
-from numpy.distutils.system_info import accelerate_info
-
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder, PromptImageEncoder
 from torch.utils.data import DataLoader
 from label_anything.loss.symmetric import SymmetricLoss
