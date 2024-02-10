@@ -18,7 +18,7 @@ from label_anything.logger.abstract_logger import AbstractLogger, main_process_o
 from label_anything.logger.text_logger import get_logger
 from accelerate import Accelerator
 from label_anything.logger.utils import get_tmp_dir, take_image
-from label_anything.utils.utils import log_every_n
+from label_anything.utils.utils import log_every_n, write_yaml
 
 from label_anything.visualization.visualize import get_image
 
@@ -145,7 +145,7 @@ class WandBLogger(AbstractLogger):
             offline_directory = "."
         wandb_dir = os.path.join(offline_directory, "wandb")
         runs = os.listdir(wandb_dir)
-        runs = list(filter(lambda x: run_id in x, runs))
+        runs = sorted(list(filter(lambda x: run_id in x, runs)))
         if len(runs) == 0:
             raise ValueError(f"Run {run_id} not found in {wandb_dir}")
         if len(runs) > 1:
@@ -197,7 +197,10 @@ class WandBLogger(AbstractLogger):
     @main_process_only
     def log_parameters(self, config: dict = None):
         wandb.config.update(config, allow_val_change=self.resume)
-
+        tmp = os.path.join(self.local_dir, "config.yaml")
+        write_yaml(config, tmp)
+        self.add_file("config.yaml")
+        
     @main_process_only
     def add_tags(self, tags):
         wandb.run.tags = wandb.run.tags + tuple(tags)
@@ -308,8 +311,8 @@ class WandBLogger(AbstractLogger):
     @main_process_only
     def add_file(self, file_name: str = None):
         wandb.save(
-            glob_str=os.path.join(self._local_dir, file_name),
-            base_path=self._local_dir,
+            glob_str=os.path.join(self.local_dir, file_name),
+            base_path=self.local_dir,
             policy="now",
         )
 
@@ -322,13 +325,13 @@ class WandBLogger(AbstractLogger):
         if self.save_tensorboard_wandb:
             wandb.save(
                 glob_str=self._get_tensorboard_file_name(),
-                base_path=self._local_dir,
+                base_path=self.local_dir,
                 policy="now",
             )
 
         if self.save_logs_wandb:
             wandb.save(
-                glob_str=self.log_file_path, base_path=self._local_dir, policy="now"
+                glob_str=self.log_file_path, base_path=self.local_dir, policy="now"
             )
 
     @main_process_only
@@ -337,15 +340,15 @@ class WandBLogger(AbstractLogger):
         if not name.endswith(".pth"):
             name += ".pth"
 
-        path = os.path.join(self._local_dir, name)
+        path = os.path.join(self.local_dir, name)
         torch.save(state_dict, path)
 
         if self.save_checkpoints_wandb:
             if self.s3_location_available:
                 self.model_checkpoints_data_interface.save_remote_checkpoints_file(
-                    self.experiment_name, self._local_dir, name
+                    self.experiment_name, self.local_dir, name
                 )
-            wandb.save(glob_str=path, base_path=self._local_dir, policy="now")
+            wandb.save(glob_str=path, base_path=self.local_dir, policy="now")
 
     @main_process_only
     def _get_tensorboard_file_name(self):
@@ -359,15 +362,15 @@ class WandBLogger(AbstractLogger):
 
     @main_process_only
     def _get_wandb_id(self):
-        for file in os.listdir(self._local_dir):
+        for file in os.listdir(self.local_dir):
             if file.startswith(WANDB_ID_PREFIX):
                 return file.replace(WANDB_ID_PREFIX, "")
 
     @main_process_only
     def _set_wandb_id(self, id):
-        for file in os.listdir(self._local_dir):
+        for file in os.listdir(self.local_dir):
             if file.startswith(WANDB_ID_PREFIX):
-                os.remove(os.path.join(self._local_dir, file))
+                os.remove(os.path.join(self.local_dir, file))
 
     @main_process_only
     def add(self, tag: str, obj: Any, global_step: int = None):

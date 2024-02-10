@@ -54,6 +54,11 @@ class BatchKeys(StrEnum):
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
+    
+    
+class BatchMetadataKeys(StrEnum):
+    PROMPT_TYPES = "prompt_types"
+    NUM_EXAMPLES = "num_examples"
 
 
 def cast_type(input, dtype) -> dict:

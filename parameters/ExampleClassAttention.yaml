@@ -78,3 +78,15 @@ parameters:
     possible_batch_example_nums: [[[2, 8], [4, 4], [8, 2], [16, 1]]]
 
 other_grids:
+  -   model:
+        name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+        checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
+        use_sam_checkpoint: [True]
+        example_attention: [True]
+        class_attention: [False]
+  -   model:
+        name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+        checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
+        use_sam_checkpoint: [True]
+        example_attention: [False]
+        class_attention: [True]

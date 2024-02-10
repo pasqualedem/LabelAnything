@@ -243,7 +243,6 @@ class PromptImageEncoder(PromptEncoder):
         transformer: nn.Module,
         class_example_attention: bool = True,
         class_attention: bool = False,
-        example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -282,15 +281,6 @@ class PromptImageEncoder(PromptEncoder):
             1, embed_dim
         )  # For when no sparse embeddings in input
 
-        self.example_attention = None
-        if example_attention:
-            self.example_attention = AttentionMLPBlock(
-                embed_dim=embed_dim,
-                num_heads=num_heads,
-                downsample_rate=attention_downsample_rate,
-                mlp_dim=mlp_dim,
-                act=activation,
-            )
         self.class_attention = None
         if class_attention:
             self.class_attention = AttentionMLPBlock(
@@ -563,10 +553,6 @@ class PromptImageEncoder(PromptEncoder):
             src = self.class_example_attention(src)
             src = rearrange(src, "b (m c) d -> b m c d", c=c)
 
-        if self.example_attention is not None:
-            src = rearrange(src, "b m c d -> (b c) m d", c=c)
-            src = self.example_attention(src)
-            src = rearrange(src, "(b c) m d -> b m c d", c=c)
         if self.class_attention is not None:
             src = rearrange(src, "b m c d -> (b m) c d", c=c)
             src = self.class_attention(src)
