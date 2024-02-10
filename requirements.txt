@@ -60,10 +60,6 @@ simplejson==3.19.2
 six==1.16.0
 SQLAlchemy==2.0.23
 sympy==1.12
-torch==2.1.0+cu121
-torchaudio==2.1.0+cu121
-torchmetrics==1.2.0
-torchvision==0.16.0+cu121
 tqdm==4.66.1
 typing_extensions==4.4.0
 tzdata==2023.3
