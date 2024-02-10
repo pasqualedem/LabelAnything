@@ -47,7 +47,7 @@ parameters:
       num_warmup_steps: 1000
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
-    watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
+    watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
