@@ -116,6 +116,7 @@ parameters:
     batch_size: [1]
     num_workers: [0]
     possible_batch_example_nums: [[[1,1]]]
+    prompt_types: [[bbox, point, mask]]
     num_steps: [10]
 
 other_grids:
