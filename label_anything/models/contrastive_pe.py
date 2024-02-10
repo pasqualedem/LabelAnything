@@ -54,6 +54,6 @@ class ContrastivePromptEncoder(torch.nn.Module):
                                                points=points,
                                                boxes=boxes,
                                                masks=masks,).get(ResultDict.CLASS_EMBS)
-        class_proj = self.prompt_proj(class_embeddings)
+        class_proj = self.prompt_proj(class_embeddings).squeeze(dim=0)
         clip_proj = self.clip_proj(clip_embeddings).mean(dim=1)
         return class_proj, clip_proj
