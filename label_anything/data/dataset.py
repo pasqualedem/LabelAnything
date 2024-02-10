@@ -249,8 +249,11 @@ def get_batch_metadata(
         val for tup in zip(*[batch_sizes for i in range(num_processes)]) for val in tup
     ]
     examples_nums = [
-        val
-        for tup in zip(*[examples_nums for i in range(num_processes)])
+        val for tup in zip(*[examples_nums for i in range(num_processes)])
+        for val in tup
+    ]
+    prompt_types = [
+        val for tup in zip(*[prompt_types for i in range(num_processes)])
         for val in tup
     ]
     batch_metadata = {
@@ -317,7 +320,9 @@ class VariableBatchSampler(BatchSampler):
                 num_steps = num_steps - (num_steps % num_processes)
                 logger.warning(f"The new number of steps is {num_steps}.")
             self.batch_sizes = self.batch_sizes[:num_steps]
-            self.batch_metadata = {k: v[:num_steps] for k, v in self.batch_metadata.items()}
+            self.batch_metadata = {
+                k: v[:num_steps] for k, v in self.batch_metadata.items()
+            }
         self.drop_last = drop_last
         if shuffle:
             self.sampler = torch.utils.data.RandomSampler(data_source)

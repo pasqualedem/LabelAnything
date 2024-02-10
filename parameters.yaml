@@ -36,7 +36,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [10]
     compile: [False]
-    initial_lr: [0.0001, 0.00005, 0.00001]
+    initial_lr: [0.0001, 0.00005, 0.00002]
     optimizer: [AdamW]
     scheduler:
     - type: reduce_lr_on_plateau
