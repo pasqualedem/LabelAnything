@@ -349,6 +349,7 @@ def plot_results():
 
 
 def main():
+    st.set_page_config(layout="wide", page_title="Label Anything")
     st.title("Label Anything")
     st.sidebar.title("Settings")
     accelerator = Accelerator()
