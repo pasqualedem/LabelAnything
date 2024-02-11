@@ -8,40 +8,42 @@ import torch
 
 from functools import partial
 
-from . import ImageEncoderViT, MaskDecoderLam, PromptImageEncoder, Lam, TwoWayTransformer
+from . import (
+    ImageEncoderViT,
+    MaskDecoderLam,
+    PromptImageEncoder,
+    Lam,
+    TwoWayTransformer,
+)
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
 
-def build_lam_vit_h(checkpoint=None, use_sam_checkpoint=False):
+
+def build_lam_vit_h(**kwargs):
     return _build_lam(
         build_vit_h,
-        checkpoint=checkpoint,
-        use_sam_checkpoint=use_sam_checkpoint,
+        **kwargs,
     )
 
 
-def build_lam_vit_l(checkpoint=None, use_sam_checkpoint=False):
+def build_lam_vit_l(**kwargs):
     return _build_lam(
         build_vit_l,
-        checkpoint=checkpoint,
-        use_sam_checkpoint=use_sam_checkpoint,
+        **kwargs,
     )
 
 
-def build_lam_vit_b(checkpoint=None, use_sam_checkpoint=False):
+def build_lam_vit_b(**kwargs):
     return _build_lam(
         build_vit_b,
-        checkpoint=checkpoint,
-        use_sam_checkpoint=use_sam_checkpoint,
+        **kwargs,
     )
 
 
-
-def build_lam_no_vit(checkpoint=None, use_sam_checkpoint=False):
+def build_lam_no_vit(**kwargs):
     return _build_lam(
         build_vit=None,
-        checkpoint=checkpoint,
-        use_sam_checkpoint=use_sam_checkpoint,
         use_vit=False,
+        **kwargs,
     )
 
 
@@ -53,6 +55,8 @@ def _build_lam(
     prompt_embed_dim=256,
     image_size=1024,
     vit_patch_size=16,
+    class_attention=False,
+    spatial_convs=None,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -66,6 +70,7 @@ def _build_lam(
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
+            class_attention=class_attention,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=prompt_embed_dim,
@@ -75,6 +80,7 @@ def _build_lam(
         ),
         mask_decoder=MaskDecoderLam(
             transformer_dim=prompt_embed_dim,
+            spatial_convs=spatial_convs,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=prompt_embed_dim,
@@ -87,7 +93,7 @@ def _build_lam(
     if checkpoint is not None:
         with open(checkpoint, "rb") as f:
             state_dict = torch.load(f)
-            
+
         if use_sam_checkpoint:
             lam.init_pretrained_weights(state_dict)
         else:

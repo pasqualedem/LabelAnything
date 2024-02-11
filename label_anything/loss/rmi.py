@@ -220,7 +220,6 @@ class RMILoss(nn.Module):
         rmi_pool_way=1,
         rmi_pool_size=4,
         rmi_pool_stride=4,
-        weight=False,
         loss_weight_lambda=0.5,
         lambda_way=1,
         ignore_index=-100,
@@ -239,7 +238,6 @@ class RMILoss(nn.Module):
         self.weight_lambda = loss_weight_lambda
         self.lambda_way = lambda_way
 
-        self.weight = weight
         # dimension of the distribution
         self.half_d = self.rmi_radius * self.rmi_radius
         self.d = 2 * self.half_d
@@ -247,7 +245,7 @@ class RMILoss(nn.Module):
         # ignore class
         self.ignore_index = ignore_index
 
-    def forward(self, logits_4D, labels_4D):
+    def forward(self, logits_4D, labels_4D, weight_matrix=None, **kwargs):
         num_classes = logits_4D.shape[1]
         # labels_4D = F.one_hot(labels.long(), num_classes=num_classes).permute(0, 3, 1, 2)
         # explicitly disable fp16 mode because torch.cholesky and
@@ -255,13 +253,13 @@ class RMILoss(nn.Module):
         logits_4D.float()
         labels_4D.float()
         with torch.autocast(logits_4D.device.type, enabled=False):
-            loss = self.forward_sigmoid(logits_4D, labels_4D, num_classes)
+            loss = self.forward_sigmoid(logits_4D, labels_4D, num_classes, weight_matrix=weight_matrix)
         # if not FP16
         # else:
         #     loss = self.forward_sigmoid(logits_4D, labels_4D, do_rmi=do_rmi)
         return loss
 
-    def forward_sigmoid(self, logits_4D, labels_4D, num_classes):
+    def forward_sigmoid(self, logits_4D, labels_4D, num_classes, weight_matrix=None):
         """
         Using the sigmiod operation both.
         Args:
@@ -293,32 +291,8 @@ class RMILoss(nn.Module):
 
         # binary loss, multiplied by the not_ignore_mask
         valid_pixels = torch.sum(label_mask_flat)
-        there_is_ignore = self.ignore_index in labels_4D
-        if self.weight:
-            if there_is_ignore:
-                weight_labels = labels_4D.clone()
-                weight_labels += 1
-                weight_labels[weight_labels == self.ignore_index + 1] = 0
-                weight_num_classes = num_classes + 1
-            else:
-                weight_labels = labels_4D
-                weight_num_classes = num_classes
-            weights = torch.ones(weight_num_classes, device=labels_4D.device)
-            classes, counts = weight_labels.unique(return_counts=True)
-            classes = classes.long()
-            if there_is_ignore:
-                median = torch.median(counts[1:].float())
-                weights[classes] = median / counts
-                weights[0] = 0
-            else:
-                median = torch.median(counts.float())
-                weights[classes] = median / counts
-            wtarget = substitute_values(
-                weight_labels,
-                weights,
-                unique=torch.arange(weight_num_classes, device=labels_4D.device),
-            )
-            label_mask_flat = label_mask_flat * wtarget.view(
+        if weight_matrix is not None:
+            label_mask_flat = label_mask_flat * weight_matrix.view(
                 [
                     -1,
                 ]

@@ -12,6 +12,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from label_anything.data.utils import get_preprocess_shape
+from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
@@ -44,6 +45,7 @@ class Lam(nn.Module):
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
+        self.class_embeddings = None
 
     def forward(
         self, batched_input: List[Dict[str, Any]]
@@ -81,25 +83,29 @@ class Lam(nn.Module):
         query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(
             batched_input
         )
-        points, boxes, masks = self.prepare_prompts(batched_input)
+        points, boxes, masks, flag_examples = self.prepare_prompts(batched_input)
 
-        class_embeddings = self.prompt_encoder(
+        pe_result = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
             masks=masks,
+            flag_examples=flag_examples,
         )
 
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            class_embeddings=class_embeddings,
+            class_embeddings=pe_result[ResultDict.CLASS_EMBS],
         )
 
         seg = self.postprocess_masks(seg, batched_input["dims"])
         if "flag_gts" in batched_input:
             seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-        return seg
+        return {
+            ResultDict.LOGITS: seg,
+            ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
+        }
 
     def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
@@ -125,7 +131,11 @@ class Lam(nn.Module):
             embeddings = batched_input["embeddings"]
         elif "images" in batched_input:
             images = batched_input["images"]
+            B, N = images.shape[0:2]
+            images = rearrange(images, "b n c h w -> (b n) c h w")
             embeddings = self.image_encoder(images)
+            # embeddings = torch.rand((B*N, 256, 64, 64))
+            embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
@@ -156,7 +166,7 @@ class Lam(nn.Module):
         else:
             masks = None
 
-        return points, boxes, masks
+        return points, boxes, masks, batched_input['flag_examples']
 
     def init_pretrained_weights(self, weights):
         """
@@ -220,7 +230,7 @@ class Lam(nn.Module):
             if k.startswith("mask_decoder.output_upscaling")
         }
         self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
-        
+
     def get_learnable_params(self, training_params: dict) -> list:
         """
 
@@ -230,28 +240,34 @@ class Lam(nn.Module):
         def f(x):
             return not "image_encoder" in x[0]
 
-        freeze_pretrained = training_params.get('freeze_backbone', False)
+        freeze_pretrained = training_params.get("freeze_backbone", False)
         if freeze_pretrained:
             for param in self.image_encoder.parameters():
                 param.requires_grad = False
             return [x[1] for x in filter(f, list(self.named_parameters()))]
         return self.parameters()
 
-    def generate_class_embeddings(self, example_dict):
+    def generate_class_embeddings(self, example_dict, chunk_size=None):
         prompt_embeddings = self.prepare_embeddings(example_dict)
-        points, boxes, masks = self.prepare_prompts(example_dict)
+        points, boxes, masks, flag_examples = self.prepare_prompts(example_dict)
         class_embeddings = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
             masks=masks,
-        )
+            chunk_size=chunk_size,
+            flag_examples=flag_examples,
+        )[ResultDict.CLASS_EMBS]
         return class_embeddings
 
     def predict(self, batched_input, class_embeddings=None):
-        if class_embeddings is None:
+        if class_embeddings is None and self.class_embeddings is None:
             return self.forward(batched_input)
-        query_embeddings = self.prepare_embeddings(batched_input)
+        if class_embeddings is None and self.class_embeddings is not None:
+            class_embeddings = self.class_embeddings
+        query_embeddings = self.prepare_embeddings(batched_input)[
+            :, 0
+        ]  # There is only query image
 
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
@@ -259,7 +275,9 @@ class Lam(nn.Module):
             class_embeddings=class_embeddings,
         )
 
-        return self.postprocess_masks(seg, batched_input["dims"])
+        return self.postprocess_masks(
+            seg, batched_input["dims"].unsqueeze(1)  # Add example dimension to uniform
+        )
 
     def postprocess_masks(
         self,
@@ -320,5 +338,7 @@ class Lam(nn.Module):
                 for i, mask in enumerate(masks)
             ]
         )
-        masks[:, 0, :, :][masks[:, 0, :, :] == float("-inf")] = 0 # background class for padding
+        masks[:, 0, :, :][
+            masks[:, 0, :, :] == float("-inf")
+        ] = 0  # background class for padding
         return masks

@@ -11,10 +11,11 @@ from einops import rearrange
 
 from typing import Any, Optional, Tuple, Type
 
-from .common import LayerNorm2d, MLPBlock
-from .transformer import TwoWayTransformer, Attention
+from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
+from .transformer import TwoWayTransformer
 
-from label_anything.data.coco import Label
+from label_anything.data.utils import Label
+from label_anything.utils.utils import ResultDict
 
 
 class PromptEncoder(nn.Module):
@@ -47,11 +48,16 @@ class PromptEncoder(nn.Module):
         self.pe_layer = PositionEmbeddingRandom(embed_dim // 2)
 
         self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
-        point_embeddings = [nn.Embedding(1, embed_dim) for i in range(self.num_point_embeddings)]
+        point_embeddings = [
+            nn.Embedding(1, embed_dim) for i in range(self.num_point_embeddings)
+        ]
         self.point_embeddings = nn.ModuleList(point_embeddings)
         self.not_a_point_embed = nn.Embedding(1, embed_dim)
 
-        self.mask_input_size = (4 * image_embedding_size[0], 4 * image_embedding_size[1])
+        self.mask_input_size = (
+            4 * image_embedding_size[0],
+            4 * image_embedding_size[1],
+        )
         self.mask_downscaling = nn.Sequential(
             nn.Conv2d(1, mask_in_chans // 4, kernel_size=2, stride=2),
             LayerNorm2d(mask_in_chans // 4),
@@ -61,7 +67,7 @@ class PromptEncoder(nn.Module):
             activation(),
             nn.Conv2d(mask_in_chans, embed_dim, kernel_size=1),
         )
-        self.no_mask_embed = nn.Embedding(1, embed_dim) # For when no masks in input
+        self.no_mask_embed = nn.Embedding(1, embed_dim)  # For when no masks in input
 
     def get_dense_pe(self) -> torch.Tensor:
         """
@@ -87,7 +93,9 @@ class PromptEncoder(nn.Module):
             padding_label = -torch.ones((labels.shape[0], 1), device=labels.device)
             points = torch.cat([points, padding_point], dim=1)
             labels = torch.cat([labels, padding_label], dim=1)
-        point_embedding = self.pe_layer.forward_with_coords(points, self.input_image_size)
+        point_embedding = self.pe_layer.forward_with_coords(
+            points, self.input_image_size
+        )
         point_embedding[labels == Label.NULL] = 0.0
         point_embedding[labels == Label.NULL] += self.not_a_point_embed.weight
         point_embedding[labels == Label.NEGATIVE] += self.point_embeddings[0].weight
@@ -98,7 +106,9 @@ class PromptEncoder(nn.Module):
         """Embeds box prompts."""
         boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.reshape(-1, 2, 2)
-        corner_embedding = self.pe_layer.forward_with_coords(coords, self.input_image_size)
+        corner_embedding = self.pe_layer.forward_with_coords(
+            coords, self.input_image_size
+        )
         corner_embedding[:, 0, :] += self.point_embeddings[2].weight
         corner_embedding[:, 1, :] += self.point_embeddings[3].weight
         return corner_embedding
@@ -153,7 +163,9 @@ class PromptEncoder(nn.Module):
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
         bs = self._get_batch_size(points, boxes, masks)
-        sparse_embeddings = torch.empty((bs, 0, self.embed_dim), device=self._get_device())
+        sparse_embeddings = torch.empty(
+            (bs, 0, self.embed_dim), device=self._get_device()
+        )
         if points is not None:
             coords, labels = points
             point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
@@ -189,6 +201,9 @@ class PositionEmbeddingRandom(nn.Module):
     def _pe_encoding(self, coords: torch.Tensor) -> torch.Tensor:
         """Positionally encode points that are normalized to [0,1]."""
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coords = coords.type(
+            self.positional_encoding_gaussian_matrix.dtype
+        )  # Ensure same type
         coords = 2 * coords - 1
         coords = coords @ self.positional_encoding_gaussian_matrix
         coords = 2 * np.pi * coords
@@ -215,8 +230,8 @@ class PositionEmbeddingRandom(nn.Module):
         coords = coords_input.clone()
         coords[:, :, 0] = coords[:, :, 0] / image_size[1]
         coords[:, :, 1] = coords[:, :, 1] / image_size[0]
-        return self._pe_encoding(coords.to(torch.float))  # B x N x C
-    
+        return self._pe_encoding(coords)  # B x N x C
+
 
 class PromptImageEncoder(PromptEncoder):
     def __init__(
@@ -226,6 +241,8 @@ class PromptImageEncoder(PromptEncoder):
         input_image_size: Tuple[int, int],
         mask_in_chans: int,
         transformer: nn.Module,
+        class_example_attention: bool = True,
+        class_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -242,7 +259,9 @@ class PromptImageEncoder(PromptEncoder):
           activation (nn.Module): The activation to use when encoding
             input masks.
         """
-        super().__init__(embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation)
+        super().__init__(
+            embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation
+        )
 
         num_heads: int = 8
         attention_downsample_rate: int = 2
@@ -251,31 +270,64 @@ class PromptImageEncoder(PromptEncoder):
 
         self.transformer = transformer
 
-        self.sparse_embedding_attention = Attention(
-                    embed_dim, num_heads, downsample_rate=attention_downsample_rate
-                )
-        self.no_sparse_embedding = nn.Embedding(1, embed_dim) # For when no sparse embeddings in input
-        self.norm_sparse_embedding_attention = nn.LayerNorm(embed_dim)
-        self.example_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
+        self.sparse_embedding_attention = AttentionMLPBlock(
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            downsample_rate=attention_downsample_rate,
+            mlp_dim=mlp_dim,
+            act=activation,
         )
-        self.norm_example_attention = nn.LayerNorm(embed_dim)
-        self.example_mlp = MLPBlock(embed_dim, mlp_dim)
-        self.norm_example_mlp = nn.LayerNorm(embed_dim)
-        
-        self.not_a_mask_embed = nn.Embedding(1, embed_dim // 4) # For classes/examples with missing masks
+        self.no_sparse_embedding = nn.Embedding(
+            1, embed_dim
+        )  # For when no sparse embeddings in input
 
-    def _embed_masks(self, masks: torch.Tensor, masks_flags: torch.Tensor) -> torch.Tensor:
-        """Embeds mask inputs. (B, C, H, W) """
-        B, M, C, _, _ = masks.shape
-        masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
-        mask_embedding = self.mask_downscaling(masks)
-        mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
+        self.class_attention = None
+        if class_attention:
+            self.class_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+
+        if class_example_attention:
+            self.class_example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+            )
+
+        self.not_a_mask_embed = nn.Embedding(
+            1, embed_dim // 4
+        )  # For classes/examples with missing masks
+
+    def _embed_masks(
+        self, masks: torch.Tensor, masks_flags: torch.Tensor, chunk_size=None
+    ) -> torch.Tensor:
+        """Embeds mask inputs. (B, C, H, W)"""
+        B, M, C, H, W = masks.shape
+        masks = rearrange(masks, "b m c h w -> (b m c) 1 h w")
+        if chunk_size is None:
+            mask_embedding = self.mask_downscaling(masks)
+        else:
+            for i in range(0, masks.shape[0], chunk_size):
+                mask_embedding = torch.zeros(
+                    B * M * C, self.embed_dim, H // 4, W // 4, device=self._get_device()
+                )
+                mask_embedding[i : i + chunk_size] = self.mask_downscaling(
+                    masks[i : i + chunk_size]
+                )
+        mask_embedding = rearrange(
+            mask_embedding, "(b m c) d h w -> b m c d h w", b=B, m=M
+        )
         H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == Label.NULL] = 0.0
         mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
         return mask_embedding
-    
+
     def _get_batch_examples_class_size(
         self,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
@@ -283,7 +335,7 @@ class PromptImageEncoder(PromptEncoder):
         masks: Optional[torch.Tensor],
     ) -> int:
         """
-        Gets the batch size and the number classes of the output 
+        Gets the batch size and the number classes of the output
         given the batch size and the number of classes of the input prompts.
         """
         if points is not None:
@@ -296,13 +348,14 @@ class PromptImageEncoder(PromptEncoder):
             masks = masks[0]
             return masks.shape[0], masks.shape[1], masks.shape[2]
         else:
-            return 1
-    
+            raise ValueError("No prompts provided")
+
     def embed_points_masks(
         self,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[Tuple[torch.Tensor, torch.Tensor]],
         masks: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        chunk_size: Optional[int] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense
@@ -322,10 +375,16 @@ class PromptImageEncoder(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
-        B, n_examples, n_classes = self._get_batch_examples_class_size(points, boxes, masks)
+        B, n_examples, n_classes = self._get_batch_examples_class_size(
+            points, boxes, masks
+        )
         bs = B * n_examples * n_classes
 
-        sparse_embeddings = torch.empty((bs, 0, self.embed_dim), device=self._get_device())
+        sparse_embeddings = torch.empty(
+            (bs, 0, self.embed_dim),
+            device=self._get_device(),
+            dtype=self.no_sparse_embedding.weight.dtype,
+        )
         if points is not None:
             coords, labels = points
             point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
@@ -335,43 +394,69 @@ class PromptImageEncoder(PromptEncoder):
             box_embeddings = self._embed_boxes(boxes, flags)
             sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
         if boxes is None and points is None:
-            sparse_embeddings = torch.zeros((bs, 1, self.embed_dim), device=self._get_device())
+            sparse_embeddings = torch.zeros(
+                (bs, 1, self.embed_dim), device=self._get_device()
+            )
             sparse_embeddings += self.no_sparse_embedding.weight
 
         # Attention over sparse embeddings
-        sparse_embeddings = rearrange(sparse_embeddings, '(b m c) n d -> (b m) (c n) d', b=B, m=n_examples, c=n_classes)
-        sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings, sparse_embeddings, sparse_embeddings)
-        sparse_embeddings = self.norm_sparse_embedding_attention(sparse_embeddings)
-        sparse_embeddings = rearrange(sparse_embeddings, '(b m) (c n) d -> b m c n d', b=B, m=n_examples, c=n_classes)
+        sparse_embeddings = rearrange(
+            sparse_embeddings,
+            "(b m c) n d -> (b m) (c n) d",
+            b=B,
+            m=n_examples,
+            c=n_classes,
+        )
+        sparse_embeddings = self.sparse_embedding_attention(sparse_embeddings)
+        sparse_embeddings = rearrange(
+            sparse_embeddings,
+            "(b m) (c n) d -> b m c n d",
+            b=B,
+            m=n_examples,
+            c=n_classes,
+        )
 
         if masks is not None:
             mask_inputs, mask_flags = masks
-            dense_embeddings = self._embed_masks(mask_inputs, mask_flags)
+            dense_embeddings = self._embed_masks(mask_inputs, mask_flags, chunk_size)
         else:
-            dense_embeddings = self.no_mask_embed.weight.reshape(1, 1, 1, -1, 1, 1).expand(
-                B, n_examples, n_classes, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+            dense_embeddings = self.no_mask_embed.weight.reshape(
+                1, 1, 1, -1, 1, 1
+            ).expand(
+                B,
+                n_examples,
+                n_classes,
+                -1,
+                self.image_embedding_size[0],
+                self.image_embedding_size[1],
             )
 
         return sparse_embeddings, dense_embeddings
-    
-    def _embed_points(self, points: torch.Tensor, labels: torch.Tensor, pad: bool) -> torch.Tensor:
+
+    def _embed_points(
+        self, points: torch.Tensor, labels: torch.Tensor, pad: bool
+    ) -> torch.Tensor:
         B = points.shape[0]
-        points = rearrange(points, 'b m c n xy -> (b m c) n xy')
-        labels = rearrange(labels, 'b m c n -> (b m c) n')
+        points = rearrange(points, "b m c n xy -> (b m c) n xy")
+        labels = rearrange(labels, "b m c n -> (b m c) n")
         return super()._embed_points(points, labels, pad)
 
     def _embed_boxes(self, boxes: torch.Tensor, padding) -> torch.Tensor:
         b, m, c, n = boxes.shape[:4]
-        boxes = rearrange(boxes, 'b m c n xy -> (b m c) n xy')
+        boxes = rearrange(boxes, "b m c n xy -> (b m c) n xy")
         box_embeddings = super()._embed_boxes(boxes)
-        box_embeddings = rearrange(box_embeddings, '(b m c n) xy d -> b m c (n xy) d', b=b, c=c, m=m, n=n)
+        box_embeddings = rearrange(
+            box_embeddings, "(b m c n) xy d -> b m c (n xy) d", b=b, c=c, m=m, n=n
+        )
         two_points_padding = padding.repeat(1, 1, 1, 2)
         box_embeddings[two_points_padding == Label.NULL] = 0.0
-        box_embeddings[two_points_padding == Label.NULL] += self.not_a_point_embed.weight
-        box_embeddings = rearrange(box_embeddings, 'b m c n d-> (b m c) n d')
+        box_embeddings[
+            two_points_padding == Label.NULL
+        ] += self.not_a_point_embed.weight
+        box_embeddings = rearrange(box_embeddings, "b m c n d-> (b m c) n d")
         return box_embeddings
 
-    def get_unattended_prompts(        
+    def get_unattended_prompts(
         self,
         image_embeddings: torch.Tensor,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
@@ -396,12 +481,31 @@ class PromptImageEncoder(PromptEncoder):
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
 
+    def sparse_dense_fusion(self, src, pos_src, sparse_embeddings, chunk_size=None):
+        _, _, h, w = src.shape
+        if chunk_size is None:
+            return rearrange(
+                self.transformer(src, pos_src, sparse_embeddings)[1],
+                "b (h w) d  -> b d h w",
+                h=h,
+            )  # src: (BMC, HW, D)
+        for i in range(0, src.shape[1], chunk_size):
+            _, attn_out = self.transformer(
+                src[i : i + chunk_size],
+                pos_src[i : i + chunk_size],
+                sparse_embeddings[i : i + chunk_size],
+            )
+            src[i : i + chunk_size] = rearrange(attn_out, "b (h w) d  -> b d h w", h=h)
+        return src
+
     def forward(
         self,
         image_embeddings: torch.Tensor,
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[torch.Tensor],
         masks: Optional[torch.Tensor],
+        flag_examples: Optional[torch.Tensor],
+        chunk_size=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning class embeddings
@@ -412,6 +516,7 @@ class PromptImageEncoder(PromptEncoder):
             and labels to embed (B, M, C, 2)
           boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
           masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+          flag_examples (torch.Tensor or none): flags to indicate which examples (B, M, C)
 
         Returns:
           torch.Tensor: sparse embeddings for the points and boxes, with shape
@@ -420,32 +525,48 @@ class PromptImageEncoder(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
-        sparse_embeddings, dense_embeddings = self.embed_points_masks(points, boxes, masks)
-        sparse_embeddings = rearrange(sparse_embeddings, 'b m c n d -> (b m c) n d')
+        sparse_embeddings, dense_embeddings = self.embed_points_masks(
+            points, boxes, masks, chunk_size=chunk_size
+        )
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m c) n d")
 
         b, m, c, d, h, w = dense_embeddings.shape
-        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
+        dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
 
-        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, c, 1, 1, 1)
+        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(
+            1, 1, c, 1, 1, 1
+        )
         src = rearrange(src, "b m c d h w -> (b m c) d h w")
         src = src + dense_embeddings
-        pos_src = torch.repeat_interleave(self.get_dense_pe(), sparse_embeddings.shape[0], dim=0)
+        pos_src = torch.repeat_interleave(
+            self.get_dense_pe(), sparse_embeddings.shape[0], dim=0
+        )
 
         # Run the transformer to fuse the dense embeddings and sparse embeddings
-        hs, src = self.transformer(src, pos_src, sparse_embeddings) # src: (BMC, HW, D)
-        src = rearrange(src, 'b hw d -> b d hw')
-        src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2) # (BMC, D)
-        src = rearrange(src, '(b m c) d -> b (m c) d', b=b, m=m, c=c)
-        
-        src = self.example_attention(src, src, src)
-        src = self.norm_example_attention(src)
-        src = self.example_mlp(src) + src
-        src = self.norm_example_mlp(src)
+        src = self.sparse_dense_fusion(
+            src, pos_src, sparse_embeddings, chunk_size=chunk_size
+        )
+        src = rearrange(src, "b d h w -> b d (h w)")
+        src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
+        src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
 
-        # Average over examples
-        src = rearrange(src, 'b (m c) d -> b m c d', c=c)
-        src = torch.mean(src, dim=1) # (B, C, D)
-        return src
+        if self.class_example_attention is not None:
+            src = rearrange(src, "b m c d -> b (m c) d", c=c)
+            src = self.class_example_attention(src)
+            src = rearrange(src, "b (m c) d -> b m c d", c=c)
+
+        if self.class_attention is not None:
+            src = rearrange(src, "b m c d -> (b m) c d", c=c)
+            src = self.class_attention(src)
+            src = rearrange(src, "(b m) c d -> b m c d", m=m)
+
+        # Average over examples removing padding embeddings
+        masked_src = src * flag_examples.unsqueeze(-1)
+        class_embeddings = masked_src.sum(dim=1) / flag_examples.sum(dim=1).unsqueeze(-1)
+        return {
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: src,
+        }
 
 
 class PromptMaskImageEncoder(PromptEncoder):
@@ -472,38 +593,46 @@ class PromptMaskImageEncoder(PromptEncoder):
           activation (nn.Module): The activation to use when encoding
             input masks.
         """
-        super().__init__(embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation)
+        super().__init__(
+            embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation
+        )
 
         num_heads: int = 8
         attention_downsample_rate: int = 2
         mlp_dim: int = 2048
-        
+
         self.example_attention = Attention(
             embed_dim, num_heads, downsample_rate=attention_downsample_rate
         )
         self.norm_example_attention = nn.LayerNorm(embed_dim)
         self.example_mlp = MLPBlock(embed_dim, mlp_dim)
         self.norm_example_mlp = nn.LayerNorm(embed_dim)
-        
-        self.not_a_mask_embed = nn.Embedding(1, embed_dim // 4) # For classes/examples with missing masks
 
-    def _embed_masks(self, masks: torch.Tensor, masks_flags: torch.Tensor) -> torch.Tensor:
-        """Embeds mask inputs. (B, C, H, W) """
+        self.not_a_mask_embed = nn.Embedding(
+            1, embed_dim // 4
+        )  # For classes/examples with missing masks
+
+    def _embed_masks(
+        self, masks: torch.Tensor, masks_flags: torch.Tensor
+    ) -> torch.Tensor:
+        """Embeds mask inputs. (B, C, H, W)"""
         B, M, C, _, _ = masks.shape
-        masks = rearrange(masks, 'b m c h w -> (b m c) 1 h w')
+        masks = rearrange(masks, "b m c h w -> (b m c) 1 h w")
         mask_embedding = self.mask_downscaling(masks)
-        mask_embedding = rearrange(mask_embedding, '(b m c) d h w -> b m c d h w', b=B, m=M)
+        mask_embedding = rearrange(
+            mask_embedding, "(b m c) d h w -> b m c d h w", b=B, m=M
+        )
         H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == Label.NULL] = 0.0
         mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
         return mask_embedding
-    
+
     def _get_batch_examples_class_size(
         self,
         masks: Optional[torch.Tensor],
     ) -> int:
         """
-        Gets the batch size and the number classes of the output 
+        Gets the batch size and the number classes of the output
         given the batch size and the number of classes of the input prompts.
         """
         if masks is not None:
@@ -532,19 +661,21 @@ class PromptMaskImageEncoder(PromptEncoder):
         """
         dense_embeddings = self._embed_masks(masks)
         b, m, c, d, h, w = dense_embeddings.shape
-        dense_embeddings = rearrange(dense_embeddings, 'b m c d h w -> (b m c) d h w')
+        dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
 
-        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(1, 1, c, 1, 1, 1)
+        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(
+            1, 1, c, 1, 1, 1
+        )
         src = rearrange(src, "b m c d h w -> (b m c) d h w")
         src = src + dense_embeddings
-        src = rearrange(src, '(b m c) d h w -> b (m c) d', b=b, m=m, c=c)
-        
+        src = rearrange(src, "(b m c) d h w -> b (m c) d", b=b, m=m, c=c)
+
         src = self.example_attention(src, src, src)
         src = self.norm_example_attention(src)
         src = self.example_mlp(src) + src
         src = self.norm_example_mlp(src)
 
         # Average over examples
-        src = rearrange(src, 'b (m c) d -> b m c d', c=c)
-        src = torch.mean(src, dim=1) # (B, C, D)
+        src = rearrange(src, "b (m c) d -> b m c d", c=c)
+        src = torch.mean(src, dim=1)  # (B, C, D)
         return src

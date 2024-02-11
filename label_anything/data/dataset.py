@@ -1,3 +1,4 @@
+import random
 import torch
 import itertools
 
@@ -6,6 +7,11 @@ from torch.utils.data import Dataset, BatchSampler
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
+from label_anything.data.coco20i import Coco20iDataset
+from label_anything.logger.text_logger import get_logger
+
+logger = get_logger(__name__)
+
 
 datasets = {
     "coco": CocoLVISDataset,
@@ -13,6 +19,9 @@ datasets = {
     "val_coco": CocoLVISDataset,
     "val_lvis": CocoLVISDataset,
     "ade20k": None,
+    "voc": CocoLVISDataset,
+    "coco20i": Coco20iDataset,
+    "val_coco20i": Coco20iDataset,
 }
 
 
@@ -25,15 +34,14 @@ class LabelAnythingDataset(Dataset):
             datasets_params (Dict): A dictionary containing the parameters for each dataset.
             common_params (Dict): A dictionary containing the common parameters for all datasets.
         """
-        self._log_images = True  # logs the first batch
-        self.load_embeddings = common_params.get("load_embeddings")
 
         self.datasets = {
             dataset_name: datasets[dataset_name](**{**common_params, **params})
             for dataset_name, params in datasets_params.items()
         }
         self.categories = {
-            dataset_name: dataset.categories for dataset_name, dataset in self.datasets.items()
+            dataset_name: dataset.categories
+            for dataset_name, dataset in self.datasets.items()
         }
         index = sum(
             [
@@ -43,13 +51,13 @@ class LabelAnythingDataset(Dataset):
             [],
         )
         self.index = {i: index for i, index in enumerate(index)}
-        
+
         super().__init__()
 
     def __len__(self):
         return sum([len(dataset) for dataset in self.datasets.values()])
 
-    def __getitem__(self, idx_num_examples) -> Any:
+    def __getitem__(self, idx_metadata) -> Any:
         """
         Returns the item at the given index.
 
@@ -59,10 +67,13 @@ class LabelAnythingDataset(Dataset):
         Returns:
             Any: The item at the given index.
         """
-        idx, num_examples = idx_num_examples
+        idx, batch_metadata = idx_metadata
         dataset_name, dataset_index = self.index[idx]
-        return self.datasets[dataset_name][(dataset_index, num_examples)], dataset_name
-    
+        return (
+            self.datasets[dataset_name][(dataset_index, batch_metadata)],
+            dataset_name,
+        )
+
     def load_and_preprocess_images(self, dataset_name, image_ids):
         return self.datasets[dataset_name].load_and_preprocess_images(image_ids)
 
@@ -168,9 +179,14 @@ class LabelAnythingDataset(Dataset):
         points = torch.stack([x[0] for x in points_flags])
         flag_points = torch.stack([x[1] for x in points_flags])
 
+        # flag examples
+        flag_examples = torch.stack(
+            [utils.collate_example_flags(x["flag_examples"], max_classes) for x in batched_input]
+        )
+
         # aux gts
         classes = [x["classes"] for x in batched_input]
-        
+
         # image ids
         image_ids = [x["image_ids"] for x in batched_input]
 
@@ -195,65 +211,145 @@ class LabelAnythingDataset(Dataset):
             "flag_bboxes": flag_bboxes,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
+            "flag_examples": flag_examples,
             "dims": dims,
             "classes": classes,
             "image_ids": image_ids,
             "flag_gts": flag_gts,
         }
 
-        if self._log_images and self.load_embeddings:
-            log_images = torch.stack([x["images"] for x in batched_input])
-            data_dict["images"] = log_images
-
         return (data_dict, ground_truths), dataset_names
+
+    def reset_seed(self, seed):
+        for dataset in self.datasets.values():
+            dataset.reset_seed(seed)
+
+
+def get_batch_metadata(
+    dataset_len, possible_batch_example_nums, possible_prompts, num_processes=1
+):
+    """
+    Returns a list of number of examples per batch and a list of batch sizes
+    such that the total number of examples is `batch_size * max_num_examples`
+    """
+    examples_nums = []
+    batch_sizes = []
+    prompt_types = []
+    combs = [
+        list(itertools.combinations(possible_prompts, i))
+        for i in range(1, len(possible_prompts))
+    ]
+    multi_combs = [x for comb in combs for x in comb]
+    remaining_images = dataset_len // num_processes
+    while remaining_images > 0:
+        cur_batch_size, examples_num = random.choice(possible_batch_example_nums)
+        if cur_batch_size > remaining_images:
+            cur_batch_size = remaining_images
+        prompt_type = random.choice(multi_combs)
+        prompt_types.append(prompt_type)
+        examples_nums.append(examples_num)
+        batch_sizes.append(cur_batch_size)
+        remaining_images -= cur_batch_size
+
+    batch_sizes = [
+        val for tup in zip(*[batch_sizes for i in range(num_processes)]) for val in tup
+    ]
+    examples_nums = [
+        val
+        for tup in zip(*[examples_nums for i in range(num_processes)])
+        for val in tup
+    ]
+    prompt_types = [
+        val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
+    ]
+    batch_metadata = {
+        utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
+        utils.BatchMetadataKeys.PROMPT_TYPES: prompt_types,
+    }
+
+    return batch_sizes, batch_metadata
 
 
 class VariableBatchSampler(BatchSampler):
     """
-    A custom batch sampler that generates variable-sized batches based on the provided batch_sizes and num_examples.
+    A custom batch sampler that generates variable-sized batches based on the provided constraints.
 
     Args:
         data_source (Dataset): The dataset to sample from.
-        batch_sizes (list): A list of batch sizes for each iteration.
-        num_examples (list): A list of the number of examples for each iteration.
-        drop_last (bool, optional): If True, drops the last incomplete batch. Default is False.
+        max_batch_size (int): The maximum size of each batch.
+        max_num_examples (int): The maximum number of examples to include in each batch.
+        prompt_types (List[str]): The types of prompts to use.
+        drop_last (bool, optional): Whether to drop the last batch if it is smaller than `max_batch_size`. Defaults to False.
+        shuffle (bool, optional): Whether to shuffle the data before sampling. Defaults to False.
+        num_processes (int, optional): The number of processes to use for parallel processing. Defaults to 1.
 
     Raises:
         ValueError: If no batch size is provided.
 
     Returns:
-        An iterator that yields variable-sized batches.
+        Iterator: An iterator that yields variable-sized batches.
 
-    Example:
-        data_source = MyDataset()
-        batch_sizes = [32, 16, 8]
-        num_examples = [1000, 500, 200]
-        sampler = VariableBatchSampler(data_source, batch_sizes, num_examples)
-        for batch in sampler:
-            # Process the batch
     """
 
-    def __init__(self, data_source, batch_sizes, num_examples, drop_last=False):
+    def __init__(
+        self,
+        data_source,
+        possible_batch_example_nums,
+        prompt_types=None,
+        drop_last=False,
+        shuffle=False,
+        num_processes=1,
+        num_steps=None,
+    ):
         self.data_source = data_source
-        self.batch_sizes = batch_sizes
-        self.num_examples = num_examples
-        self.drop_last = drop_last
-        self.sampler = torch.utils.data.sampler.RandomSampler(data_source)
+        if prompt_types is None:
+            prompt_types = [
+                utils.PromptType.BBOX,
+                utils.PromptType.MASK,
+                utils.PromptType.POINT,
+            ]
 
-        if len(batch_sizes) == 0:
+        self.batch_sizes, self.batch_metadata = get_batch_metadata(
+            len(data_source),
+            possible_batch_example_nums,
+            num_processes=num_processes,
+            possible_prompts=prompt_types,
+        )
+        if num_steps is not None:
+            if num_steps % num_processes != 0:
+                logger.warning(
+                    "The number of steps is not divisible by the number of processes."
+                )
+                logger.warning(
+                    "The number of steps will be adjusted to be divisible by the number of processes."
+                )
+                num_steps = num_steps - (num_steps % num_processes)
+                logger.warning(f"The new number of steps is {num_steps}.")
+            self.batch_sizes = self.batch_sizes[:num_steps]
+            self.batch_metadata = {
+                k: v[:num_steps] for k, v in self.batch_metadata.items()
+            }
+        self.drop_last = drop_last
+        if shuffle:
+            self.sampler = torch.utils.data.RandomSampler(data_source)
+        else:
+            self.sampler = torch.utils.data.SequentialSampler(data_source)
+
+        if len(self.batch_sizes) == 0:
             raise ValueError("At least one batch size should be provided.")
-        
+
     def __len__(self):
         return len(self.batch_sizes)
 
     def __iter__(self):
         indices = self.sampler.__iter__()
 
-        for batch_size, num_examples in zip(self.batch_sizes, self.num_examples):
+        for i, batch_size in enumerate(self.batch_sizes):
+            metadata = {k: v[i] for k, v in self.batch_metadata.items()}
             batch = []
             while len(batch) < batch_size and indices:
-                batch.append((next(indices), num_examples))
+                batch.append((next(indices), metadata))
             yield batch
-            
+
     def get_max_num_images(self):
-        return self.batch_sizes[0] * self.num_examples[0]
+        return self.batch_sizes[0] * self.batch_metadata[0]

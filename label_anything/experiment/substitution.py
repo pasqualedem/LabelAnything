@@ -2,8 +2,8 @@ import torch
 
 from einops import rearrange
 
-from label_anything.data.utils import mean_pairwise_j_index
 from label_anything.data.transforms import PromptsProcessor
+from label_anything.data.utils import BatchKeys
 
 
 def cartesian_product(a, b):
@@ -96,35 +96,41 @@ class Substitutor:
     """
 
     torch_keys_to_exchange = [
-        "prompt_points",
-        "prompt_masks",
-        "prompt_bboxes",
-        "flag_masks",
-        "flag_bboxes",
-        "flag_points",
-        "dims",
+        BatchKeys.PROMPT_POINTS,
+        BatchKeys.PROMPT_MASKS,
+        BatchKeys.PROMPT_BBOXES,
+        BatchKeys.FLAG_MASKS,
+        BatchKeys.FLAG_BBOXES,
+        BatchKeys.FLAG_POINTS,
+        BatchKeys.FLAG_EXAMPLES,
+        BatchKeys.DIMS,
     ]
     torch_keys_to_separate = [
-        "prompt_points",
-        "prompt_masks",
-        "prompt_bboxes",
-        "flag_masks",
-        "flag_bboxes",
-        "flag_points",
+        BatchKeys.PROMPT_POINTS,
+        BatchKeys.PROMPT_MASKS,
+        BatchKeys.PROMPT_BBOXES,
+        BatchKeys.FLAG_MASKS,
+        BatchKeys.FLAG_BBOXES,
+        BatchKeys.FLAG_POINTS,
+        BatchKeys.FLAG_EXAMPLES,
     ]
-    list_keys_to_exchange = ["classes", "image_ids"]
+    list_keys_to_exchange = [BatchKeys.CLASSES, BatchKeys.IMAGE_IDS]
     list_keys_to_separate = []
 
     def __init__(
-        self, batch: dict, threshold: float = None, num_points: int = 1, substitute=True
+        self, threshold: float = None, num_points: int = 1, substitute=True
     ) -> None:
-        self.batch, self.ground_truths = batch
-        self.example_classes = self.batch["classes"]
+        self.example_classes = None
         self.threshold = threshold
         self.num_points = num_points
         self.substitute = self.calculate_if_substitute() and substitute
         self.it = 0
         self.prompt_processor = PromptsProcessor()
+        
+    def reset(self, batch: dict) -> None:
+        self.it = 0
+        self.batch, self.ground_truths = batch
+        self.example_classes = self.batch[BatchKeys.CLASSES]
 
     def calculate_if_substitute(self):
         if self.threshold is None:
@@ -152,31 +158,31 @@ class Substitutor:
             sampled_points = torch.stack(
                 [
                     self.prompt_processor.torch_apply_coords(elem, dim[0])
-                    for dim, elem in zip(self.batch["dims"], sampled_points)
+                    for dim, elem in zip(self.batch[BatchKeys.DIMS], sampled_points)
                 ]
             )
             sampled_points = rearrange(sampled_points, "b c n xy -> b 1 c n xy")
             padding_points = torch.zeros(
                 sampled_points.shape[0],
-                self.batch["prompt_points"].shape[1] - 1,
+                self.batch[BatchKeys.PROMPT_POINTS].shape[1] - 1,
                 *sampled_points.shape[2:],
                 device=sampled_points.device,
             )
             labels = rearrange(labels, "b c n -> b 1 c n")
             padding_labels = torch.zeros(
                 labels.shape[0],
-                self.batch["flag_points"].shape[1] - 1,
+                self.batch[BatchKeys.FLAG_POINTS].shape[1] - 1,
                 *labels.shape[2:],
                 device=labels.device,
             )
             sampled_points = torch.cat([sampled_points, padding_points], dim=1)
             labels = torch.cat([labels, padding_labels], dim=1)
 
-            self.batch["prompt_points"] = torch.cat(
-                [self.batch["prompt_points"], sampled_points], dim=3
+            self.batch[BatchKeys.PROMPT_POINTS] = torch.cat(
+                [self.batch[BatchKeys.PROMPT_POINTS], sampled_points], dim=3
             )
-            self.batch["flag_points"] = torch.cat(
-                [self.batch["flag_points"], labels], dim=3
+            self.batch[BatchKeys.FLAG_POINTS] = torch.cat(
+                [self.batch[BatchKeys.FLAG_POINTS], labels], dim=3
             )
 
     def divide_query_examples(self):

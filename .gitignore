@@ -10,6 +10,7 @@ __pycache__/
 venv/
 .venv/
 .cometml-runs
+wandb
 env/
 build/
 develop-eggs/
@@ -95,8 +96,12 @@ target/
 
 # Checkpoints
 *.pth
+*.bin
+*.pkl
 
 /label_anything/data/*.json
 exp_log.csv
 /label_anything/data/raw/annotations
 label_anything/data/annotations/instances_voc12.json
+tmp
+out

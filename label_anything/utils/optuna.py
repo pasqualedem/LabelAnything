@@ -17,7 +17,7 @@ class Optunizer:
         self.study_name = study_name
         self.direction = direction
         self.n_trials = n_trials
-        storage_name = f"sqlite:///{storage_base}/{study_name}.db"
+        storage_name = f"sqlite://{storage_base}/{study_name}.db"
         self.study = optuna.create_study(
             direction=direction,
             study_name=study_name,
@@ -61,7 +61,7 @@ class Optunizer:
             return self.trial.suggest_int(key, *values)
         elif isinstance(first_value, float):
             return self.trial.suggest_float(key, *values)
-        elif isinstance(first_value, str):
+        else:
             return self.trial.suggest_categorical(key, choices=values)
 
 

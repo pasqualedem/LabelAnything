@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 from PIL import Image, ImageDraw
 import colorsys
@@ -6,6 +7,40 @@ from torchvision.transforms.functional import resize
 from label_anything.data.utils import get_preprocess_shape
 import torch.nn.functional as F
 import torch
+
+
+def merge_dataset_categories(categories_dict: dict[dict]):
+    dataset_categories_len = {
+        dataset: len(categories_dict[dataset]) for dataset in categories_dict
+    }
+    cumulative_len = np.cumsum(list(dataset_categories_len.values()))
+    dataset_categories_len = {
+        dataset: length for dataset, length in zip(categories_dict, cumulative_len)
+    }
+    absolute_categories = {
+        dataset: {
+            k + dataset_categories_len[dataset]: v for k, v in categories_dict[dataset]
+        }
+        for dataset in categories_dict
+    }
+    absolute_categories = {key: value for d in absolute_categories.values() for key, value in d.items()}
+    return absolute_categories
+
+
+def get_tmp_dir():
+    tmp_dir = None
+    if (
+        os.environ.get("TMPDIR", None)
+        or os.environ.get("TMP", None)
+        or os.environ.get("TEMP", None)
+    ):
+        if os.environ.get("TMPDIR", None):
+            tmp_dir = os.environ.get("TMPDIR")
+        elif os.environ.get("TMP", None):
+            tmp_dir = os.environ.get("TMP")
+        else:
+            tmp_dir = os.environ.get("TEMP")
+    return tmp_dir
 
 
 def resize_anything(image, dims):
