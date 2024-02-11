@@ -9,7 +9,7 @@ class SamplingFailureException(Exception):
     """
 
 
-def sample_power_law(N, alpha, generator, num_samples=1):
+def sample_power_law(N, alpha, num_samples=1):
     """
     Samples from a power law distribution.
     Args:
@@ -24,20 +24,16 @@ def sample_power_law(N, alpha, generator, num_samples=1):
     probabilities /= probabilities.sum()
 
     # Create a categorical distribution based on the probabilities
-    samples = torch.multinomial(probabilities, num_samples, True, generator=generator)
+    samples = torch.multinomial(probabilities, num_samples, True)
     return samples + 1  # Add 1 to map the sample indices to values in the range [1, N]
 
 
-def uniform_sampling(elem_set, sampled_elems, generator, *args, **kwargs):
+def uniform_sampling(elem_set, sampled_elems, *args, **kwargs):
     to_sample_from = [c for c in elem_set if c not in sampled_elems]
-    return to_sample_from[
-        torch.randint(0, len(to_sample_from), (1,), generator=generator).item()
-    ]
+    return to_sample_from[torch.randint(0, len(to_sample_from), (1,)).item()]
 
 
-def sample_over_inverse_frequency(
-    class_set, sampled, generator, frequencies, inverse=True
-):
+def sample_over_inverse_frequency(class_set, sampled, frequencies, inverse=True):
     frequencies = {k: v for k, v in frequencies.items() if k not in sampled}
     probs = {k: v + 1 for k, v in frequencies.items()}
     tot = sum(probs.values())
@@ -47,7 +43,8 @@ def sample_over_inverse_frequency(
         else {k: v / tot for k, v in probs.items()}
     )
     index = torch.multinomial(
-        torch.tensor(list(probs.values())), 1, generator=generator
+        torch.tensor(list(probs.values())),
+        1,
     ).item()
     return list(probs.keys())[index]
 
@@ -70,13 +67,11 @@ class ExampleGenerator:
         class_sample_function,
         image_sample_function,
         min_size,
-        generator,
     ) -> None:
         self.image_sample_function = image_sample_function
         self.class_sample_function = class_sample_function
         self.n_classes_sample_function = n_classes_sample_function
         self.min_size = min_size
-        self.generator = generator
         self.categories_to_imgs = categories_to_imgs
 
     def sample_classes_from_query(self, class_list, sample_function, frequencies=None):
@@ -93,7 +88,7 @@ class ExampleGenerator:
         if len(class_list) <= self.min_size:
             return class_list
         n_elements = self.n_classes_sample_function(
-            len(class_list), generator=self.generator
+            len(class_list),
         ).item()
         sampled_classes = []
         if n_elements == len(class_list):
@@ -103,7 +98,6 @@ class ExampleGenerator:
                 sampled_class = sample_function(
                     class_list,
                     sampled_classes,
-                    self.generator,
                     frequencies,
                     inverse=False,
                 )
@@ -112,7 +106,7 @@ class ExampleGenerator:
         else:
             for _ in range(n_elements):
                 sampled_class = sample_function(
-                    class_list, sampled_classes, self.generator, frequencies
+                    class_list, sampled_classes, frequencies
                 )
                 sampled_classes.append(sampled_class)
 
@@ -178,7 +172,7 @@ class ExampleGenerator:
                 ):  # We found at least one image, we can take one of them and stop
                     found = True
                     example_id = self.image_sample_function(
-                        images_containing, image_ids, generator=self.generator
+                        images_containing, image_ids,
                     )
                 else:  # We didn't find an image, we need to remove a class and try again
                     max_frequency_class = max(
@@ -200,7 +194,7 @@ class ExampleGenerator:
                     ) = self.backup_sampling(image_classes.tolist(), frequencies)
                     found = True
                     example_id = self.image_sample_function(
-                        images_containing, [], generator=self.generator
+                        images_containing, [],
                     )  # Doesn't matter we take a sampled image
             image_ids.append(example_id)
             for cat in example_sampled_classes:
@@ -217,12 +211,11 @@ class ExampleGeneratorPowerLawUniform(ExampleGenerator):
     Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
     """
 
-    def __init__(self, categories_to_imgs, generator, alpha=-2.0, min_size=1) -> None:
+    def __init__(self, categories_to_imgs, alpha=-2.0, min_size=1) -> None:
         super().__init__(
             categories_to_imgs,
             partial(sample_power_law, alpha=alpha),
             sample_over_inverse_frequency,
             uniform_sampling,
             min_size,
-            generator=generator,
         )

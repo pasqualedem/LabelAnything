@@ -214,10 +214,6 @@ class LabelAnythingDataset(Dataset):
 
         return (data_dict, ground_truths), dataset_names
 
-    def reset_seed(self, seed):
-        for dataset in self.datasets.values():
-            dataset.reset_seed(seed)
-
 
 def get_batch_metadata(
     dataset_len, possible_batch_example_nums, possible_prompts, num_processes=1
@@ -249,12 +245,12 @@ def get_batch_metadata(
         val for tup in zip(*[batch_sizes for i in range(num_processes)]) for val in tup
     ]
     examples_nums = [
-        val for tup in zip(*[examples_nums for i in range(num_processes)])
+        val
+        for tup in zip(*[examples_nums for i in range(num_processes)])
         for val in tup
     ]
     prompt_types = [
-        val for tup in zip(*[prompt_types for i in range(num_processes)])
-        for val in tup
+        val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
     ]
     batch_metadata = {
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
