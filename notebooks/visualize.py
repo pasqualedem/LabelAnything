@@ -12,7 +12,7 @@ import numpy as np
 import cv2
 
 from label_anything.data import utils
-from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys
+from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys, flags_merge
 
 
 colors = [
@@ -97,6 +97,8 @@ def obtain_batch(superdatset, dataset, images, image_ids, cat_ids, classes, img_
             if cat_id == -1:
                 continue
             ground_truths[ground_truths_copy == cat_id] = i
+            
+    flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
     data_dict = {
         image_key: images,
@@ -106,6 +108,7 @@ def obtain_batch(superdatset, dataset, images, image_ids, cat_ids, classes, img_
         BatchKeys.FLAG_POINTS: flag_points,
         BatchKeys.PROMPT_BBOXES: bboxes,
         BatchKeys.FLAG_BBOXES: flag_bboxes,
+        BatchKeys.FLAG_EXAMPLES: flag_examples,
         BatchKeys.DIMS: dims,
         BatchKeys.CLASSES: classes,
         BatchKeys.IMAGE_IDS: image_ids,
@@ -299,25 +302,34 @@ def set_embeddings(accelerator, batch, embeddings_dir):
     return batch
 
 
-def plot_emebddings(examples_class_embeddings, text_colors):
+def plot_emebddings(examples_class_embeddings, example_flags, text_colors):
     b, n, c, d = examples_class_embeddings.shape
     embeddings = rearrange(examples_class_embeddings, 'b n c d -> (b n c) d')
+    flags = rearrange(example_flags, 'b n c -> (b n c)')
 
     # Perform t-SNE dimensionality reduction
     tsne = TSNE(n_components=2, perplexity=5, n_iter=300)
     embeddings_2d = tsne.fit_transform(embeddings.detach().cpu().numpy())
 
-    # Plot the 2D embeddings
+    # Plot the 2D embeddings grouped per class
     plt.figure(figsize=(8, 8))
-    plt.scatter(embeddings_2d[:, 0], embeddings_2d[:, 1])
+    for i in range(n):
+        for j in range(c):
+            x, y = embeddings_2d[i * c + j]
+            plt.scatter(x, y, color=text_colors[j], label=f"Class {j}", s=50)
+            
+    for i in range(n):
+        for j in range(c):
+            x, y = embeddings_2d[i * c + j]
+            if flags[i * c + j]:
+                plt.text(x, y, f"{i}-{j}", fontsize=12)
+            else:
+                plt.text(x, y, f"{i}-{j}", fontsize=12, color='red')
 
-    # Annotate points with indices
-    embeddings_2d = embeddings_2d.reshape(b, n, c, 2)
-    for i in range(b):
-        for j in range(n):
-            for k in range(c):
-                x, y = embeddings_2d[i, j, k]
-                plt.text(x, y, f"{j}-{k}", color=text_colors[k], fontsize=12)
+
+    plt.title('t-SNE Visualization of Embeddings')
+    plt.show()
+
 
     plt.title('t-SNE Visualization of Embeddings')
     plt.show()
