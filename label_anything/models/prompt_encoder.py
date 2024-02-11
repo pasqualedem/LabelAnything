@@ -504,6 +504,7 @@ class PromptImageEncoder(PromptEncoder):
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[torch.Tensor],
         masks: Optional[torch.Tensor],
+        flag_examples: Optional[torch.Tensor],
         chunk_size=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -515,6 +516,7 @@ class PromptImageEncoder(PromptEncoder):
             and labels to embed (B, M, C, 2)
           boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
           masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+          flag_examples (torch.Tensor or none): flags to indicate which examples (B, M, C)
 
         Returns:
           torch.Tensor: sparse embeddings for the points and boxes, with shape
@@ -558,8 +560,9 @@ class PromptImageEncoder(PromptEncoder):
             src = self.class_attention(src)
             src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
-        # Average over examples
-        class_embeddings = torch.mean(src, dim=1)  # (B, C, D)
+        # Average over examples removing padding embeddings
+        masked_src = src * flag_examples.unsqueeze(-1)
+        class_embeddings = masked_src.sum(dim=1) / flag_examples.sum(dim=1).unsqueeze(-1)
         return {
             ResultDict.CLASS_EMBS: class_embeddings,
             ResultDict.EXAMPLES_CLASS_EMBS: src,

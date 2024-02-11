@@ -87,9 +87,7 @@ def get_batch_size(batch_tuple):
 def compose_loss_input(input_dict: dict, result_dict: dict):
     return {
         **result_dict,
-        BatchKeys.FLAG_BBOXES: input_dict[BatchKeys.FLAG_BBOXES],
-        BatchKeys.FLAG_MASKS: input_dict[BatchKeys.FLAG_MASKS],
-        BatchKeys.FLAG_POINTS: input_dict[BatchKeys.FLAG_POINTS],
+        BatchKeys.FLAG_EXAMPLES: input_dict[BatchKeys.FLAG_EXAMPLES],
     }
 
 

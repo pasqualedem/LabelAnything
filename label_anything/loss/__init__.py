@@ -78,9 +78,7 @@ class LabelAnythingLoss(nn.Module):
             self.weights[k]
             * loss(
                 result[ResultDict.EXAMPLES_CLASS_EMBS],
-                result[BatchKeys.FLAG_MASKS],
-                result[BatchKeys.FLAG_POINTS],
-                result[BatchKeys.FLAG_BBOXES],
+                result[BatchKeys.FLAG_EXAMPLES],
             )
             for k, loss in self.prompt_components.items()
         )

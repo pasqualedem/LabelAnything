@@ -179,6 +179,11 @@ class LabelAnythingDataset(Dataset):
         points = torch.stack([x[0] for x in points_flags])
         flag_points = torch.stack([x[1] for x in points_flags])
 
+        # flag examples
+        flag_examples = torch.stack(
+            [utils.collate_example_flags(x["flag_examples"], max_classes) for x in batched_input]
+        )
+
         # aux gts
         classes = [x["classes"] for x in batched_input]
 
@@ -206,6 +211,7 @@ class LabelAnythingDataset(Dataset):
             "flag_bboxes": flag_bboxes,
             "prompt_masks": masks,
             "flag_masks": flag_masks,
+            "flag_examples": flag_examples,
             "dims": dims,
             "classes": classes,
             "image_ids": image_ids,
@@ -249,12 +255,12 @@ def get_batch_metadata(
         val for tup in zip(*[batch_sizes for i in range(num_processes)]) for val in tup
     ]
     examples_nums = [
-        val for tup in zip(*[examples_nums for i in range(num_processes)])
+        val
+        for tup in zip(*[examples_nums for i in range(num_processes)])
         for val in tup
     ]
     prompt_types = [
-        val for tup in zip(*[prompt_types for i in range(num_processes)])
-        for val in tup
+        val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
     ]
     batch_metadata = {
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,

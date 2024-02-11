@@ -53,8 +53,8 @@ parameters:
       step_moment: [epoch]
       patience: [0]
       # warmup_steps: [2500] 
-    substitute: [True]
-    accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    substitute: [False]
+    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
@@ -115,7 +115,7 @@ parameters:
   dataloader:
     batch_size: [1]
     num_workers: [0]
-    possible_batch_example_nums: [[[1,1]]]
+    possible_batch_example_nums: [[[2,2]]]
     prompt_types: [[bbox, point, mask]]
     num_steps: [10]
 

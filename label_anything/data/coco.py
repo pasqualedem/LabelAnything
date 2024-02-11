@@ -28,6 +28,7 @@ from label_anything.data.utils import (
     BatchKeys,
     BatchMetadataKeys,
     PromptType,
+    flags_merge,
 )
 from label_anything.data.test import LabelAnythingTestDataset
 
@@ -576,6 +577,8 @@ class CocoLVISDataset(Dataset):
                 if cat_id == -1:
                     continue
                 ground_truths[ground_truths_copy == cat_id] = i
+                
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         data_dict = {
             image_key: images,
@@ -585,6 +588,7 @@ class CocoLVISDataset(Dataset):
             BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.PROMPT_BBOXES: bboxes,
             BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.DIMS: dims,
             BatchKeys.CLASSES: classes,
             BatchKeys.IMAGE_IDS: image_ids,
