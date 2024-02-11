@@ -115,6 +115,7 @@ def plot_segs(input, seg, gt, colors, dims):
 IMG_DIR = "/ext/stalla/LabelAnything/images/train2017"
 ANNOTATIONS_DIR = "data/annotations/instances_val2017.json"
 EMBEDDINGS_DIR = "/ext/stalla/LabelAnything/embeddings"
+MAX_EXAMPLES = 30
 
 
 preprocess = Compose([CustomResize(1024), PILToTensor(), CustomNormalize()])
@@ -182,6 +183,14 @@ def show_image(idx, coco_dataset):
     st.write(
         f"Chosen classes: {[coco_dataset.categories[cat]['name'] for cat in chosen_classes]}"
     )
+    if "chosen_classes" not in st.session_state:
+        st.session_state["chosen_classes"] = chosen_classes
+    elif st.session_state["chosen_classes"] != chosen_classes:
+        st.session_state["chosen_classes"] = chosen_classes
+        st.session_state["batch"] = (None, None, None)
+        st.session_state["result"] = None
+        st.session_state["examples"] = None
+
     return base_image_data, img_cats, chosen_classes
 
 
@@ -196,10 +205,12 @@ def generate_examples(
     )
 
     cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+    st.session_state["named_classes"] = ["background"] + [
+        coco_dataset.categories[cat]["name"] for cat in cat_ids
+    ]
     cat_ids.insert(0, -1)  # add the background class
 
     images, image_key, ground_truths = coco_dataset._get_images_or_embeddings(image_ids)
-
     pil_images = [get_image(image) for image in images][1:]
     st.session_state["examples"] = {
         "images": images,
@@ -293,6 +304,9 @@ def plot_embeddings(examples_class_embeddings, example_flags):
     b, n, c, _ = examples_class_embeddings.shape
     n_example = np.repeat(np.arange(c), repeats=n)
     n_class = np.tile(np.arange(c), n)
+    class_names = st.session_state["named_classes"]
+    n_class = [class_names[i] for i in n_class]
+    st.write(f"Class names: {class_names}")
     valid = example_flags.flatten().cpu().numpy() * 10 + 1
     df = pd.DataFrame(
         {
@@ -304,14 +318,15 @@ def plot_embeddings(examples_class_embeddings, example_flags):
         }
     )
     df["class"] = df["class"].astype("str")
+    plot_colors = ["white"] + text_colors
     scatter_plot = px.scatter(
         df,
         x="x",
         y="y",
         color="class",
         symbol="example",
-        size="valid", 
-        color_discrete_sequence=text_colors,
+        size="valid",
+        color_discrete_sequence=plot_colors,
     )
 
     st.plotly_chart(scatter_plot)
@@ -337,7 +352,7 @@ def main():
     st.title("Label Anything")
     st.sidebar.title("Settings")
     accelerator = Accelerator()
-    # uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg"]) 
+    # uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg"])
     dataset = get_data(_accelerator=accelerator)
     coco = dataset.dataset.datasets["coco"]
     with st.sidebar:
@@ -346,36 +361,37 @@ def main():
         model = load_model(accelerator, run_id).model  # WrapperModule
         datalaoder = get_data(accelerator)
         image_idx = st.slider("Image index", 0, len(dataset) - 1, 0)
-        num_examples = st.slider("Number of examples", 1, 10, 1)
+        num_examples = st.slider("Number of examples", 1, MAX_EXAMPLES, 1)
         prompt_types = get_prompt_types()
     base_image_data, img_cats, chosen_classes = show_image(image_idx, coco)
     if st.button("Generate Examples"):
         generate_examples(coco, base_image_data, img_cats, chosen_classes, num_examples)
-    pil_images = st.session_state.get("examples", {}).get("pil_images", [])
-    aux_cat_ids = st.session_state.get("examples", {}).get("aux_cat_ids", [])
-    if pil_images:
-        cols = st.columns(len(pil_images))
-        for i, pil_image in enumerate(pil_images):
-            cats = [coco.categories[cat]["name"] for cat in aux_cat_ids[i]]
-            cols[i].image(pil_image, caption=f"{cats}", use_column_width=True)
-    if st.button("Generate prompts"):
-        generate_prompts(accelerator, datalaoder.dataset, coco, prompt_types)
-    plot_prompts()
-    batch, gt, dataset_name = st.session_state.get("batch", (None, None, None))
-    if batch is not None:
-        embeddings_name = get_embeddings_names(batch, EMBEDDINGS_DIR)
-        st.write(f"Needed embeddings")
-        st.code(embeddings_name)
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Load embeddings"):
-                batch = set_embeddings(accelerator, batch, EMBEDDINGS_DIR)
-                batch = to_device(batch, accelerator.device)
-        with col2:
-            if st.button("Predict"):
-                get_result(model, batch, gt)
-        if st.session_state.get("result", None) is not None:
-            plot_results()
+    if st.session_state.get("examples", None) is not None:
+        pil_images = st.session_state.get("examples", {}).get("pil_images", [])
+        aux_cat_ids = st.session_state.get("examples", {}).get("aux_cat_ids", [])
+        if pil_images:
+            cols = st.columns(len(pil_images))
+            for i, pil_image in enumerate(pil_images):
+                cats = [coco.categories[cat]["name"] for cat in aux_cat_ids[i]]
+                cols[i].image(pil_image, caption=f"{cats}", use_column_width=True)
+        if st.button("Generate prompts"):
+            generate_prompts(accelerator, datalaoder.dataset, coco, prompt_types)
+        plot_prompts()
+        batch, gt, dataset_name = st.session_state.get("batch", (None, None, None))
+        if batch is not None:
+            embeddings_name = get_embeddings_names(batch, EMBEDDINGS_DIR)
+            st.write(f"Needed embeddings")
+            st.code(embeddings_name)
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Load embeddings"):
+                    batch = set_embeddings(accelerator, batch, EMBEDDINGS_DIR)
+                    batch = to_device(batch, accelerator.device)
+            with col2:
+                if st.button("Predict"):
+                    get_result(model, batch, gt)
+            if st.session_state.get("result", None) is not None:
+                plot_results()
 
     # load image
     # image_placeholder = row[0].empty()

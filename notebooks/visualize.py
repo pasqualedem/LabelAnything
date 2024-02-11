@@ -19,14 +19,14 @@ from label_anything.experiment.utils import WrapperModule
 
 
 colors = [
-    # yellow
-    (255, 255, 0),
+    # blue
+    (0, 0, 255),
     # red
     (255, 0, 0),
     # green
     (0, 255, 0),
-    # blue
-    (0, 0, 255),
+    # yellow
+    (255, 255, 0),
     # purple
     (255, 0, 255),
     # cyan
@@ -40,7 +40,9 @@ colors = [
     # grey
     (128, 128, 128),
     # black
-    (0, 0, 0)
+    (0, 0, 0),
+    # white
+    (255, 255, 255),
 ]
 
 text_colors = [
@@ -54,7 +56,8 @@ text_colors = [
     "pink",
     "brown",
     "grey",
-    "black"
+    "black",
+    "white",
 ]
 
 def to_device(batch, device):
