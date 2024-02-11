@@ -13,17 +13,20 @@ import cv2
 
 from label_anything.data import utils
 from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys, flags_merge
+from accelerate import Accelerator
+
+from label_anything.experiment.utils import WrapperModule
 
 
 colors = [
-    # yellow
-    (255, 255, 0),
+    # blue
+    (0, 0, 255),
     # red
     (255, 0, 0),
     # green
     (0, 255, 0),
-    # blue
-    (0, 0, 255),
+    # yellow
+    (255, 255, 0),
     # purple
     (255, 0, 255),
     # cyan
@@ -37,7 +40,9 @@ colors = [
     # grey
     (128, 128, 128),
     # black
-    (0, 0, 0)
+    (0, 0, 0),
+    # white
+    (255, 255, 255),
 ]
 
 text_colors = [
@@ -51,7 +56,8 @@ text_colors = [
     "pink",
     "brown",
     "grey",
-    "black"
+    "black",
+    "white",
 ]
 
 def to_device(batch, device):
@@ -164,7 +170,7 @@ def draw_boxes(img: Image, boxes: torch.Tensor, colors):
     return img
 
 
-def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
+def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes, dims=None):
     resized_image = resize(img.copy(), seg.shape[-2:])
     masked_image = resized_image.copy()
     for i in range(1, num_classes):
@@ -225,7 +231,7 @@ def plot_all(dataset, batch, colors):
     plot_images(images, unbatched["classes"], dataset.categories["coco"])
     
     
-def plot_segs(input, seg, gt, colors):
+def plot_segs(input, seg, gt, colors, dims):
     num_classes = len(input['classes'][0][0]) + 1
     image = get_image(input['images'][0, 0])
     segmask = draw_seg(
@@ -264,21 +270,25 @@ def plot_segs(input, seg, gt, colors):
         subplots[1].flatten()[i].imshow(plot)
         subplots[1].flatten()[i].set_title(title)
         subplots[1].flatten()[i].axis("off")
+    return plots, titles
         
         
 def resize_ground_truth(ground_truth, dims):
     return ground_truth[:dims[0], :dims[1]]
 
 
-def load_checkpoint(accelerator, run_id):
+def load_checkpoint(accelerator: Accelerator, run_id):
     api = wandb.Api()
     run = api.run(f"cilabuniba/LabelAnything/{run_id}")
     files = run.files()
     model_file = None
     for file in files:
         if "model" in file.name and "latest" in file.name:
-            model_file = file.download(replace=True)
-    accelerator.load_state("best")
+            folder, file_name = file.name.split("/")
+            if file_name == "pytorch_model.bin":
+                print(file.name)
+                model_file = file.download(replace=True)
+    return accelerator.load_state("latest", strict=False)
     
     
 def get_embeddings_names(batch, embeddings_dir):
@@ -287,7 +297,9 @@ def get_embeddings_names(batch, embeddings_dir):
     flattened = [item for sublist in z_filled for item in sublist]
     # filter embeddings already present in EMBEDDINGS_DIR
     filtered = [item for item in flattened if not Path(f"{embeddings_dir}/{item}.safetensors").exists()]
-    print(" ".join(filtered))
+    names = " ".join(filtered)
+    print(names)
+    return names
     
     
 def set_embeddings(accelerator, batch, embeddings_dir):
@@ -302,17 +314,24 @@ def set_embeddings(accelerator, batch, embeddings_dir):
     return batch
 
 
-def plot_emebddings(examples_class_embeddings, example_flags, text_colors):
+def reduce_embeddings(examples_class_embeddings):
     b, n, c, d = examples_class_embeddings.shape
     embeddings = rearrange(examples_class_embeddings, 'b n c d -> (b n c) d')
-    flags = rearrange(example_flags, 'b n c -> (b n c)')
 
     # Perform t-SNE dimensionality reduction
-    tsne = TSNE(n_components=2, perplexity=5, n_iter=300)
+    perplexity = min(10, n*c - 1)
+    tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=300)
     embeddings_2d = tsne.fit_transform(embeddings.detach().cpu().numpy())
+    return embeddings_2d
+
+
+def plot_emebddings(examples_class_embeddings, example_flags, text_colors):
+    b, n, c, d = examples_class_embeddings.shape
+    embeddings_2d = reduce_embeddings(examples_class_embeddings)
+    flags = rearrange(example_flags, 'b n c -> (b n c)')
 
     # Plot the 2D embeddings grouped per class
-    plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(8, 8))
     for i in range(n):
         for j in range(c):
             x, y = embeddings_2d[i * c + j]
@@ -327,9 +346,6 @@ def plot_emebddings(examples_class_embeddings, example_flags, text_colors):
                 plt.text(x, y, f"{i}-{j}", fontsize=12, color='red')
 
 
-    plt.title('t-SNE Visualization of Embeddings')
-    plt.show()
-
-
-    plt.title('t-SNE Visualization of Embeddings')
-    plt.show()
+    fig.suptitle('t-SNE Visualization of Embeddings')
+    fig.show()
+    return fig
