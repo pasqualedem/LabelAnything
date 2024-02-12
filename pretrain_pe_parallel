@@ -2,7 +2,7 @@
 
 #SBATCH -A IscrC_PENELOPE
 #SBATCH -p boost_usr_prod
-#SBATCH --qos boost_qos_dbg
+#SBATCH --qos normal
 #SBATCH --time=24:00:00
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
