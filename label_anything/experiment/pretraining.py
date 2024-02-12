@@ -43,7 +43,7 @@ def train(
                         optimizer.zero_grad()
             if phase == 'val' and accelerator.is_main_process:
                 accelerator.print('In')
-                cumulated_loss = accelerator.gather(cumulated_loss).mean().cpu().item()
+                cumulated_loss = accelerator.gather(cumulated_loss)#.mean().cpu().item()
                 accelerator.print('After the calculation')
         #         accelerator.print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
         #         early_stop(cumulated_loss, accelerator)
