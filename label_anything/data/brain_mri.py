@@ -7,10 +7,12 @@ import json
 import torch
 from torchvision import transforms
 from pycocotools import mask as mask_utils
+from torch.nn.functional import one_hot
 
 
 class BrainMriTestDataset(LabelAnythingTestDataset):
-    num_classes = 1
+    num_classes = 2
+
     def __init__(
         self,
         annotations: str,
@@ -41,22 +43,28 @@ class BrainMriTestDataset(LabelAnythingTestDataset):
             img for img, cat_id in self.image_to_category.items() if cat_id == 1
         ]
         selected_images = random.sample(cat_images, min(5, len(cat_images)))
+
+        # Get image data
         image_data = [self._get_image_by_id(image_id) for image_id in selected_images]
+        masks = [self._get_gt_by_id(image_id) for image_id in selected_images]
         images, sizes = zip(*image_data)
         images = torch.stack(images)
         sizes = torch.stack(sizes)
-
-        gt_data = [self._get_gt_by_id(image_id) for image_id in selected_images]
-        masks, _ = zip(*gt_data)
         masks = torch.stack(masks)
-        flag_masks = torch.tensor([1 if torch.sum(mask) > 0 else 0 for mask in masks])
 
-        return {
+        # Create flag masks
+        backflag = torch.zeros(masks.shape[0])
+        contain_tumor = (masks == 1).sum(dim=(1, 2)) > 0
+        flag_masks = torch.stack([backflag, contain_tumor]).T
+        masks = one_hot(masks.long(), 2).permute(0, 3, 1, 2).float()
+
+        prompt_dict = {
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
             BatchKeys.DIMS: sizes,
         }
+        return prompt_dict
 
     def _get_image_by_id(self, image_id):
         for image in self.annotations["images"]:
@@ -74,19 +82,18 @@ class BrainMriTestDataset(LabelAnythingTestDataset):
         size = img.size
         if self.preprocess:
             img = self.preprocess(img)  # 3 x h x w
-        return img, torch.tensor(size)
+        return img, torch.tensor(size).unsqueeze(0)
 
     def _get_gt(self, annotation_info):
-        mask = Image.fromarray(mask_utils.decode(annotation_info["segmentation"]))
+        gt = mask_utils.decode(annotation_info["segmentation"])
         if self.preprocess:
-            mask = self.preprocess(mask)
-        return mask, torch.tensor(annotation_info["bbox"])
+            gt = torch.from_numpy(gt)
+        return gt.long()
 
     def __getitem__(self, idx):
         image_info = self.annotations["images"][idx]
         annotation_info = self.annotations["annotations"][idx]
-        image, _ = self._get_image(image_info)
-        size = torch.tensor(image.shape[1:]).unsqueeze(0)  # Example dimension
+        image, size = self._get_image(image_info)
         gt = self._get_gt(annotation_info)
         return {
             BatchKeys.IMAGES: image,
