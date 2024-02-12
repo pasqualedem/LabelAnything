@@ -38,7 +38,7 @@ def train(
                     loss = criterion(prompt_proj, clip_proj, label)
                     cumulated_loss = cumulated_loss + loss
                     if phase == 'train':
-                        accelerator.backward()
+                        accelerator.backward(loss)
                         optimizer.step()
                         optimizer.zero_grad()
             if phase == 'val' and accelerator.is_main_process:
