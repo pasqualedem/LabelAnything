@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_PENELOPE
+#SBATCH -p boost_usr_prod
+#SBATCH --qos normal
+#SBATCH --time 24:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --mem=123000
+#SBATCH --job-name=run
+#SBATCH --out=out/run.log
+#SBATCH --err=out/run.log
+
+srun ./launch_run_single_exe $1

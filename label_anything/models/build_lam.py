@@ -55,7 +55,6 @@ def _build_lam(
     prompt_embed_dim=256,
     image_size=1024,
     vit_patch_size=16,
-    example_attention=False,
     class_attention=False,
     spatial_convs=None,
 ):
@@ -71,7 +70,6 @@ def _build_lam(
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
-            example_attention=example_attention,
             class_attention=class_attention,
             transformer=TwoWayTransformer(
                 depth=2,

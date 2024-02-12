@@ -50,11 +50,39 @@ class BatchKeys(StrEnum):
     FLAG_POINTS = "flag_points"
     PROMPT_BBOXES = "prompt_bboxes"
     FLAG_BBOXES = "flag_bboxes"
+    FLAG_EXAMPLES = "flag_examples"
     DIMS = "dims"
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
     CLIP_EMBEDDINGS = "clip_embeddings"
+    
+    
+class BatchMetadataKeys(StrEnum):
+    PROMPT_TYPES = "prompt_types"
+    NUM_EXAMPLES = "num_examples"
+    
+    
+def flags_merge(flag_masks: torch.Tensor, flag_points: torch.Tensor, flag_bboxes: torch.Tensor) -> torch.Tensor:
+    """
+    Merges the flags of the prompt masks, points and bboxes into a single tensor.
+
+    Args:
+        flag_masks (torch.Tensor): tensor of shape M x C, in which each element indicates whether the prompt mask is real
+                                   or a padding one.
+        flag_points (torch.Tensor): tensor of shape M x C x N, in which each element indicates whether the prompt point is
+                                    real or a padding one.
+        flag_bboxes (torch.Tensor): tensor of shape M x C x N, in which each element indicates whether the prompt bbox is
+                                    real or a padding one.
+
+    Returns:
+        torch.Tensor: tensor of shape M x C, in which each element indicates whether the example is real or a padding one.
+    """
+    flag_examples = torch.logical_or(flag_masks, flag_points.any(dim=-1))
+    flag_examples = torch.logical_or(flag_examples, flag_bboxes.any(dim=-1))
+    # Put BG class to 1
+    flag_examples[:, 0] = 1
+    return flag_examples
 
 
 def cast_type(input, dtype) -> dict:
@@ -263,6 +291,21 @@ def collate_coords(
     out_coords[:, :c, :n, :] = coords
     out_flag[:, :c, :n] = flag
     return out_coords, out_flag
+
+
+def collate_example_flags(example_flags: torch.Tensor, num_classes: int) -> torch.Tensor:
+    """
+    Rearranges the flags tensor for a single query image, according to the classes present in the whole batch.
+
+    Arguments:
+        example_flags: tensor of shape M x C_old, in which each element indicates whether the example is real or a
+                       padding one.
+        num_classes: number of classes present in the whole batch.
+    """
+    m, c = example_flags.shape
+    out = torch.zeros(size=(m, num_classes), dtype=example_flags.dtype)
+    out[:, :c] = example_flags
+    return out
 
 
 def collate_gts(gt, dims):

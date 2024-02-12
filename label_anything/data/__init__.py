@@ -8,6 +8,7 @@ from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
 from label_anything.data.dram import DramTestDataset
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.data.weedmap import WeedMapTestDataset
+from label_anything.data.brain_mri import BrainMriTestDataset
 
 
 TEST_DATASETS = {
@@ -15,6 +16,7 @@ TEST_DATASETS = {
     "test_lvis": CocoLVISTestDataset,
     "test_weedmap": WeedMapTestDataset,
     "test_dram": DramTestDataset,
+    "test_brain": BrainMriTestDataset,
 }
 
 
@@ -28,6 +30,8 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     val_possible_batch_example_nums = dataloader_args.pop(
         "val_possible_batch_example_nums", possible_batch_example_nums
     )
+    prompt_types = dataloader_args.pop("prompt_types", None)
+    val_prompt_types = dataloader_args.pop("val_prompt_types", prompt_types)
     num_steps = dataloader_args.pop("num_steps", None)
 
     val_datasets_params = {
@@ -50,6 +54,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         train_dataset,
         possible_batch_example_nums=possible_batch_example_nums,
         num_processes=num_processes,
+        prompt_types=prompt_types,
         shuffle=True,
         num_steps=num_steps,
     )
@@ -68,6 +73,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
             val_dataset,
             possible_batch_example_nums=val_possible_batch_example_nums,
             num_processes=num_processes,
+            prompt_types=val_prompt_types,
         )
         val_dataloader = DataLoader(
             dataset=val_dataset,

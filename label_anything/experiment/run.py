@@ -99,12 +99,14 @@ class Run:
         kwargs = [
             DistributedDataParallelKwargs(find_unused_parameters=True),
         ]
+        logger.info("Creating Accelerator")
         self.accelerator = Accelerator(
             even_batches=False,
             kwargs_handlers=kwargs,
             split_batches=False,
             mixed_precision=self.train_params.get("precision", None),
         )
+        logger.info("Initiliazing tracker...")
         self.plat_logger = get_experiment_logger(self.accelerator, self.params)
         self.url = self.plat_logger.url
         self.name = self.plat_logger.name
@@ -114,16 +116,16 @@ class Run:
             self.accelerator.num_processes,
         )
         model_name = self.model_params.pop("name")
+        logger.info(f"Creating model {model_name}")
         self.model = model_registry[model_name](**self.model_params)
 
         self.watch_metric = self.train_params["watch_metric"]
-
-    def launch(self):
-        logger.info("Start training loop...")
-
+        
+        logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
 
+        logger.info("Creating optimizer")
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
             lr=self.train_params["initial_lr"],
@@ -138,9 +140,11 @@ class Run:
                 * len(self.train_loader),
             )
 
-        if self.train_params.get("compile", False):
-            self.model = torch.compile(self.model)
 
+        if self.train_params.get("compile", False):
+            logger.info("Compiling model")
+            self.model = torch.compile(self.model)
+        logger.info("Preparing model, optimizer, dataloaders and scheduler")
         (
             self.model,
             self.optimizer,
@@ -150,10 +154,14 @@ class Run:
             self.model, self.optimizer, self.train_loader, self.scheduler
         )
         if self.val_loader:
+            logger.info("Preparing validation dataloader")
             self.val_loader = self.accelerator.prepare(self.val_loader)
 
         if self.plat_logger.accelerator_state_dir:
             self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+
+    def launch(self):
+        logger.info("Start training loop...")
 
         # Train the Model
         with self.plat_logger.train():
@@ -175,14 +183,8 @@ class Run:
                 self.save_training_state(epoch, metrics)
 
         if self.test_loader:
-            with self.plat_logger.test():
-                for dataloader in self.test_loader:
-                    dataloader = self.accelerator.prepare(dataloader)
-                    self.test(dataloader=dataloader)
-
-        logger.info("Ending run")
-        self.plat_logger.end()
-        logger.info("Run ended")
+            self.test()
+        self.end()
 
     def save_training_state(self, epoch, metrics=None):
         if metrics:
@@ -199,9 +201,14 @@ class Run:
     def _get_lr(self):
         if self.scheduler is None:
             return self.train_params["initial_lr"]
-        if hasattr(self.scheduler, "get_lr"):
-            return self.scheduler.get_lr()[0]
-        return self.scheduler.optimizer.param_groups[0]["lr"]
+        try:
+            if hasattr(self.scheduler, "get_lr"):
+                return self.scheduler.get_lr()[0]
+        except NotImplementedError:
+            pass
+        if hasattr(self.scheduler, "optimizer"):
+            return self.scheduler.optimizer.param_groups[0]["lr"]
+        return self.scheduler.optimizers[0].param_groups[0]["lr"]
 
     def _scheduler_step(self, moment, metrics=None):
         if moment != self.scheduler_step_moment or self.scheduler is None:
@@ -264,7 +271,8 @@ class Run:
         gt: torch.tensor,
         tot_steps: int,
     ):
-        metrics_dict = metrics(preds, gt)
+        with self.accelerator.no_sync(model=metrics):
+            metrics_dict = metrics(preds, gt)
         if tot_steps % self.plat_logger.log_frequency == 0:
             for metric_name, metric_value in metrics_dict.items():
                 metric_value = torch.mean(self.accelerator.gather(metric_value))
@@ -333,7 +341,7 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics.to(self.accelerator.device)
+        metrics = self.accelerator.prepare(metrics)
         loss_avg = RunningAverage()
 
         # prepare substitutor
@@ -466,7 +474,7 @@ class Run:
             },
             prefix="batch_",
         )
-        metrics.to(self.accelerator.device)
+        metrics = self.accelerator.prepare(metrics)
 
         tot_steps = 0
         tot_images = 0
@@ -540,7 +548,13 @@ class Run:
         logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
         return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
 
-    def test(self, dataloader):
+    def test(self):
+        with self.plat_logger.test():
+            for dataloader in self.test_loader:
+                dataloader = self.accelerator.prepare(dataloader)
+                self.test_dataset(dataloader=dataloader)
+
+    def test_dataset(self, dataloader):
         self.model.eval()
         total_loss = 0
         metrics = MetricCollection(
@@ -591,6 +605,10 @@ class Run:
                 logger.info(f"Test - {k}: {v}")
             logger.info(f"Test - Loss: {total_loss}")
 
+    def end(self):
+        logger.info("Ending run")
+        self.plat_logger.end()
+        logger.info("Run ended")
 
 class ParallelRun:
     slurm_command = "sbatch"

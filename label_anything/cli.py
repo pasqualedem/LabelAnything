@@ -3,8 +3,9 @@ from label_anything.preprocess import (
     preprocess_images_to_embeddings,
     generate_ground_truths,
 )
-from label_anything.experiment.experiment import experiment as run_experiment, run as run_single
 from label_anything.preprocess_clip import main as exe_clip_preprocess
+from label_anything.experiment.experiment import experiment as run_experiment, run as run_single, test as test_fn
+
 import click
 from label_anything.experiment.pretraining import main as exe_pretrain_pe
 
@@ -34,6 +35,11 @@ def experiment(parameters, parallel, only_create):
 )
 def run(parameters):
         run_single(param_path=parameters)
+        
+@main.command("test")
+@click.option("--parameters", default="test.yaml")
+def test(parameters):
+    test_fn(param_path=parameters)
 
 
 @main.command("preprocess")

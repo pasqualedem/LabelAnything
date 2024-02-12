@@ -23,7 +23,13 @@ from label_anything.data.transforms import (
     CustomResize,
     PromptsProcessor,
 )
-from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
+from label_anything.data.utils import (
+    AnnFileKeys,
+    BatchKeys,
+    BatchMetadataKeys,
+    PromptType,
+    flags_merge,
+)
 from label_anything.data.test import LabelAnythingTestDataset
 
 warnings.filterwarnings("ignore")
@@ -45,11 +51,6 @@ class CocoLVISDataset(Dataset):
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
-        prompt_types: list[PromptType] = [
-            PromptType.BBOX,
-            PromptType.MASK,
-            PromptType.POINT,
-        ],
         dtype=torch.float32,
     ):
         """Initialize the dataset.
@@ -77,7 +78,6 @@ class CocoLVISDataset(Dataset):
         assert (
             not load_gts or emb_dir is not None
         ), "If load_gts is True, emb_dir must be provided."
-        assert len(prompt_types) > 0, "prompt_types must be a non-empty list."
 
         self.name = name
         self.instances_path = instances_path
@@ -89,7 +89,6 @@ class CocoLVISDataset(Dataset):
         self.max_points_annotations = max_points_annotations
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
-        self.prompt_types = prompt_types
 
         # seeds
         self.reset_seed(seed)
@@ -233,9 +232,7 @@ class CocoLVISDataset(Dataset):
             PIL.Image: The loaded image.
         """
         if self.img_dir is not None:
-            return Image.open(
-                f'{self.img_dir}/{img_data["file_name"]}'
-            ).convert("RGB")
+            return Image.open(f'{self.img_dir}/{img_data["file_name"]}').convert("RGB")
         return Image.open(BytesIO(requests.get(img_data["coco_url"]).content)).convert(
             "RGB"
         )
@@ -312,13 +309,14 @@ class CocoLVISDataset(Dataset):
         )
 
     def _get_prompts(
-        self, image_ids: list, cat_ids: list
+        self, image_ids: list, cat_ids: list, possible_prompt_types: list[PromptType]
     ) -> (list, list, list, list, list):
         """Get the annotations for the chosen examples.
 
         Args:
             image_ids (list): A list of image ids of the examples.
             cat_ids (list): A list of sets of category ids of the examples.
+            possible_prompt_types (list[PromptType]): A list of possible prompt types to be sampled.
 
         Returns:
             (list, list, list, list, list): Returns five lists:
@@ -351,7 +349,7 @@ class CocoLVISDataset(Dataset):
                 if n_ann > self.max_points_annotations:
                     prompt_types = [PromptType.MASK] * n_ann
                 else:
-                    prompt_types = self.rng.choices(self.prompt_types, k=n_ann)
+                    prompt_types = self.rng.choices(possible_prompt_types, k=n_ann)
 
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
@@ -433,7 +431,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             list[torch.Tensor]: A list of tensors containing the ground truths (per image).
         """
-        ground_truths = [dict() for _ in range (len(image_ids))]
+        ground_truths = [dict() for _ in range(len(image_ids))]
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
@@ -520,16 +518,20 @@ class CocoLVISDataset(Dataset):
 
         return tensor, flag
 
-    def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
+    def __getitem__(self, idx_metadata: tuple[int, int]) -> dict:
         """Get an item from the dataset.
 
         Args:
-            idx_num_examples (tuple[int, int]): A tuple containing the index of the image and the number of examples to be chosen.
+            idx_metadata (tuple[int, dict]): A tuple containing the index of the image and the batch level metadata e.g. number of examples to be chosen and type of prompts.
 
         Returns:
             dict: A dictionary containing the data.
         """
-        idx, num_examples = idx_num_examples
+        idx, batch_metadata = idx_metadata
+
+        num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
+        possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
+
         base_image_data = self.images[self.image_ids[idx]]
         image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
         cat_ids = list(set(itertools.chain(*aux_cat_ids)))
@@ -540,7 +542,7 @@ class CocoLVISDataset(Dataset):
 
         # create the prompt dicts
         bboxes, masks, points, classes, img_sizes = self._get_prompts(
-            image_ids, cat_ids
+            image_ids, cat_ids, possible_prompt_types
         )
 
         # obtain padded tensors
@@ -575,6 +577,8 @@ class CocoLVISDataset(Dataset):
                 if cat_id == -1:
                     continue
                 ground_truths[ground_truths_copy == cat_id] = i
+                
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         data_dict = {
             image_key: images,
@@ -584,6 +588,7 @@ class CocoLVISDataset(Dataset):
             BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.PROMPT_BBOXES: bboxes,
             BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.DIMS: dims,
             BatchKeys.CLASSES: classes,
             BatchKeys.IMAGE_IDS: image_ids,
@@ -622,7 +627,9 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
         )
         LabelAnythingTestDataset.__init__()
         self.num_classes = len(list(self.cat2img.keys()))
-        self.support_dataset = CocoLVISDataset(preprocess=preprocess, **support_params),
+        self.support_dataset = (
+            CocoLVISDataset(preprocess=preprocess, **support_params),
+        )
 
     def _extract_examples(self, cat2img: dict, img2cat: dict) -> list[int]:
         prompt_images = set()
@@ -658,7 +665,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
         img2cat = self.support_dataset.img2cat
         img2cat_annotations = self.support_dataset.img2cat_annotations
         images = self.support_dataset.images
-        
+
         image_ids = self._extract_examples(cat2img, img2cat)
         prompt_images = [images[x] for x in image_ids]
 

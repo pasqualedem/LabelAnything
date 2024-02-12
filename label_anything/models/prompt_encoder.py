@@ -243,7 +243,6 @@ class PromptImageEncoder(PromptEncoder):
         transformer: nn.Module,
         class_example_attention: bool = True,
         class_attention: bool = False,
-        example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
     ) -> None:
         """
@@ -282,15 +281,6 @@ class PromptImageEncoder(PromptEncoder):
             1, embed_dim
         )  # For when no sparse embeddings in input
 
-        self.example_attention = None
-        if example_attention:
-            self.example_attention = AttentionMLPBlock(
-                embed_dim=embed_dim,
-                num_heads=num_heads,
-                downsample_rate=attention_downsample_rate,
-                mlp_dim=mlp_dim,
-                act=activation,
-            )
         self.class_attention = None
         if class_attention:
             self.class_attention = AttentionMLPBlock(
@@ -514,6 +504,7 @@ class PromptImageEncoder(PromptEncoder):
         points: Optional[Tuple[torch.Tensor, torch.Tensor]],
         boxes: Optional[torch.Tensor],
         masks: Optional[torch.Tensor],
+        flag_examples: Optional[torch.Tensor],
         chunk_size=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -525,6 +516,7 @@ class PromptImageEncoder(PromptEncoder):
             and labels to embed (B, M, C, 2)
           boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
           masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+          flag_examples (torch.Tensor or none): flags to indicate which examples (B, M, C)
 
         Returns:
           torch.Tensor: sparse embeddings for the points and boxes, with shape
@@ -563,17 +555,14 @@ class PromptImageEncoder(PromptEncoder):
             src = self.class_example_attention(src)
             src = rearrange(src, "b (m c) d -> b m c d", c=c)
 
-        if self.example_attention is not None:
-            src = rearrange(src, "b m c d -> (b c) m d", c=c)
-            src = self.example_attention(src)
-            src = rearrange(src, "(b c) m d -> b m c d", c=c)
         if self.class_attention is not None:
             src = rearrange(src, "b m c d -> (b m) c d", c=c)
             src = self.class_attention(src)
             src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
-        # Average over examples
-        class_embeddings = torch.mean(src, dim=1)  # (B, C, D)
+        # Average over examples removing padding embeddings
+        masked_src = src * flag_examples.unsqueeze(-1)
+        class_embeddings = masked_src.sum(dim=1) / flag_examples.sum(dim=1).unsqueeze(-1)
         return {
             ResultDict.CLASS_EMBS: class_embeddings,
             ResultDict.EXAMPLES_CLASS_EMBS: src,

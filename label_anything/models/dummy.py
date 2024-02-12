@@ -66,12 +66,12 @@ class Dummy(nn.Module):
             device = batched_input["prompt_points"].device
             class_example_embeddings = batched_input["prompt_points"].mean(dim=(3, 4)).unsqueeze(3)
             class_example_embeddings = class_example_embeddings @ self.param.weight
-        elif "prompt_bboxes" in batched_input:
+        elif "prompt_bboxes" in batched_input and batched_input["prompt_bboxes"].flatten().shape[0] > 0:
             b, m, c, n, _ = batched_input["prompt_bboxes"].shape
             device = batched_input["prompt_bboxes"].device
             class_example_embeddings = batched_input["prompt_bboxes"].mean(dim=(3, 4)).unsqueeze(3)
             class_example_embeddings = class_example_embeddings @ self.param.weight
-        elif "prompt_masks" in batched_input:
+        elif "prompt_masks" in batched_input and batched_input["prompt_masks"].flatten().shape[0] > 0:
             b, m, c, h, w = batched_input["prompt_masks"].shape
             device = batched_input["prompt_masks"].device
             class_example_embeddings = batched_input["prompt_masks"].mean(dim=(3, 4)).unsqueeze(3)
@@ -97,12 +97,12 @@ class Dummy(nn.Module):
             device = example_dict["prompt_points"].device
             class_example_embeddings = example_dict["prompt_points"].mean(dim=(3, 4)).unsqueeze(3)
             class_example_embeddings = class_example_embeddings @ self.param.weight
-        elif "prompt_bboxes" in example_dict:
+        elif "prompt_bboxes" in example_dict and example_dict["prompt_bboxes"].flatten().shape[0] > 0:
             b, m, c, n, _ = example_dict["prompt_bboxes"].shape
             device = example_dict["prompt_bboxes"].device
             class_example_embeddings = example_dict["prompt_bboxes"].mean(dim=(3, 4)).unsqueeze(3)
             class_example_embeddings = class_example_embeddings @ self.param.weight
-        elif "prompt_masks" in example_dict:
+        elif "prompt_masks" in example_dict and example_dict["prompt_masks"].flatten().shape[0] > 0:
             b, m, c, h, w = example_dict["prompt_masks"].shape
             device = example_dict["prompt_masks"].device
             class_example_embeddings = example_dict["prompt_masks"].mean(dim=(3, 4)).unsqueeze(3)
