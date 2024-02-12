@@ -17,8 +17,17 @@ class ContrastivePromptEncoder(torch.nn.Module):
         self.pe_in_channels = pe_in_channels
         self.clip_in_channels = clip_in_channels
         self.hidden_size = hidden_size
-        self.prompt_proj = torch.nn.Linear(self.pe_in_channels, self.hidden_size)
-        self.clip_proj = torch.nn.Linear(self.clip_in_channels, self.hidden_size)
+        self.prompt_proj = torch.nn.Sequential(
+            torch.nn.Linear(self.pe_in_channels, self.hidden_size),
+            torch.nn.LayerNorm(self.hidden_size),
+            torch.nn.Tanh(),
+        )
+
+        self.clip_proj = torch.nn.Sequential(
+            torch.nn.Linear(self.clip_in_channels, self.hidden_size),
+            torch.nn.LayerNorm(self.hidden_size),
+            torch.nn.Tanh(),
+        )
 
     def prepare_prompts(self, batched_input):
         if (
