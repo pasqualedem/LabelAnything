@@ -14,7 +14,6 @@ dataset:
     clip_emb_dir: &clip_emb_dir /leonardo_scratch/large/userexternal/rscaring/embeddings
     img_dir: &img_dir /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
     num_examples: &num_examples 8
-    seed: &seed 42
     do_subsample: False
     add_box_noise: True
     max_points_annotations: 50
@@ -27,7 +26,6 @@ dataset:
     clip_emb_dir: *clip_emb_dir
     num_examples: *num_examples
     img_dir: *img_dir
-    seed: *seed
     do_subsample: False
     add_box_noise: False
     max_points_annotations: 50

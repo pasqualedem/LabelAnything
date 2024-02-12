@@ -5,6 +5,7 @@ from typing import Optional
 from label_anything.data.utils import PromptType, BatchKeys
 import label_anything.data.utils as data_utils
 from safetensors.torch import load_file
+import random
 
 
 class PromptEncoderDataset(CocoLVISDataset):
@@ -19,15 +20,9 @@ class PromptEncoderDataset(CocoLVISDataset):
             max_points_per_annotation: int = 10,
             max_points_annotations: int = 50,
             preprocess=ToTensor(),
-            seed: int = 42,
             load_gts: bool = False,
             do_subsample: bool = True,
             add_box_noise: bool = True,
-            prompt_types: list[PromptType] = [
-                PromptType.BBOX,
-                PromptType.MASK,
-                PromptType.POINT,
-            ],
             dtype=torch.float32,
     ):
         super().__init__(
@@ -38,11 +33,9 @@ class PromptEncoderDataset(CocoLVISDataset):
             max_points_per_annotation=max_points_per_annotation,
             max_points_annotations=max_points_annotations,
             preprocess=preprocess,
-            seed=seed,
             load_gts=load_gts,
             do_subsample=do_subsample,
             add_box_noise=add_box_noise,
-            prompt_types=prompt_types,
             dtype=dtype,
         )
         self.clip_emb_dir = clip_emb_dir
@@ -56,14 +49,14 @@ class PromptEncoderDataset(CocoLVISDataset):
         # extract randon images for class class_id
         class_idx = list(self.categories.keys())[class_idx]
         cat_id = self.categories[class_idx].get('id')
-        img_ids = self.rng.choices(population=list(self.cat2img[cat_id]), k=self.n_images)
+        img_ids = random.choices(population=list(self.cat2img[cat_id]), k=self.n_images)
 
         # get base image data
         images, image_key, ground_truths = self._get_images_or_embeddings(img_ids)
 
         # load image prompts
         bboxes, masks, points, classes, img_sizes = self._get_prompts(
-            img_ids, [cat_id]
+            img_ids, [cat_id], possible_prompt_types=[PromptType.MASK, PromptType.BBOX, PromptType.POINT]
         )
         # obtain padded tensors
         bboxes, flag_bboxes = self.annotations_to_tensor(
