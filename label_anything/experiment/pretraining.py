@@ -42,9 +42,7 @@ def train(
                         optimizer.step()
                         optimizer.zero_grad()
             if phase == 'val':
-                accelerator.print('In')
                 cumulated_loss = accelerator.gather(cumulated_loss)
-                accelerator.print('After the calculation')
                 if accelerator.is_main_process:
                     cumulated_loss = cumulated_loss.cpu().mean().item()
                     accelerator.print(f'Epoch {epoch:04d}: Val loss: {cumulated_loss:.4f}')
@@ -56,8 +54,6 @@ def train(
         accelerator.wait_for_everyone()
         if accelerator.check_trigger():
             break
-        else:
-            accelerator.print('No trigger')
 
 
 def init_model(model_params: dict) -> dict:
