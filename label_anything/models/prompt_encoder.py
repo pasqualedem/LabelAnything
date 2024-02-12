@@ -561,8 +561,11 @@ class PromptImageEncoder(PromptEncoder):
             src = rearrange(src, "(b m) c d -> b m c d", m=m)
 
         # Average over examples removing padding embeddings
-        masked_src = src * flag_examples.unsqueeze(-1)
-        class_embeddings = masked_src.sum(dim=1) / flag_examples.sum(dim=1).unsqueeze(-1)
+        normalizer = flag_examples.unsqueeze(-1).clone().float()
+        masked_src = src * normalizer
+        normalizer[normalizer == 0] = 1 # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
+        
+        class_embeddings = masked_src.sum(dim=1) / normalizer.sum(dim=1)
         return {
             ResultDict.CLASS_EMBS: class_embeddings,
             ResultDict.EXAMPLES_CLASS_EMBS: src,
