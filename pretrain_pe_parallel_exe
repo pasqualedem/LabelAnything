@@ -1,0 +1,6 @@
+#!/bin/bash
+
+source .venv/bin/activate
+export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
+export CUDA_LAUNCH_BLOCKING=1
+accelerate launch --debug --multi_gpu --main_process_port 54345 main.py pretrain_pe $1

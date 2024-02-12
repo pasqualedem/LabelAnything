@@ -1,0 +1,13 @@
+model:
+  model_name: ViT-g-14
+  pretrained: laion2b_s34b_b88k
+dataset:
+  directory: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+dataloader:
+  num_workers: 16
+  batch_size: 128
+  shuffle: False
+  drop_last: False
+general:
+  out_dir: /leonardo_scratch/large/userexternal/rscaring/embeddings
+  device: cuda

@@ -55,6 +55,7 @@ class BatchKeys(StrEnum):
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
+    CLIP_EMBEDDINGS = "clip_embeddings"
     
     
 class BatchMetadataKeys(StrEnum):
@@ -321,6 +322,36 @@ def collate_batch_gts(gt, dims, fill_value=-100):
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
     return out
+
+
+def collate_class_masks(masks, flags, n_classes):
+    n_ex, _, h, w = masks[0].size()
+    out_mask = torch.zeros(n_ex * n_classes, n_classes, h, w, dtype=masks[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, dtype=flags[0].dtype)
+    for idx, (m, f) in enumerate(zip(masks, flags)):
+        out_mask[(idx*n_ex): ((idx + 1)*n_ex), idx, :, :] = m.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx] = f.squeeze(dim=1)
+    return out_mask.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
+
+
+def collate_class_bbox(bboxes, flags, n_classes, max_annotations):
+    n_ex = bboxes[0].size(0)
+    out_bbox = torch.zeros(n_ex * n_classes, n_classes, max_annotations, 4, dtype=bboxes[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, max_annotations, dtype=flags[0].dtype)
+    for idx, (b, f) in enumerate(zip(bboxes, flags)):
+        out_bbox[(idx*n_ex): ((idx + 1)*n_ex), idx, :b.size(2), :] = b.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx, :f.size(2)] = f.squeeze(dim=1)
+    return out_bbox.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
+
+
+def collate_class_points(points, flags, n_classes, max_annotations):
+    n_ex = points[0].size(0)
+    out_points = torch.zeros(n_ex * n_classes, n_classes, max_annotations, 2, dtype=points[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, max_annotations, dtype=points[0].dtype)
+    for idx, (p, f) in enumerate(zip(points, flags)):
+        out_points[(idx*n_ex): ((idx + 1)*n_ex), idx, :p.size(2), :] = p.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx, :f.size(2)] = f.squeeze(dim=1)
+    return out_points.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
 
 
 def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):
