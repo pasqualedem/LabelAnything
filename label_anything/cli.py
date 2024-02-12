@@ -2,6 +2,7 @@ import comet_ml
 from label_anything.preprocess import (
     preprocess_images_to_embeddings,
     generate_ground_truths,
+    rename_coco20i_json
 )
 from label_anything.preprocess_clip import main as exe_clip_preprocess
 from label_anything.experiment.experiment import experiment as run_experiment, run as run_single, test as test_fn
@@ -185,3 +186,13 @@ def preprocess_clip(parameters):
 )
 def pretrain_pe(parameters):
     exe_pretrain_pe(parameters)
+
+
+@main.command("rename_coco20i_json")
+@click.option(
+    "--instances_path",
+    default='data/raw/instances_train2014.json',
+    help='Path to the instances file'
+)
+def rename_coco20i_json_cli(instances_path):
+    rename_coco20i_json(instances_path)
