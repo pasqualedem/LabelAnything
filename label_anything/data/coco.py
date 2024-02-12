@@ -329,7 +329,7 @@ class CocoLVISDataset(Dataset):
                 if n_ann > self.max_points_annotations:
                     prompt_types = [PromptType.MASK] * n_ann
                 else:
-                    prompt_types = np.random.choice(possible_prompt_types, size=n_ann)
+                    prompt_types = random.choices(possible_prompt_types, k=n_ann)
 
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
