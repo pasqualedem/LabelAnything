@@ -233,7 +233,7 @@ def get_batch_metadata(
     prompt_types = []
     combs = [
         list(itertools.combinations(possible_prompts, i))
-        for i in range(1, len(possible_prompts))
+        for i in range(1, len(possible_prompts) + 1)
     ]
     multi_combs = [x for comb in combs for x in comb]
     remaining_images = dataset_len // num_processes
