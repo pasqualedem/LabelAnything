@@ -9,6 +9,7 @@ from copy import deepcopy
 import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
+from accelerate.utils import set_seed
 from torch.optim import AdamW
 from torchmetrics import MetricCollection
 from tqdm import tqdm
@@ -81,10 +82,7 @@ class Run:
         ) = parse_params(self.params)
 
     def init(self, params: dict):
-        # set torch, numpy, random seeds
-        torch.manual_seed(42)
-        np.random.seed(42)
-        random.seed(42)
+        set_seed(params["train_params"]["seed"])
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -120,7 +118,7 @@ class Run:
         self.model = model_registry[model_name](**self.model_params)
 
         self.watch_metric = self.train_params["watch_metric"]
-        
+
         logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
@@ -139,7 +137,6 @@ class Run:
                 num_training_steps=self.train_params["max_epochs"]
                 * len(self.train_loader),
             )
-
 
         if self.train_params.get("compile", False):
             logger.info("Compiling model")
@@ -313,6 +310,8 @@ class Run:
         self,
         epoch: int,
     ):
+        if epoch > 0:
+            set_seed(self.params["train_params"]["seed"] + epoch)
         self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
@@ -454,7 +453,7 @@ class Run:
         )
 
     def validate(self, epoch):
-        self.val_loader.dataset.reset_seed(self.params["train_params"]["seed"])
+        set_seed(self.params["train_params"]["seed"])
         self.model.eval()
         avg_loss = RunningAverage()
         dataset_categories = next(
@@ -609,6 +608,7 @@ class Run:
         logger.info("Ending run")
         self.plat_logger.end()
         logger.info("Run ended")
+
 
 class ParallelRun:
     slurm_command = "sbatch"

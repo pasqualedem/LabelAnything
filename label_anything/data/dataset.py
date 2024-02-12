@@ -220,10 +220,6 @@ class LabelAnythingDataset(Dataset):
 
         return (data_dict, ground_truths), dataset_names
 
-    def reset_seed(self, seed):
-        for dataset in self.datasets.values():
-            dataset.reset_seed(seed)
-
 
 def get_batch_metadata(
     dataset_len, possible_batch_example_nums, possible_prompts, num_processes=1

@@ -47,7 +47,6 @@ class CocoLVISDataset(Dataset):
         max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
         preprocess=ToTensor(),
-        seed: int = 42,
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
@@ -63,7 +62,6 @@ class CocoLVISDataset(Dataset):
             max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
-            seed (int, optional): For reproducibility. Defaults to 42.
             load_gts (bool, optional): Specify if ground truth masks are precomputed. Defaults to False.
             do_subsample (bool, optional): Specify if classes should be randomly subsampled. Defaults to True.
             add_box_noise (bool, optional): Add noise to the boxes (useful for training). Defaults to True.
@@ -89,9 +87,6 @@ class CocoLVISDataset(Dataset):
         self.max_points_annotations = max_points_annotations
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
-
-        # seeds
-        self.reset_seed(seed)
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -121,31 +116,16 @@ class CocoLVISDataset(Dataset):
 
         # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
-            categories_to_imgs=self.cat2img, generator=self.torch_rng
+            categories_to_imgs=self.cat2img,
         )
 
         # processing
         self.preprocess = preprocess
         self.prompts_processor = PromptsProcessor(
-            long_side_length=1024, masks_side_length=256, np_rng=self.np_rng
+            long_side_length=1024, masks_side_length=256,
         )
 
-    def reset_seed(self, seed: int) -> None:
-        """Reset the seed of the dataset.
-
-        Args:
-            seed (int): The new seed.
-        """
-        self.seed = seed
-        self.rng = random.Random(self.seed)
-        self.np_rng = np.random.default_rng(self.seed)
-        self.torch_rng = torch.Generator().manual_seed(self.seed)
-        if hasattr(self, "example_generator"):
-            self.example_generator.generator = self.torch_rng
-        if hasattr(self, "prompts_processor"):
-            self.prompts_processor.np_rng = self.np_rng
-
-    def _load_annotation_dicts(self) -> (dict, dict, dict, dict):
+    def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict]:
         """Load useful annotation dicts.
 
         Returns:
@@ -305,7 +285,7 @@ class CocoLVISDataset(Dataset):
             annotation_area
         )  # poisson mean is proportional to the square root of the area
         return np.clip(
-            self.np_rng.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
+            np.random.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
         )
 
     def _get_prompts(
@@ -349,7 +329,7 @@ class CocoLVISDataset(Dataset):
                 if n_ann > self.max_points_annotations:
                     prompt_types = [PromptType.MASK] * n_ann
                 else:
-                    prompt_types = self.rng.choices(possible_prompt_types, k=n_ann)
+                    prompt_types = np.random.choices(possible_prompt_types, k=n_ann)
 
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types

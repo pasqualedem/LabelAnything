@@ -1,3 +1,5 @@
+import random
+
 import torch
 
 import label_anything.data.utils as utils
@@ -82,7 +84,7 @@ class Coco20iDataset(CocoLVISDataset):
 
         # example generator/selector
         self.example_generator = ExampleGeneratorPowerLawUniform(
-            categories_to_imgs=self.cat2img, generator=self.torch_rng
+            categories_to_imgs=self.cat2img
         )
 
     def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
@@ -102,11 +104,9 @@ class Coco20iDataset(CocoLVISDataset):
         elif self.split == Coco20iSplit.VAL:
             idx, _ = idx_num_examples
             # sample a random category
-            cat_ids = [-1, self.rng.choice(list(self.categories.keys()))]
+            cat_ids = [-1, random.choice(list(self.categories.keys()))]
             # sample random img ids
-            image_ids = self.rng.sample(
-                list(self.cat2img[cat_ids[1]]), self.n_shots + 1
-            )
+            image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
 
             # load, stack and preprocess the images
             images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
