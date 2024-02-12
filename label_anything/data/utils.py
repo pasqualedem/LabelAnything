@@ -50,15 +50,39 @@ class BatchKeys(StrEnum):
     FLAG_POINTS = "flag_points"
     PROMPT_BBOXES = "prompt_bboxes"
     FLAG_BBOXES = "flag_bboxes"
+    FLAG_EXAMPLES = "flag_examples"
     DIMS = "dims"
     CLASSES = "classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
+    CLIP_EMBEDDINGS = "clip_embeddings"
     
     
 class BatchMetadataKeys(StrEnum):
     PROMPT_TYPES = "prompt_types"
     NUM_EXAMPLES = "num_examples"
+    
+    
+def flags_merge(flag_masks: torch.Tensor, flag_points: torch.Tensor, flag_bboxes: torch.Tensor) -> torch.Tensor:
+    """
+    Merges the flags of the prompt masks, points and bboxes into a single tensor.
+
+    Args:
+        flag_masks (torch.Tensor): tensor of shape M x C, in which each element indicates whether the prompt mask is real
+                                   or a padding one.
+        flag_points (torch.Tensor): tensor of shape M x C x N, in which each element indicates whether the prompt point is
+                                    real or a padding one.
+        flag_bboxes (torch.Tensor): tensor of shape M x C x N, in which each element indicates whether the prompt bbox is
+                                    real or a padding one.
+
+    Returns:
+        torch.Tensor: tensor of shape M x C, in which each element indicates whether the example is real or a padding one.
+    """
+    flag_examples = torch.logical_or(flag_masks, flag_points.any(dim=-1))
+    flag_examples = torch.logical_or(flag_examples, flag_bboxes.any(dim=-1))
+    # Put BG class to 1
+    flag_examples[:, 0] = 1
+    return flag_examples
 
 
 def cast_type(input, dtype) -> dict:
@@ -269,6 +293,21 @@ def collate_coords(
     return out_coords, out_flag
 
 
+def collate_example_flags(example_flags: torch.Tensor, num_classes: int) -> torch.Tensor:
+    """
+    Rearranges the flags tensor for a single query image, according to the classes present in the whole batch.
+
+    Arguments:
+        example_flags: tensor of shape M x C_old, in which each element indicates whether the example is real or a
+                       padding one.
+        num_classes: number of classes present in the whole batch.
+    """
+    m, c = example_flags.shape
+    out = torch.zeros(size=(m, num_classes), dtype=example_flags.dtype)
+    out[:, :c] = example_flags
+    return out
+
+
 def collate_gts(gt, dims):
     """Collate ground truths for a single sample (query + support)."""
     out = torch.zeros(dims)
@@ -283,6 +322,36 @@ def collate_batch_gts(gt, dims, fill_value=-100):
     _, dim0, dim1 = gt.shape
     out[:, :dim0, :dim1] = gt
     return out
+
+
+def collate_class_masks(masks, flags, n_classes):
+    n_ex, _, h, w = masks[0].size()
+    out_mask = torch.zeros(n_ex * n_classes, n_classes, h, w, dtype=masks[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, dtype=flags[0].dtype)
+    for idx, (m, f) in enumerate(zip(masks, flags)):
+        out_mask[(idx*n_ex): ((idx + 1)*n_ex), idx, :, :] = m.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx] = f.squeeze(dim=1)
+    return out_mask.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
+
+
+def collate_class_bbox(bboxes, flags, n_classes, max_annotations):
+    n_ex = bboxes[0].size(0)
+    out_bbox = torch.zeros(n_ex * n_classes, n_classes, max_annotations, 4, dtype=bboxes[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, max_annotations, dtype=flags[0].dtype)
+    for idx, (b, f) in enumerate(zip(bboxes, flags)):
+        out_bbox[(idx*n_ex): ((idx + 1)*n_ex), idx, :b.size(2), :] = b.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx, :f.size(2)] = f.squeeze(dim=1)
+    return out_bbox.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
+
+
+def collate_class_points(points, flags, n_classes, max_annotations):
+    n_ex = points[0].size(0)
+    out_points = torch.zeros(n_ex * n_classes, n_classes, max_annotations, 2, dtype=points[0].dtype)
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, max_annotations, dtype=points[0].dtype)
+    for idx, (p, f) in enumerate(zip(points, flags)):
+        out_points[(idx*n_ex): ((idx + 1)*n_ex), idx, :p.size(2), :] = p.squeeze(dim=1)
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx, :f.size(2)] = f.squeeze(dim=1)
+    return out_points.unsqueeze(dim=0), out_flags.unsqueeze(dim=0)
 
 
 def get_preprocess_shape(oldh: int, oldw: int, long_side_length: int):

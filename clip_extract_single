@@ -1,0 +1,16 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_PENELOPE
+#SBATCH -p boost_usr_prod
+#SBATCH --qos boost_qos_lprod
+#SBATCH --time 4-00:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:1
+#SBATCH --mem=123000
+#SBATCH --job-name=clip_extract
+#SBATCH --out=extractCLIP.out
+#SBATCH --err=extractCLIP.out
+
+srun ./clip_extract_exe_single

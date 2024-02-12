@@ -83,13 +83,14 @@ class Lam(nn.Module):
         query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(
             batched_input
         )
-        points, boxes, masks = self.prepare_prompts(batched_input)
+        points, boxes, masks, flag_examples = self.prepare_prompts(batched_input)
 
         pe_result = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
             masks=masks,
+            flag_examples=flag_examples,
         )
 
         seg = self.mask_decoder(
@@ -165,7 +166,7 @@ class Lam(nn.Module):
         else:
             masks = None
 
-        return points, boxes, masks
+        return points, boxes, masks, batched_input['flag_examples']
 
     def init_pretrained_weights(self, weights):
         """
@@ -248,13 +249,14 @@ class Lam(nn.Module):
 
     def generate_class_embeddings(self, example_dict, chunk_size=None):
         prompt_embeddings = self.prepare_embeddings(example_dict)
-        points, boxes, masks = self.prepare_prompts(example_dict)
+        points, boxes, masks, flag_examples = self.prepare_prompts(example_dict)
         class_embeddings = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
             points=points,
             boxes=boxes,
             masks=masks,
             chunk_size=chunk_size,
+            flag_examples=flag_examples,
         )[ResultDict.CLASS_EMBS]
         return class_embeddings
 

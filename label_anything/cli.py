@@ -3,9 +3,11 @@ from label_anything.preprocess import (
     preprocess_images_to_embeddings,
     generate_ground_truths,
 )
+from label_anything.preprocess_clip import main as exe_clip_preprocess
 from label_anything.experiment.experiment import experiment as run_experiment, run as run_single, test as test_fn
 
 import click
+from label_anything.experiment.pretraining import main as exe_pretrain_pe
 
 
 @click.group()
@@ -163,3 +165,23 @@ def benchmark():
     average_time = (end_time - start_time) / num_iterations
 
     print(f"Average time per iteration: {average_time:.5f} seconds")
+
+
+@main.command("preprocess_clip")
+@click.option(
+    "--parameters",
+    default="extract_params.yaml",
+    help="Path to yaml file"
+)
+def preprocess_clip(parameters):
+    exe_clip_preprocess(params_path=parameters)
+
+
+@main.command("pretrain_pe")
+@click.option(
+    "--parameters",
+    default='pretraining_parameters.yaml',
+    help='Path to yaml file'
+)
+def pretrain_pe(parameters):
+    exe_pretrain_pe(parameters)

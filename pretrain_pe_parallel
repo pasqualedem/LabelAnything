@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_PENELOPE
+#SBATCH -p boost_usr_prod
+#SBATCH --qos boost_qos_dbg
+#SBATCH --time=00:10:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:4
+#SBATCH --mem=0
+#SBATCH --exclusive
+#SBATCH --job-name=run
+#SBATCH --out=out/run_pretraining.log
+#SBATCH --err=out/run_pretraining.log
+
+srun ./pretrain_pe_parallel_exe $1
