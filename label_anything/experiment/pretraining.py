@@ -64,7 +64,6 @@ def train(
                         accelerator.set_trigger()
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
-        #if accelerator.is_main_process:
         n_examples = random.randint(min_num_examples, max_num_examples)
         accelerator.print(f"Having {n_examples} examples")
         change_num_examples(train_loader, val_loader, n_examples)
