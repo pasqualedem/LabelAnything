@@ -11,4 +11,4 @@
 #SBATCH --out=experiment.out
 #SBATCH --err=experiment.out
 
-srun ./launch_experiment_exe $1
+srun ./launch_experiment_exe $@

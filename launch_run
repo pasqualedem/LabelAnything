@@ -14,4 +14,4 @@
 #SBATCH --out=out/run.log
 #SBATCH --err=out/run.log
 
-srun ./launch_run_exe $1
+srun ./launch_run_exe $@
