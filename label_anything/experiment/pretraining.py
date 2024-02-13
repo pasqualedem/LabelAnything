@@ -43,7 +43,6 @@ def train(
             accelerator.print(f'Phase: {phase}')
             cumulated_loss = torch.as_tensor([0.0]).to(accelerator.device)
             with torch.set_grad_enabled(phase == 'train'):
-                accelerator.print(loader.dataset.n_images)
                 for data_dict in tqdm(loader):
                     prompt_proj, clip_proj = model(data_dict)
                     label = torch.eye(prompt_proj.size(0)).to(accelerator.device)
@@ -65,7 +64,6 @@ def train(
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
         n_examples = random.randint(min_num_examples, max_num_examples)
-        accelerator.print(f"Having {n_examples} examples")
         change_num_examples(train_loader, val_loader, n_examples)
         if accelerator.check_trigger():
             break
