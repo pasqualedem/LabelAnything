@@ -49,5 +49,5 @@ early_stopping:
   patience: 5
 train_loop:
   num_epochs: 300
-  min_num_examples: 1
-  max_num_examples: 3
+  min_num_examples: 3
+  max_num_examples: 5
