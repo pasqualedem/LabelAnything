@@ -48,4 +48,6 @@ early_stopping:
   out_dir: /leonardo_work/IscrC_PENELOPE/raffaele/LabelAnything/data/experiment/pretrain_pe
   patience: 5
 train_loop:
-  num_epochs: 50
+  num_epochs: 300
+  min_num_examples: 5
+  max_num_examples: 20
