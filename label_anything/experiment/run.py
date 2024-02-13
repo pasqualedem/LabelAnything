@@ -645,7 +645,7 @@ class ParallelRun:
             self.slurm_stderr,
             out_file,
             self.slurm_script,
-            self.slurm_script_first_parameter + tmp_parameters_file.name,
+            self.slurm_script_first_parameter + param_file,
         ]
         if only_create:
             logger.info(f"Creating command: {' '.join(command)}")
