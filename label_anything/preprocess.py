@@ -75,6 +75,7 @@ def preprocess_images_to_embeddings(
 ):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
+
     Args:
         encoder_name (str): name of the Image Encoder to use
         checkpoint (str): path to the checkpoint
@@ -107,3 +108,17 @@ def preprocess_images_to_embeddings(
     )
     print("Dataloader created")
     create_image_embeddings(model, dataloader, outfolder, device=device)
+
+
+def rename_coco20i_json(instances_path: str):
+    """Change image filenames of COCO 2014 instances.
+
+    Args:
+        instances_path (str): Path to the COCO 2014 instances file.
+    """
+    with open(instances_path, "r") as f:
+        anns = json.load(f)
+    for image in anns["images"]:
+        image["file_name"] = image["file_name"].split("_")[-1]
+    with open(instances_path, "w") as f:
+        json.dump(anns, f)
