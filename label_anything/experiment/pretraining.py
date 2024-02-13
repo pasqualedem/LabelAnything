@@ -14,6 +14,16 @@ from label_anything.preprocess_clip import load_ruamel
 from label_anything.data.prompt_encoder_dataset import collate_fn
 
 
+def change_num_examples(train_loader: DataLoader,
+                        val_loader: DataLoader,
+                        accelerator: Accelerator,
+                        min_examples,
+                        max_examples):
+    train_loader.dataset.set_num_examples(min_examples, max_examples)
+    val_loader.dataset.set_num_examples(min_examples, max_examples)
+    return accelerator.prepare(train_loader, val_loader)
+
+
 def train(
         model: ContrastivePromptEncoder,
         train_loader: DataLoader,
@@ -24,6 +34,8 @@ def train(
         accelerator: Accelerator,
         early_stop: ParallelEarlyStopping,
         num_epochs: int,
+        min_num_examples: int,
+        max_num_examples: int,
 ):
     loaders = {'train': train_loader, 'val': val_loader}
     optimizer.zero_grad()
@@ -52,6 +64,11 @@ def train(
                         accelerator.set_trigger()
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
+        if accelerator.is_main_process:
+            train_loader, val_loader = change_num_examples(train_loader,
+                                                           val_loader,
+                                                           min_num_examples,
+                                                           max_num_examples)
         if accelerator.check_trigger():
             break
 

@@ -45,6 +45,9 @@ class PromptEncoderDataset(CocoLVISDataset):
         f = load_file(f"{self.clip_emb_dir}/{str(img_id).zfill(12)}.safetensors")
         return f['clip_embedding']
 
+    def set_num_examples(self, min_examples, max_examples):
+        self.n_images = random.randint(a=min_examples, b=max_examples)
+
     def __getitem__(self, class_idx) -> dict:
         # extract randon images for class class_id
         class_idx = list(self.categories.keys())[class_idx]
