@@ -30,6 +30,7 @@ from label_anything.utils.utils import (
     FLOAT_PRECISIONS,
     ResultDict,
     RunningAverage,
+    get_timestamp,
     write_yaml,
 )
 
@@ -614,7 +615,7 @@ class ParallelRun:
     slurm_command = "sbatch"
     slurm_script = "launch_run"
     slurm_script_first_parameter = "--parameters="
-    slurm_output = "out/run"
+    slurm_outfolder = "out"
     out_extension = "out"
     slurm_stderr = "-e"
     slurm_stdout = "-o"
@@ -626,11 +627,14 @@ class ParallelRun:
             sys.path.extend(".")
 
     def launch(self, only_create=False):
-        os.makedirs("out", exist_ok=True)
         tmp_parameters_file = tempfile.NamedTemporaryFile(delete=False)
         write_yaml(self.params, tmp_parameters_file.name)
         tmp_parameters_file.close()
-        out_file = f"{self.slurm_output}_{self.exp_uuid}_{str(uuid.uuid4())[:8]}.{self.out_extension}"
+        subfolder = f"{get_timestamp()}_{self.exp_uuid}_{self.params['experiment']['group']}"
+        out_folder = os.path.join(self.slurm_outfolder, subfolder)
+        os.makedirs(out_folder, exist_ok=True)
+        out_file = f"run_{str(uuid.uuid4())[:8]}.{self.out_extension}"
+        out_file = os.path.join(out_folder, out_file)
         command = [
             self.slurm_command,
             self.slurm_stdout,
