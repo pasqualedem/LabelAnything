@@ -67,6 +67,7 @@ def train(
         if accelerator.is_main_process:
             train_loader, val_loader = change_num_examples(train_loader,
                                                            val_loader,
+                                                           accelerator,
                                                            min_num_examples,
                                                            max_num_examples)
         if accelerator.check_trigger():
