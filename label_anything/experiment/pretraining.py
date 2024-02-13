@@ -1,3 +1,5 @@
+import random
+
 import accelerate
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder, PromptImageEncoder
 from torch.utils.data import DataLoader
@@ -16,11 +18,9 @@ from label_anything.data.prompt_encoder_dataset import collate_fn
 
 def change_num_examples(train_loader: DataLoader,
                         val_loader: DataLoader,
-                        accelerator: Accelerator,
-                        min_examples,
-                        max_examples):
-    train_loader.dataset.set_num_examples(min_examples, max_examples)
-    val_loader.dataset.set_num_examples(min_examples, max_examples)
+                        n_examples):
+    train_loader.dataset.set_num_examples(n_examples)
+    val_loader.dataset.set_num_examples(n_examples)
     return train_loader, val_loader
     #return accelerator.prepare(train_loader, val_loader)
 
@@ -66,11 +66,9 @@ def train(
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
         #if accelerator.is_main_process:
-        train_loader, val_loader = change_num_examples(train_loader,
-                                                       val_loader,
-                                                       accelerator,
-                                                       min_num_examples,
-                                                       max_num_examples)
+        n_examples = random.randint(min_num_examples, max_num_examples)
+        accelerator.print(f"Having {n_examples} examples")
+        change_num_examples(train_loader, val_loader, n_examples)
         if accelerator.check_trigger():
             break
 
