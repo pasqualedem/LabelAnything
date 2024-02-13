@@ -21,7 +21,8 @@ def change_num_examples(train_loader: DataLoader,
                         max_examples):
     train_loader.dataset.set_num_examples(min_examples, max_examples)
     val_loader.dataset.set_num_examples(min_examples, max_examples)
-    return accelerator.prepare(train_loader, val_loader)
+    return train_loader, val_loader
+    #return accelerator.prepare(train_loader, val_loader)
 
 
 def train(
@@ -64,12 +65,12 @@ def train(
                         accelerator.set_trigger()
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
-        if accelerator.is_main_process:
-            train_loader, val_loader = change_num_examples(train_loader,
-                                                           val_loader,
-                                                           accelerator,
-                                                           min_num_examples,
-                                                           max_num_examples)
+        #if accelerator.is_main_process:
+        train_loader, val_loader = change_num_examples(train_loader,
+                                                       val_loader,
+                                                       accelerator,
+                                                       min_num_examples,
+                                                       max_num_examples)
         if accelerator.check_trigger():
             break
 
