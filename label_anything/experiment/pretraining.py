@@ -63,10 +63,10 @@ def train(
                         accelerator.set_trigger()
                         accelerator.print(f'early stopping at epoch {epoch:03d}')
         accelerator.wait_for_everyone()
-        n_examples = random.randint(min_num_examples, max_num_examples)
-        change_num_examples(train_loader, val_loader, n_examples)
         if accelerator.check_trigger():
             break
+        n_examples = random.randint(min_num_examples, max_num_examples)
+        change_num_examples(train_loader, val_loader, n_examples)
 
 
 def init_model(model_params: dict) -> dict:
