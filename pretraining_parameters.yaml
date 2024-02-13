@@ -50,4 +50,4 @@ early_stopping:
 train_loop:
   num_epochs: 300
   min_num_examples: 5
-  max_num_examples: 20
+  max_num_examples: 12
