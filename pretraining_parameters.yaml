@@ -32,7 +32,7 @@ dataset:
     max_points_per_annotation: 10
     load_gts: False
 dataloader:
-  num_workers: 20
+  num_workers: 8
   batch_size: 8
   drop_last: False
   shuffle: True
@@ -49,5 +49,5 @@ early_stopping:
   patience: 5
 train_loop:
   num_epochs: 300
-  min_num_examples: 5
-  max_num_examples: 12
+  min_num_examples: 1
+  max_num_examples: 3

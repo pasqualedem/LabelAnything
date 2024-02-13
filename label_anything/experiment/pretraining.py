@@ -21,8 +21,6 @@ def change_num_examples(train_loader: DataLoader,
                         n_examples):
     train_loader.dataset.set_num_examples(n_examples)
     val_loader.dataset.set_num_examples(n_examples)
-    return train_loader, val_loader
-    #return accelerator.prepare(train_loader, val_loader)
 
 
 def train(
