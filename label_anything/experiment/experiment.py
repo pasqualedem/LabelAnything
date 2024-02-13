@@ -440,7 +440,6 @@ class ParallelExperimenter(Experimenter):
                         f"Running run {j} out of {len(grid) - 1} ({sum(len(self.grids[k]) for k in range(i)) + j} / {self.gs.total_runs - 1})"
                     )
                     run = ParallelRun(
-                        experiment_uuid=self.exp_settings.uuid,
                         experiment_timestamp=self.exp_settings.timestamp,
                         params={"experiment": {**self.exp_settings}, **params},
                     )
