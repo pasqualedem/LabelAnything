@@ -15,7 +15,7 @@ from label_anything.experiment.resume import (
     get_interrupted_run,
     retrieve_run_to_resume,
 )
-from label_anything.utils.utils import load_yaml, nested_dict_update, update_collection
+from label_anything.utils.utils import get_timestamp, load_yaml, nested_dict_update, update_collection
 from label_anything.utils.grid import linearize, linearized_to_string, make_grid
 from label_anything.utils.optuna import Optunizer
 from label_anything.logger.text_logger import get_logger
@@ -62,6 +62,7 @@ class ExpSettings(EasyDict):
         self.n_trials = None
         self.max_parallel_runs = 1
         self.uuid = None
+        self.timestamp = get_timestamp()
         super().__init__(*args, **kwargs)
         self.tracking_dir = self.tracking_dir or ""
 
@@ -440,6 +441,7 @@ class ParallelExperimenter(Experimenter):
                     )
                     run = ParallelRun(
                         experiment_uuid=self.exp_settings.uuid,
+                        experiment_timestamp=self.exp_settings.timestamp,
                         params={"experiment": {**self.exp_settings}, **params},
                     )
                     metric = run.launch(only_create=only_create)

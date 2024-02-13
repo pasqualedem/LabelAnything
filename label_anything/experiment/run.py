@@ -621,14 +621,15 @@ class ParallelRun:
     slurm_stderr = "-e"
     slurm_stdout = "-o"
 
-    def __init__(self, params: dict, experiment_uuid: str):
+    def __init__(self, params: dict, experiment_uuid: str, experiment_timestamp: str):
         self.params = params
         self.exp_uuid = experiment_uuid
+        self.exp_timestamp = experiment_timestamp
         if "." not in sys.path:
             sys.path.extend(".")
 
     def launch(self, only_create=False):
-        subfolder = f"{get_timestamp()}_{self.exp_uuid}_{self.params['experiment']['group']}"
+        subfolder = f"{self.exp_timestamp}_{self.exp_uuid}_{self.params['experiment']['group']}"
         out_folder = os.path.join(self.slurm_outfolder, subfolder)
         os.makedirs(out_folder, exist_ok=True)
         
