@@ -55,6 +55,12 @@ parameters:
     use_sam_checkpoint: [True]
     class_attention: [True]
     spatial_convs: [3]
+  prompt_encoder:
+    checkpoint: [checkpoints/prompt_encoder/model.bin]
+    params:
+      hidden_size: [256]
+      pe_in_channels: [256]
+      clip_in_channels: [1024]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
