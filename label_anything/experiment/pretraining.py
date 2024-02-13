@@ -45,6 +45,7 @@ def train(
             accelerator.print(f'Phase: {phase}')
             cumulated_loss = torch.as_tensor([0.0]).to(accelerator.device)
             with torch.set_grad_enabled(phase == 'train'):
+                accelerator.print(loader.dataset.n_images)
                 for data_dict in tqdm(loader):
                     prompt_proj, clip_proj = model(data_dict)
                     label = torch.eye(prompt_proj.size(0)).to(accelerator.device)
