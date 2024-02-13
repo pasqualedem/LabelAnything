@@ -5,7 +5,7 @@ import torch
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.examples import ExampleGeneratorPowerLawUniform
-from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType, StrEnum
+from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys, PromptType, StrEnum, flags_merge
 
 
 class Coco20iSplit(StrEnum):
@@ -87,7 +87,7 @@ class Coco20iDataset(CocoLVISDataset):
             categories_to_imgs=self.cat2img
         )
 
-    def __getitem__(self, idx_num_examples: tuple[int, int]) -> dict:
+    def __getitem__(self, idx_batchmetadata: tuple[int, int]) -> dict:
         """Get an item from the dataset. Preserves the original functionality
         of the COCO dataset for the train split. For the val split, it samples
         a random category and returns the corresponding images (n_shots + 1).
@@ -100,9 +100,9 @@ class Coco20iDataset(CocoLVISDataset):
             dict: Data dictionary.
         """
         if self.split == Coco20iSplit.TRAIN:
-            return super().__getitem__(idx_num_examples)
+            return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
-            idx, _ = idx_num_examples
+            idx, metadata = idx_batchmetadata
             # sample a random category
             cat_ids = [-1, random.choice(list(self.categories.keys()))]
             # sample random img ids
@@ -113,7 +113,7 @@ class Coco20iDataset(CocoLVISDataset):
 
             # create the prompt dicts
             bboxes, masks, points, classes, img_sizes = self._get_prompts(
-                image_ids, cat_ids
+                image_ids, cat_ids, metadata[BatchMetadataKeys.PROMPT_TYPES]
             )
 
             # obtain padded tensors
@@ -137,6 +137,8 @@ class Coco20iDataset(CocoLVISDataset):
             ground_truths = torch.stack(
                 [utils.collate_gts(x, max_dims) for x in ground_truths]
             )
+            
+            flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
             if self.load_gts:
                 # convert the ground truths to the right format
@@ -157,6 +159,7 @@ class Coco20iDataset(CocoLVISDataset):
                 BatchKeys.FLAG_POINTS: flag_points,
                 BatchKeys.PROMPT_BBOXES: bboxes,
                 BatchKeys.FLAG_BBOXES: flag_bboxes,
+                BatchKeys.FLAG_EXAMPLES: flag_examples,
                 BatchKeys.DIMS: dims,
                 BatchKeys.CLASSES: classes,
                 BatchKeys.IMAGE_IDS: image_ids,
