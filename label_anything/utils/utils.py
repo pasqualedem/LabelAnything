@@ -1,6 +1,6 @@
-import datetime
 import os
 import importlib
+from datetime import datetime
 from inspect import signature
 import time
 import torch
