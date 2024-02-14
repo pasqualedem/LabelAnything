@@ -12,6 +12,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from label_anything.data.utils import get_preprocess_shape
+from label_anything.models.transformer import TwoWayTransformer
 from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
@@ -221,7 +222,8 @@ class Lam(nn.Module):
         self.prompt_encoder.transformer.load_state_dict(transformer_weights)
 
         # Load weights for the mask decoder transformer
-        self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
+        if isinstance(self.mask_decoder.transformer, TwoWayTransformer):
+            self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
 
         # Load weights for the mask decoder output upscaling
         output_upscaling_weights = {
