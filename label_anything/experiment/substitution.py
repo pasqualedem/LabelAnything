@@ -42,6 +42,12 @@ def generate_points_from_errors(
     )
     errors = ground_truth - prediction
     coords = torch.nonzero(errors)
+    if coords.shape[0] == 0:
+        # No errors
+        return (
+            torch.zeros(B, C, 1, 2, device=device),
+            torch.zeros(B, C, 1, device=device),
+        )
     classes, counts = torch.unique(
         coords[:, 0:2], dim=0, return_counts=True, sorted=True
     )
