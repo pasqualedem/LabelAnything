@@ -36,15 +36,15 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [10]
     compile: [False]
-    initial_lr: [0.0001, 0.00005, 0.00002]
+    initial_lr: [0.0001]
     optimizer: [AdamW]
     scheduler:
     - type: reduce_lr_on_plateau
       step_moment: epoch
       patience: 0
-    - type: cosine
-      step_moment: batch
-      num_warmup_steps: 1000
+#    - type: cosine
+#      step_moment: batch
+#      num_warmup_steps: 1000
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
