@@ -75,6 +75,7 @@ parameters:
         n_shots: [1]
         do_subsample: [False]
         add_box_noise: [False]
+        load_gts: [False]
     common:
       do_subsample: [True]
       add_box_noise: [True]
