@@ -11,7 +11,7 @@
 #SBATCH --mem=0
 #SBATCH --exclusive
 #SBATCH --job-name=run
-#SBATCH --out=out/run_pretraining.log
-#SBATCH --err=out/run_pretraining.log
+#SBATCH --out=out_pretraining/run_pretraining.log
+#SBATCH --err=out_pretraining/run_pretraining.log
 
 srun ./pretrain_pe_parallel_exe $1
