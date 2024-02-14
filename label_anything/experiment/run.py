@@ -89,7 +89,7 @@ class Run:
             return
         pe_params = deepcopy(self.prompt_encoder_params)
         pe_params['params']['prompt_encoder'] = self.model.prompt_encoder
-        contrastive_prompt_encoder = ContrastivePromptEncoder(**self.prompt_encoder_params['params'])
+        contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params['params'])
         state_dict = torch.load(self.prompt_encoder_params['checkpoint'])
         contrastive_prompt_encoder.load_state_dict(state_dict)
         self.model.prompt_encoder.load_state_dict(contrastive_prompt_encoder.prompt_encoder.state_dict())
