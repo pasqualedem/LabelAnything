@@ -52,6 +52,7 @@ parameters:
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
+    fusion_transformer: [OneWayTransformer]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
