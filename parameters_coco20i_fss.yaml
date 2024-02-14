@@ -89,7 +89,7 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  -  train_params:
+  - train_params:
       substitute: [False]
       accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-      max_epochs: [40]
+      max_epochs: [50]
