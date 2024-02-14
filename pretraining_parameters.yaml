@@ -3,6 +3,7 @@ model:
     name: lam_no_vit
     checkpoint: checkpoints/sam_vit_h_4b8939.pth
     use_sam_checkpoint: True
+    class_attention: True
   hidden_size: 256
   pe_in_channels: 256
   clip_in_channels: 1024
