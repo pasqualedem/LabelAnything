@@ -34,7 +34,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [10]
+    max_epochs: [20]
     compile: [False]
     initial_lr: [0.0001, 0.00005, 0.00002]
     optimizer: [AdamW]
@@ -42,8 +42,8 @@ parameters:
     - type: cosine
       step_moment: batch
       num_warmup_steps: 1000
-    substitute: [False]
-    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+    substitute: [True]
+    accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
@@ -89,3 +89,7 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+  -  train_params:
+      substitute: [False]
+      accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+      max_epochs: [40]
