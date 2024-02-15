@@ -47,7 +47,7 @@ parameters:
       patience: 1
       factor: 0.5
       min_lr: 0.0000001
-      mode: [max]
+      mode: max
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
