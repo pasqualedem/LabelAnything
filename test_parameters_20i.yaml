@@ -44,7 +44,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [2]
+    max_epochs: [4]
     compile: [False]
     initial_lr: [0.00001]
     optimizer: [AdamW]
