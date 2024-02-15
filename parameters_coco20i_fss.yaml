@@ -36,7 +36,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [20]
     compile: [False]
-    initial_lr: [0.00005]
+    initial_lr: [0.00001, 0.00005, 0.00002]
     optimizer: [AdamW]
     scheduler:
     - type: cosine
@@ -47,12 +47,12 @@ parameters:
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
-    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
+    name: [lam_vit_b] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
-    fusion_transformer: [TwoWayTransformer]
+    fusion_transformer: [OneWayTransformer]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
