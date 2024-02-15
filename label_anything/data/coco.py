@@ -12,6 +12,7 @@ from PIL import Image
 from safetensors.torch import load_file
 from torch.utils.data import Dataset
 from torchvision.transforms import PILToTensor, ToTensor
+from label_anything.logger.text_logger import get_logger
 
 import label_anything.data.utils as utils
 from label_anything.data.examples import (
@@ -34,6 +35,8 @@ from label_anything.data.test import LabelAnythingTestDataset
 
 warnings.filterwarnings("ignore")
 
+logger = get_logger(__name__)
+
 
 class CocoLVISDataset(Dataset):
     """Dataset class for COCO and LVIS datasets."""
@@ -47,6 +50,7 @@ class CocoLVISDataset(Dataset):
         max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
         preprocess=ToTensor(),
+        load_embeddings: bool = None,
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
@@ -62,6 +66,7 @@ class CocoLVISDataset(Dataset):
             max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
+            load_embeddings (bool, optional): Specify if embeddings are precomputed. Defaults to True.
             load_gts (bool, optional): Specify if ground truth masks are precomputed. Defaults to False.
             do_subsample (bool, optional): Specify if classes should be randomly subsampled. Defaults to True.
             add_box_noise (bool, optional): Add noise to the boxes (useful for training). Defaults to True.
@@ -76,12 +81,22 @@ class CocoLVISDataset(Dataset):
         assert (
             not load_gts or emb_dir is not None
         ), "If load_gts is True, emb_dir must be provided."
+        assert (
+            not load_embeddings or emb_dir is not None
+        ), "If load_embeddings is True, emb_dir must be provided."
+        
+        if load_embeddings is None:
+            load_embeddings = emb_dir is not None
+            logger.warning(
+                f"load_embeddings is not specified. Assuming load_embeddings={load_embeddings}."
+            )
 
         self.name = name
         self.instances_path = instances_path
 
         self.img_dir = img_dir
         self.emb_dir = emb_dir
+        self.load_embeddings = load_embeddings
         self.load_gts = load_gts
         self.max_points_per_annotation = max_points_per_annotation
         self.max_points_annotations = max_points_annotations
@@ -382,7 +397,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             (torch.Tensor, str, Optional[torch.Tensor]): Returns a tuple containing the images or the embeddings, the key of the returned tensor and the ground truths.
         """
-        if self.emb_dir is not None:
+        if self.load_embeddings:
             embeddings_gts = [
                 self._load_safe(image_data)
                 for image_data in [self.images[image_id] for image_id in image_ids]
@@ -589,6 +604,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
         preprocess=ToTensor(),  # preprocess step
         emb_dir=None,
         seed=42,  # for reproducibility
+        load_embeddings=None,
         load_gts=False,
         add_box_noise=False,
         dtype=torch.float32,
@@ -602,6 +618,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
             seed=seed,
             add_box_noise=add_box_noise,
             emb_dir=emb_dir,
+            load_embeddings=load_embeddings,
             load_gts=load_gts,
             dtype=dtype,
         )
@@ -624,7 +641,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
         return prompt_images
 
     def _get_images_or_embeddings(self, image_ids):
-        if self.emb_dir is not None:
+        if self.load_embeddings:
             embeddings_gts = [self._load_safe(data) for data in image_ids]
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
