@@ -277,18 +277,21 @@ def resize_ground_truth(ground_truth, dims):
     return ground_truth[:dims[0], :dims[1]]
 
 
-def load_checkpoint(accelerator: Accelerator, run_id):
+def load_from_wandb(run_id, wandb_folder):
     api = wandb.Api()
     run = api.run(f"cilabuniba/LabelAnything/{run_id}")
     files = run.files()
     model_file = None
+    config_file = None
     for file in files:
-        if "model" in file.name and "latest" in file.name:
-            folder, file_name = file.name.split("/")
+        # Extract name from path
+        file_name = file.name.split("/")[-1]
+        if "model" in file.name and wandb_folder in file.name:
             if file_name == "pytorch_model.bin":
-                print(file.name)
-                model_file = file.download(replace=True)
-    return accelerator.load_state("latest", strict=False)
+                model_file = file.download(replace=True, root="streamlit")
+        if file_name == "config.yaml":
+            config_file = file.download(replace=True, root="streamlit")
+    return model_file.name, config_file.name
     
     
 def get_embeddings_names(batch, embeddings_dir):

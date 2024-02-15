@@ -109,7 +109,7 @@ def generate_annotations(images, masks, annotations):
     annotations["images"] = annotations_images
     annotations["annotations"] = annotations_segmentations
     annotations["categories"] = [
-        {"id": 0, "name": "no_tumor"},
+        {"id": 0, "name": "background"},
         {"id": 1, "name": "tumor"},
     ]
 

@@ -13,6 +13,7 @@ from . import (
     MaskDecoderLam,
     PromptImageEncoder,
     Lam,
+    OneWayTransformer,
     TwoWayTransformer,
 )
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
@@ -57,11 +58,20 @@ def _build_lam(
     vit_patch_size=16,
     class_attention=False,
     spatial_convs=None,
+    fusion_transformer="TwoWayTransformer",
 ):
 
     image_embedding_size = image_size // vit_patch_size
 
     vit = build_vit() if use_vit else None
+    
+    fusion_transformer = globals()[fusion_transformer](
+                depth=2,
+                embedding_dim=prompt_embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+            )
+    
     lam = Lam(
         image_size=image_size,
         image_encoder=vit,
@@ -81,12 +91,7 @@ def _build_lam(
         mask_decoder=MaskDecoderLam(
             transformer_dim=prompt_embed_dim,
             spatial_convs=spatial_convs,
-            transformer=TwoWayTransformer(
-                depth=2,
-                embedding_dim=prompt_embed_dim,
-                mlp_dim=2048,
-                num_heads=8,
-            ),
+            transformer=fusion_transformer,
         ),
     )
     lam.eval()

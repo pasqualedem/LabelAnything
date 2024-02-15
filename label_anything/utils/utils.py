@@ -1,6 +1,8 @@
 import os
 import importlib
+from datetime import datetime
 from inspect import signature
+import time
 import torch
 from ruamel.yaml import YAML, comments
 from io import StringIO
@@ -196,6 +198,16 @@ def get_checkpoints_dir_path(
     if ckpt_root_dir:
         return os.path.join(ckpt_root_dir, project_name, group_name)
 
+
+def get_timestamp():
+    # Get the current timestamp
+    timestamp = time.time()  # replace this with your timestamp or use time.time() for current time
+
+    # Convert timestamp to a datetime object
+    dt_object = datetime.fromtimestamp(timestamp)
+
+    # Format the datetime object as a folder-friendly string
+    return dt_object.strftime("%Y%m%d_%H%M%S")
 
 def find_divisor_pairs(number):
     divisor_pairs = []

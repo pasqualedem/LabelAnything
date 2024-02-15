@@ -10,7 +10,134 @@ from typing import Tuple, Type
 
 from label_anything.models.common import Attention
 
-from .common import MLPBlock
+from .common import AttentionMLPBlock, MLPBlock
+
+
+class OneWayTransformer(nn.Module):
+    def __init__(
+        self,
+        depth: int,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+    ) -> None:
+        """
+        A transformer decoder that attends to an input image using
+        queries whose positional embedding is supplied.
+
+        Args:
+          depth (int): number of layers in the transformer
+          embedding_dim (int): the channel dimension for the input embeddings
+          num_heads (int): the number of heads for multihead attention. Must
+            divide embedding_dim
+          mlp_dim (int): the channel dimension internal to the MLP block
+          activation (nn.Module): the activation to use in the MLP block
+        """
+        super().__init__()
+        self.depth = depth
+        self.embedding_dim = embedding_dim
+        self.num_heads = num_heads
+        self.mlp_dim = mlp_dim
+        self.layers = nn.ModuleList()
+
+        for i in range(depth):
+            self.layers.append(
+                OneWayAttentionBlock(
+                    embedding_dim=embedding_dim,
+                    num_heads=num_heads,
+                    mlp_dim=mlp_dim,
+                    activation=activation,
+                    attention_downsample_rate=attention_downsample_rate,
+                )
+            )
+            
+    def forward(
+        self,
+        image_embedding: Tensor,
+        image_pe: Tensor,
+        token_embedding: Tensor,
+    ) -> Tensor:
+        """
+        Args:
+          image_embedding (torch.Tensor): image to attend to. Should be shape
+            B x embedding_dim x h x w for any h and w.
+          image_pe (torch.Tensor): the positional encoding to add to the image. Must
+            have the same shape as image_embedding.
+          token_embedding (torch.Tensor): the embedding to add to the query points.
+
+        Returns:
+          torch.Tensor: the processed point_embedding
+        """
+        # BxCxHxW -> BxHWxC == B x N_image_tokens x C
+        bs, c, h, w = image_embedding.shape
+        image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
+        image_pe = image_pe.flatten(2).permute(0, 2, 1)
+
+        # Prepare queries
+        queries = image_embedding
+        keys = token_embedding
+
+        # Apply transformer blocks
+        for layer in self.layers:
+            queries = layer(
+                queries=queries,
+                keys=keys,
+                query_pe=image_pe,
+            )
+
+        return keys, queries
+    
+    
+class OneWayAttentionBlock(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int = 2048,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+    ) -> None:
+        """
+        A transformer block with four layers: (1) self-attention of sparse
+        inputs, (2) cross attention of sparse inputs to dense inputs, (3) mlp
+        block on sparse inputs, and (4) cross attention of dense inputs to sparse
+        inputs.
+
+        Arguments:
+          embedding_dim (int): the channel dimension of the embeddings
+          num_heads (int): the number of heads in the attention layers
+          mlp_dim (int): the hidden dimension of the mlp block
+          activation (nn.Module): the activation of the mlp block
+          skip_first_layer_pe (bool): skip the PE on the first layer
+        """
+        super().__init__()
+
+        self.cross_attn_image_to_token = Attention(
+            embedding_dim, num_heads, downsample_rate=attention_downsample_rate
+        )
+        self.norm1 = nn.LayerNorm(embedding_dim)
+
+        self.mlp = MLPBlock(embedding_dim, mlp_dim, activation)
+        self.norm2 = nn.LayerNorm(embedding_dim)
+        self.norm3 = nn.LayerNorm(embedding_dim)
+
+    def forward(
+        self, queries: Tensor, keys: Tensor, query_pe: Tensor
+    ) -> Tuple[Tensor, Tensor]:
+        # Cross attention block, image embedding attending to tokens 
+        q = queries + query_pe
+        attn_out = self.cross_attn_image_to_token(q=q, k=keys, v=keys)
+        queries = queries + attn_out
+        queries = self.norm1(queries)
+
+        # MLP block
+        mlp_out = self.mlp(queries)
+        queries = queries + mlp_out
+        queries = self.norm2(queries)
+
+        return queries
 
 
 class TwoWayTransformer(nn.Module):

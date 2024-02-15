@@ -117,7 +117,11 @@ class AttentionMLPBlock(nn.Module):
         self.mlp = MLPBlock(embed_dim, mlp_dim, act)
         self.attn = Attention(embed_dim, num_heads=num_heads, downsample_rate=downsample_rate)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        attn_out = self.norm(self.attn(x, x, x) + x)
+    def forward(self, q: torch.Tensor, k: torch.Tensor = None, v: torch.Tensor = None) -> torch.Tensor:
+        if k is None:
+            k = q
+        if v is None:
+            v = q
+        attn_out = self.norm(self.attn(q, k, v) + q)
         return self.norm(self.mlp(attn_out) + attn_out)
         

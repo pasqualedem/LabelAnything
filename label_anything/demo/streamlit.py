@@ -8,8 +8,8 @@ import plotly.graph_objects as go
 from PIL import Image
 
 
-from data.dataset import LabelAnythingDataset, VariableBatchSampler
-from data.transforms import CustomResize, CustomNormalize
+from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
+from label_anything.data.transforms import CustomResize, CustomNormalize
 from accelerate import Accelerator
 
 import numpy as np
@@ -21,7 +21,8 @@ import os
 
 import lovely_tensors as lt
 from label_anything.experiment.substitution import Substitutor
-from label_anything.utils.utils import ResultDict
+from label_anything.utils.utils import ResultDict, load_yaml
+from label_anything.models import model_registry
 
 lt.monkey_patch()
 
@@ -36,9 +37,9 @@ from label_anything.data.utils import (
 )
 from label_anything.experiment.utils import WrapperModule
 
-from notebooks.visualize import (
+from label_anything.demo.visualize import (
     get_embeddings_names,
-    load_checkpoint,
+    load_from_wandb,
     obtain_batch,
     plot_emebddings,
     # plot_segs,
@@ -148,12 +149,32 @@ def get_data(_accelerator):
 
 
 @st.cache_resource
-def load_model(_accelerator, run_id):
-    model = build_lam_no_vit()
+def load_model(_accelerator: Accelerator, run_id):
+    folder = "latest"
+    model_file, config_file = load_from_wandb(run_id, folder)
+    if config_file is not None:
+        config = load_yaml(config_file)
+        model_params = config["model"]["value"]
+        name = model_params.pop("name")
+    else:
+        model_params = {}
+        name = "lam_no_vit"
+        st.warning(
+            f"Config file not found, using default model params: {model_params}, {name}"
+        )
+    model = model_registry[name](**model_params)
     model = WrapperModule(model, None)
+    model_state_dict = torch.load(model_file)
+    unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
     model = _accelerator.prepare(model)
-    unmatched_keys = load_checkpoint(_accelerator, run_id)
-    st.warning(f"Unmatched keys: {unmatched_keys}")
+    if unmatched_keys.missing_keys:
+        st.warning(f"Missing keys: {unmatched_keys.missing_keys}")
+    if unmatched_keys.unexpected_keys:
+        if unmatched_keys.unexpected_keys != [
+            "loss.prompt_components.prompt_contrastive.t_prime",
+            "loss.prompt_components.prompt_contrastive.bias",
+        ]:
+            st.warning(f"Unexpected keys: {unmatched_keys.unexpected_keys}")
     return model
 
 

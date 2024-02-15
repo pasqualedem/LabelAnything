@@ -233,7 +233,7 @@ def get_batch_metadata(
     prompt_types = []
     combs = [
         list(itertools.combinations(possible_prompts, i))
-        for i in range(1, len(possible_prompts))
+        for i in range(1, len(possible_prompts) + 1)
     ]
     multi_combs = [x for comb in combs for x in comb]
     remaining_images = dataset_len // num_processes
@@ -311,6 +311,7 @@ class VariableBatchSampler(BatchSampler):
             num_processes=num_processes,
             possible_prompts=prompt_types,
         )
+        self.num_processes = num_processes
         if num_steps is not None:
             if num_steps % num_processes != 0:
                 logger.warning(
@@ -326,6 +327,7 @@ class VariableBatchSampler(BatchSampler):
                 k: v[:num_steps] for k, v in self.batch_metadata.items()
             }
         self.drop_last = drop_last
+        self.do_shuffle = shuffle
         if shuffle:
             self.sampler = torch.utils.data.RandomSampler(data_source)
         else:
@@ -336,8 +338,29 @@ class VariableBatchSampler(BatchSampler):
 
     def __len__(self):
         return len(self.batch_sizes)
+    
+    def shuffle(self):
+        # Remove th processes multiplication
+        batches = self.batch_sizes[::self.num_processes]
+        metadata = {k: v[::self.num_processes] for k, v in list(self.batch_metadata.items())}
+        # Get permutation
+        indices = torch.randperm(len(batches)).tolist()
+        # Permute
+        batches = [batches[i] for i in indices]
+        # Multiply for the number of processes
+        metadata = {k: [v[i] for i in indices] for k, v in metadata.items()}
+        self.batch_sizes = [
+            val for tup in zip(*[batches for i in range(self.num_processes)]) for val in tup
+        ]
+        self.batch_metadata = {
+            k: list(val for tup in zip(*[v for i in range(self.num_processes)]) for val in tup)
+            for k, v in metadata.items()
+        }
+        
 
     def __iter__(self):
+        if self.do_shuffle:
+            self.shuffle()
         indices = self.sampler.__iter__()
 
         for i, batch_size in enumerate(self.batch_sizes):

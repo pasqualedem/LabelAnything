@@ -1,10 +1,8 @@
-import comet_ml
-from label_anything.preprocess import (
-    preprocess_images_to_embeddings,
-    generate_ground_truths,
+from label_anything.experiment.experiment import (
+    experiment as run_experiment,
+    run as run_single,
+    test as test_fn,
 )
-from label_anything.preprocess_clip import main as exe_clip_preprocess
-from label_anything.experiment.experiment import experiment as run_experiment, run as run_single, test as test_fn
 
 import click
 from label_anything.experiment.pretraining import main as exe_pretrain_pe
@@ -23,19 +21,23 @@ def main():
     "--parallel", default=False, help="Run the experiments in parallel", is_flag=True
 )
 @click.option(
-    "--only-create", default=False, help="Creates params files with running them", is_flag=True
+    "--only-create",
+    default=False,
+    help="Creates params files with running them",
+    is_flag=True,
 )
 def experiment(parameters, parallel, only_create):
-        run_experiment(param_path=parameters, parallel=parallel, only_create=only_create)
-        
+    run_experiment(param_path=parameters, parallel=parallel, only_create=only_create)
+
 
 @main.command("run")
 @click.option(
     "--parameters", default="parameters.yaml", help="Path to the parameters file"
 )
 def run(parameters):
-        run_single(param_path=parameters)
-        
+    run_single(param_path=parameters)
+
+
 @main.command("test")
 @click.option("--parameters", default="test.yaml")
 def test(parameters):
@@ -93,6 +95,8 @@ def preprocess(
     num_workers,
     outfolder,
 ):
+    from label_anything.preprocess import preprocess_images_to_embeddings
+
     preprocess_images_to_embeddings(
         encoder_name=encoder,
         checkpoint=checkpoint,
@@ -103,6 +107,7 @@ def preprocess(
         outfolder=outfolder,
         compile=compile,
     )
+
 
 @main.command("generate_gt")
 @click.option(
@@ -121,6 +126,7 @@ def preprocess(
     help="Folder to save the embeddings",
 )
 def generate_gt(dataset_name, anns_path, outfolder):
+    from label_anything.preprocess import generate_ground_truths
     generate_ground_truths(dataset_name, anns_path, outfolder)
 
 
@@ -168,20 +174,27 @@ def benchmark():
 
 
 @main.command("preprocess_clip")
-@click.option(
-    "--parameters",
-    default="extract_params.yaml",
-    help="Path to yaml file"
-)
+@click.option("--parameters", default="extract_params.yaml", help="Path to yaml file")
 def preprocess_clip(parameters):
+    from label_anything.preprocess_clip import main as exe_clip_preprocess
+
     exe_clip_preprocess(params_path=parameters)
 
 
 @main.command("pretrain_pe")
 @click.option(
-    "--parameters",
-    default='pretraining_parameters.yaml',
-    help='Path to yaml file'
+    "--parameters", default="pretraining_parameters.yaml", help="Path to yaml file"
 )
 def pretrain_pe(parameters):
     exe_pretrain_pe(parameters)
+
+
+@main.command("rename_coco20i_json")
+@click.option(
+    "--instances_path",
+    default="data/raw/instances_train2014.json",
+    help="Path to the instances file",
+)
+def rename_coco20i_json_cli(instances_path):
+    from label_anything.preprocess import rename_coco20i_json
+    rename_coco20i_json(instances_path)
