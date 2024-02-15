@@ -36,19 +36,25 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [20]
     compile: [False]
-    initial_lr: [0.00001, 0.00005, 0.00002]
+    initial_lr: [0.00005]
     optimizer: [AdamW]
     scheduler:
-    - type: cosine
+    - type: constant_with_warmup
       step_moment: batch
       num_warmup_steps: 1000
+    - type: reduce_lr_on_plateau
+      step_moment: [epoch]
+      patience: [1]
+      factor: [0.5]
+      min_lr: [0.0000001]
+      mode: [max]
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
-    name: [lam_vit_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
