@@ -100,3 +100,21 @@ other_grids:
         - type: constant_with_warmup
           step_moment: batch
           num_warmup_steps: 1000
+  - train_parameters:
+      initial_lr: [0.00002, 0.00005]
+      scheduler:
+        - type: constant_with_warmup
+          step_moment: batch
+          num_warmup_steps: 1000
+      substitute: [False]
+      accumulate_substitution: [False]
+      max_epochs: [100]
+  - train_parameters:
+      initial_lr: [0.00002, 0.00005]
+      scheduler:
+      - type: cosine
+        step_moment: batch
+        num_warmup_steps: 1000
+      substitute: [False]
+      accumulate_substitution: [False]
+      max_epochs: [100]
