@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 import time
 
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
+from label_anything.data.examples import NWayExampleGenerator
 
 @pytest.mark.skip(reason="Not implemented")
 def test_examples():
@@ -40,7 +40,7 @@ def test_examples():
     N_EXAMPLES = 10
     TIMEIT = True
 
-    example_generator = ExampleGeneratorPowerLawUniform(categories_to_imgs=category_images)
+    example_generator = NWayExampleGenerator(categories_to_imgs=category_images)
 
     if TIMEIT:
         start = time.time()

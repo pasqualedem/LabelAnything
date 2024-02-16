@@ -16,7 +16,7 @@ from label_anything.logger.text_logger import get_logger
 
 import label_anything.data.utils as utils
 from label_anything.data.examples import (
-    ExampleGeneratorPowerLawUniform,
+    NWayExampleGenerator,
     uniform_sampling,
 )
 from label_anything.data.transforms import (
@@ -49,6 +49,7 @@ class CocoLVISDataset(Dataset):
         emb_dir: Optional[str] = None,
         max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
+        n_ways: int = "max",
         preprocess=ToTensor(),
         load_embeddings: bool = None,
         load_gts: bool = False,
@@ -65,6 +66,7 @@ class CocoLVISDataset(Dataset):
             emb_dir (Optional[str], optional): Path to the directory containing the embeddings. Defaults to None.
             max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
+            n_ways (int, optional): Number of classes to sample. Defaults to "max".
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
             load_embeddings (bool, optional): Specify if embeddings are precomputed. Defaults to True.
             load_gts (bool, optional): Specify if ground truth masks are precomputed. Defaults to False.
@@ -102,6 +104,7 @@ class CocoLVISDataset(Dataset):
         self.max_points_annotations = max_points_annotations
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
+        self.n_ways = n_ways
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -130,7 +133,8 @@ class CocoLVISDataset(Dataset):
         self.image_ids = list(self.images.keys())
 
         # example generator/selector
-        self.example_generator = ExampleGeneratorPowerLawUniform(
+        self.example_generator = NWayExampleGenerator(
+            n_ways=self.n_ways,
             categories_to_imgs=self.cat2img,
         )
 

@@ -4,7 +4,7 @@ import torch
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
-from label_anything.data.examples import ExampleGeneratorPowerLawUniform
+from label_anything.data.examples import NWayExampleGenerator
 from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys, PromptType, StrEnum, flags_merge
 
 
@@ -83,7 +83,8 @@ class Coco20iDataset(CocoLVISDataset):
         self.image_ids = list(self.images.keys())
 
         # example generator/selector
-        self.example_generator = ExampleGeneratorPowerLawUniform(
+        self.example_generator = NWayExampleGenerator(
+            n_ways=self.n_ways,
             categories_to_imgs=self.cat2img
         )
 

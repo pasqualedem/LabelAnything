@@ -206,16 +206,21 @@ class ExampleGenerator:
         return image_ids, examples_sampled_classes
 
 
-class ExampleGeneratorPowerLawUniform(ExampleGenerator):
+class NWayExampleGenerator(ExampleGenerator):
     """
     Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
     """
 
-    def __init__(self, categories_to_imgs, alpha=-2.0, min_size=1) -> None:
+    def __init__(self, categories_to_imgs, n_ways="max", min_size=1, alpha=-2.0) -> None:
+        if n_ways == "max":
+            n_classes_sample_function = partial(sample_power_law, alpha=alpha),
+        else:
+            n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways)) 
         super().__init__(
             categories_to_imgs,
-            partial(sample_power_law, alpha=alpha),
+            n_classes_sample_function,
             sample_over_inverse_frequency,
             uniform_sampling,
             min_size,
         )
+        
