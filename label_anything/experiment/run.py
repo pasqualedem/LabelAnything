@@ -453,8 +453,37 @@ class Run:
             epoch=epoch,
         )
 
-    def validate(self, epoch):
-        set_seed(self.params["train_params"]["seed"])
+    def validate(self, epoch: int):
+        if self.train_params.get("validation_reruns", None) is None:
+            metrics = self.validate_run(epoch, None)
+        else:
+            overall_metrics = []
+            for validation_run in range(self.train_params["validation_reruns"]):
+                metrics = self.validate_run(epoch, validation_run)
+                overall_metrics.append(metrics)
+            metrics = {
+                k: torch.stack([torch.tensor(m[k]) for m in overall_metrics]).mean()
+                for k in overall_metrics[0].keys()
+            }
+            self.plat_logger.log_metrics(
+                {**{"avg_" + k: v for k, v in metrics.items()}},
+                epoch=epoch,
+            )
+            for k, v in metrics.items():
+                logger.info(f"Validation epoch {epoch} - {k}: {v}")
+
+        logger.info(f"Validation epoch {epoch} finished")
+        return metrics
+
+    def validate_run(self, epoch, validation_run=None):
+        if validation_run is None:
+            seed = self.params["train_params"]["seed"]
+            metrics_suffix = ""
+        else:
+            seed = self.params["train_params"]["seed"] + validation_run
+            metrics_suffix = f"_{validation_run}"
+        set_seed(seed)
+
         self.model.eval()
         avg_loss = RunningAverage()
         dataset_categories = next(
@@ -463,12 +492,12 @@ class Run:
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
-                "mIoU": DistributedMulticlassJaccardIndex(
+                f"mIoU{metrics_suffix}": DistributedMulticlassJaccardIndex(
                     num_classes=num_classes + 1,
                     average="macro",
                     ignore_index=-100,
                 ),
-                "FBIoU": DistributedBinaryJaccardIndex(
+                f"FBIoU{metrics_suffix}": DistributedBinaryJaccardIndex(
                     ignore_index=-100,
                 ),
             },
@@ -541,12 +570,17 @@ class Run:
             )
         self.accelerator.wait_for_everyone()
 
-        logger.info(f"Validation epoch {epoch} finished")
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
-            logger.info(f"Validation epoch {epoch} - {k}: {v}")
-        logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
-        return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
+            logger.info(f"Validation {metrics_suffix[1:]} epoch {epoch} - {k}: {v}")
+        logger.info(
+            f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
+        )
+        return {
+            "miou": metrics_value[f"batch_mIoU{metrics_suffix}"],
+            "loss": avg_loss.compute(),
+            "fbiou": metrics_value[f"batch_FBIoU{metrics_suffix}"],
+        }
 
     def test(self):
         with self.plat_logger.test():
@@ -631,7 +665,7 @@ class ParallelRun:
         subfolder = f"{self.exp_timestamp}_{self.params['experiment']['group']}"
         out_folder = os.path.join(self.slurm_outfolder, subfolder)
         os.makedirs(out_folder, exist_ok=True)
-        
+
         run_uuid = str(uuid.uuid4())[:8]
         out_file = f"{run_uuid}.{self.out_extension}"
         out_file = os.path.join(out_folder, out_file)
