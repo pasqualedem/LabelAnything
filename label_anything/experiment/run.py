@@ -376,7 +376,7 @@ class Run:
 
         # setting prompt encoder parameters
         if self.prompt_encoder_params:
-            for p in self.model.module.prompt_encoder.parameters():
+            for p in self.model.module.model.prompt_encoder.parameters():
                 p.requires_grad = (epoch < self.train_params.get('freeze_params_max_epoch', 0))
 
         for batch_idx, batch_tuple in bar:
