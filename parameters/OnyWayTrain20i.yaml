@@ -94,9 +94,9 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  train_parameters:
-    initial_lr: [0.00002, 0.00005]
-    scheduler:
-      - type: constant_with_warmup
-        step_moment: batch
-        num_warmup_steps: 1000
+  - train_parameters:
+      initial_lr: [0.00002, 0.00005]
+      scheduler:
+        - type: constant_with_warmup
+          step_moment: batch
+          num_warmup_steps: 1000
