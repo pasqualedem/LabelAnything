@@ -35,7 +35,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [20, 30, 40, 60]
+    max_epochs: [60]
     compile: [False]
     initial_lr: [0.00005]
     optimizer: [AdamW]
@@ -46,6 +46,7 @@ parameters:
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
+    validation_reruns: [5] # number of reruns for validation
     check_nan: [1] # check for nan every n batches
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
@@ -93,3 +94,9 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+  train_parameters:
+    initial_lr: [0.00002, 0.00005]
+    scheduler:
+      - type: constant_with_warmup
+        step_moment: batch
+        num_warmup_steps: 1000
