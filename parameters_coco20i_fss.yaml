@@ -36,7 +36,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [20]
     compile: [False]
-    initial_lr: [0.0001, 0.00005, 0.00002]
+    initial_lr: [0.00005]
     optimizer: [AdamW]
     scheduler:
     - type: cosine
@@ -52,7 +52,7 @@ parameters:
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
-    fusion_transformer: [OneWayTransformer]
+    fusion_transformer: [TwoWayTransformer]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -81,7 +81,7 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      load_gts: [True]
+      load_gts: [False]
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
@@ -91,7 +91,3 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  - train_params:
-      substitute: [False]
-      accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-      max_epochs: [50]
