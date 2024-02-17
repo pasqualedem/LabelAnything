@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Port is passed or default is used
+PORT=$1
+if [ -z "$PORT" ]
+    then
+    PORT=8501
+fi
+
+cd $WORK/LabelAnything
+source .venv/bin/activate
+export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
+fuser -k -n tcp $PORT
+streamlit run slurm/slurm.py --server.port $PORT
