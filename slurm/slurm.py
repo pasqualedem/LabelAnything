@@ -85,7 +85,7 @@ def get_run_data(group_dir, run):
         unix_time = os.path.getmtime(outfile)
         return {"Out File": outfile, "Last Modified": pd.to_datetime(unix_time, unit='s')}
     else:
-        return None, None
+        return {"Out File": None, "Last Modified": None}
 
 def show_group(group):
     group_dir = os.path.join(OUT_DIR, group)
