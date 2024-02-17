@@ -7,8 +7,19 @@ import subprocess
 
 OUT_DIR = 'out'
 
-@st.cache_data
+@st.cache_resource
 def get_slurm_jobs():
+        def highlight_state(val):
+            if val == 'RUNNING':
+                return 'background-color: blue'
+            elif val == 'FAILED':
+                return 'background-color: red'
+            elif val == 'COMPLETED':
+                return 'background-color: green'
+            elif val == 'PENDING':
+                return 'background-color: yellow'
+            else:
+                return ''
         # Run sacct command and capture output
         command_output = subprocess.run(['sacct', '--format=JobID,JobName,State,Start,End,Elapsed,CPUTime,AllocCPUS,Partition'],
                                         capture_output=True, text=True)
@@ -22,17 +33,20 @@ def get_slurm_jobs():
 
             # Create a DataFrame from the list of dictionaries
             df = pd.DataFrame(data_list, columns=columns)
-            return df
+            df = df[df['JobID'].str.isnumeric()]
+            # Set running jobs background to yellow, failed to red, and completed to green
+            styled_df = df.style.applymap(highlight_state, subset=['State'])
+            return styled_df
         else:
             df = pd.DataFrame([])
             
 
 def show_slurm():
     if st.button('Refresh'):
-        st.cache_data.clear()
+        st.cache_resource.clear()
     with st.expander('Slurm'):
         df = get_slurm_jobs()
-        AgGrid(df)
+        st.dataframe(df, use_container_width=True)
     
             
 def parse_miou(output):
@@ -43,6 +57,15 @@ def parse_miou(output):
                         if 'miou:' in line:
                             mious.append(float(line.split('miou:')[1].strip()))
     return mious
+
+
+def read_output(output, lines=10):
+    if lines < 0:
+        slc = slice(lines, None)
+    else:
+        slc = slice(None, lines)
+    with open(output) as f:
+        return '\n'.join(f.readlines()[slc])
 
 
 def show_run(group_dir, run):
@@ -68,7 +91,16 @@ def show_run(group_dir, run):
                     break
         if not found:
             st.write('No wandb sync found')
-        if st.button("Show miou"):
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            miou_button = st.button("Show miou")
+        with col3:
+            lines = st.number_input('Lines', min_value=-100, max_value=100, value=-10)
+        with col4:
+            out_button = st.button("Show output")
+        if out_button:
+            st.code(read_output(run_output, lines=lines))
+        if miou_button:
             miou = parse_miou(run_output)
             if len(miou) > 0:
                 st.line_chart(pd.DataFrame(miou, columns=['miou']))
@@ -93,7 +125,7 @@ def show_group(group):
     runs = os.listdir(group_dir)
     runs = set([run.split('.')[0] for run in runs])
     runs_data = pd.DataFrame([{"Run": run, **get_run_data(group_dir, run)} for run in runs])
-    AgGrid(runs_data)   
+    st.dataframe(runs_data, use_container_width=True)   
     
     run = st.selectbox('Run', list(runs))
     show_run(group_dir, run)
@@ -105,12 +137,50 @@ def show_groups():
         groups.remove("old")
     group = st.selectbox('Group', groups)
     show_group(group)
-            
+    
+    
+def launch_job():
+    sh_file = "launch_experiment_exe"
+    slurm_file = st.text_input('Slurm file', value='launch_run')
+    exe_file = st.text_input('Exe file', value='launch_run_exe')
+    col1, col2 = st.columns(2)
+    with col1:
+        if os.path.exists(slurm_file):
+            with open(slurm_file) as f:
+                st.code(f.read())
+        else:
+            st.write(f'No slurm file found: {slurm_file}')
+    with col2:
+        if os.path.exists(exe_file):
+            with open(exe_file) as f:
+                st.code(f.read())
+        else:
+            st.write(f'No exe file found: {exe_file}')
+    params = [p for p in os.listdir() if p.endswith('.yaml')]
+    if os.path.exists('parameters'):
+        params += os.listdir('parameters')
+    param = st.selectbox('Param', params)
+    only_create = st.checkbox('Only create')
+    command = f'sh ./{sh_file} --parameters={param} {"--only-create" if only_create else ""}'
+    st.code(command, language="bash")
+    command = command.split()
+    if st.button('Run'):
+        with st.spinner('Running'):
+            # Get output
+            output = subprocess.run(command, capture_output=True, text=True)
+        st.code(output.stdout)
+        st.code(output.stderr)
+        st.balloons()
 
 def main():
     st.title('Experiment handler')
-    show_slurm()
-    show_groups()
+    viewer_tab, launcher_tab = st.tabs((f"Viewer", f"Launcher"))
+    with viewer_tab:
+        show_slurm()
+        show_groups()
+    with launcher_tab:
+        launch_job()
+        
 
 if __name__ == '__main__':
     main()
