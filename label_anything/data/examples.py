@@ -213,7 +213,7 @@ class NWayExampleGenerator(ExampleGenerator):
 
     def __init__(self, categories_to_imgs, n_ways="max", min_size=1, alpha=-2.0) -> None:
         if n_ways == "max":
-            n_classes_sample_function = partial(sample_power_law, alpha=alpha),
+            n_classes_sample_function = partial(sample_power_law, alpha=alpha)
         else:
             n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways)) 
         super().__init__(
