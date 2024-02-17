@@ -61,9 +61,9 @@ def show_run(group_dir, run):
             found = False
             for line in lines:
                 if 'wandb sync' in line:
-                    command = line.split('wandb sync')[1]
-                    command += f"> {group_dir}/{run}.sync 2>&1 &"
-                    st.code(command)
+                    folder = line.split('wandb sync')[1].strip()
+                    command = f"wandb sync {folder} > {group_dir}/{run}.sync 2>&1 &"
+                    st.code(command, language="bash")
                     found = True
                     break
         if not found:
