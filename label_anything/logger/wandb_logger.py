@@ -78,6 +78,7 @@ class WandBLogger(AbstractLogger):
         save_code: bool = False,
         tags=None,
         run_id=None,
+        resume_checkpoint_type: str = "best",
         group=None,
         **kwargs,
     ):
@@ -96,8 +97,11 @@ class WandBLogger(AbstractLogger):
         :param save_logs_remote: Saves log files in s3.
         :param save_code: save current code to wandb
         """
-        self.resume = resume
-        resume = "must" if resume else None
+        tracker_resume = "must" if resume else None
+        self.resume = tracker_resume
+        resume = run_id is not None
+        if not tracker_resume and resume:
+            tags = tags + ["resume", run_id]
         self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
@@ -107,14 +111,14 @@ class WandBLogger(AbstractLogger):
             os.environ["WANDB_CONFIG_DIR"] = offline_directory
             os.environ["WANDB_DATA_DIR"] = offline_directory
         if resume:
-            self._resume(offline_directory, run_id)
+            self._resume(offline_directory, run_id, checkpoint_type=resume_checkpoint_type)
         experiment = None
         if kwargs["accelerator"].is_local_main_process:
             experiment = wandb.init(
                 project=project_name,
                 entity=entity,
-                resume=resume,
-                id=run_id,
+                resume=tracker_resume,
+                id=run_id if tracker_resume else None,
                 tags=tags,
                 dir=offline_directory,
                 group=group,
@@ -140,7 +144,7 @@ class WandBLogger(AbstractLogger):
         self.context = ""
         self.sequences = {}
                 
-    def _resume(self, offline_directory, run_id):
+    def _resume(self, offline_directory, run_id, checkpoint_type="latest"):
         if not offline_directory:
             offline_directory = "."
         wandb_dir = os.path.join(offline_directory, "wandb")

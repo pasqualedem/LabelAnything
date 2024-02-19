@@ -2,6 +2,7 @@ from label_anything.experiment.experiment import (
     experiment as run_experiment,
     run as run_single,
     test as test_fn,
+    validate as validate_fn,
 )
 
 import click
@@ -42,6 +43,12 @@ def run(parameters):
 @click.option("--parameters", default="test.yaml")
 def test(parameters):
     test_fn(param_path=parameters)
+    
+
+@main.command("validate")
+@click.option("--parameters", default="test.yaml")
+def validate(parameters):
+    validate_fn(param_path=parameters)
 
 
 @main.command("preprocess")

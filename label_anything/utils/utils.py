@@ -22,10 +22,38 @@ FLOAT_PRECISIONS = {
 }
 
 
+def strip_wandb_keys_recursive(data):
+    
+    if isinstance(data, dict):
+        d = {}
+        for k, v in data.items():
+            if k == "wandb_version":
+                continue
+            elif k == "_wandb":
+                d = {**d, **strip_wandb_keys_recursive(v)}
+            elif k == "desc":
+                continue
+            elif k == "value":
+                d = {**d, **strip_wandb_keys_recursive(v)}
+            else:
+                d[k] = strip_wandb_keys_recursive(v)
+    elif isinstance(data, list):
+        return [strip_wandb_keys_recursive(v) for v in data]
+    else:
+        return data
+    
+
+def strip_wandb_keys(data):
+    if "_wandb" in data:
+        return strip_wandb_keys_recursive(data["_wandb"])
+    return data
+
+
 def load_yaml(file_path):
     try:
         with open(file_path, "r") as yaml_file:
             data = yaml.safe_load(yaml_file.read())
+            data = strip_wandb_keys(data)
             return data
     except FileNotFoundError:
         print(f"File '{file_path}' not found.")
