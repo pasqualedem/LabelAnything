@@ -101,6 +101,8 @@ class WandBLogger(AbstractLogger):
         self.resume = tracker_resume
         resume = run_id is not None
         if not tracker_resume and resume:
+            if tags is None:
+                tags = []
             tags = tags + ["resume", run_id]
         self.accelerator_state_dir = None
         if offline_directory:
