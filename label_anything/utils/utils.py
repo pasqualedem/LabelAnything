@@ -37,6 +37,7 @@ def strip_wandb_keys_recursive(data):
                 d = {**d, **strip_wandb_keys_recursive(v)}
             else:
                 d[k] = strip_wandb_keys_recursive(v)
+        return d
     elif isinstance(data, list):
         return [strip_wandb_keys_recursive(v) for v in data]
     else:
@@ -45,7 +46,7 @@ def strip_wandb_keys_recursive(data):
 
 def strip_wandb_keys(data):
     if "_wandb" in data:
-        return strip_wandb_keys_recursive(data["_wandb"])
+        return strip_wandb_keys_recursive(data)
     return data
 
 
