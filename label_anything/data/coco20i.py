@@ -4,7 +4,7 @@ import torch
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
-from label_anything.data.examples import NWayExampleGenerator
+from label_anything.data.examples import build_example_generator
 from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys, PromptType, StrEnum, flags_merge
 
 
@@ -83,8 +83,9 @@ class Coco20iDataset(CocoLVISDataset):
         self.image_ids = list(self.images.keys())
 
         # example generator/selector
-        self.example_generator = NWayExampleGenerator(
+        self.example_generator = build_example_generator(
             n_ways=self.n_ways,
+            n_shots=self.n_shots,
             categories_to_imgs=self.cat2img
         )
 
@@ -100,7 +101,7 @@ class Coco20iDataset(CocoLVISDataset):
         Returns:
             dict: Data dictionary.
         """
-        if self.split == Coco20iSplit.TRAIN:
+        if self.split == Coco20iSplit.TRAIN or self.n_shots == "min":
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
             idx, metadata = idx_batchmetadata
@@ -170,6 +171,7 @@ class Coco20iDataset(CocoLVISDataset):
             return data_dict
 
     def __len__(self):
+        return 10
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
         elif self.split == Coco20iSplit.VAL:

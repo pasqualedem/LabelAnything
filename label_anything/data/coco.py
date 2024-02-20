@@ -16,7 +16,7 @@ from label_anything.logger.text_logger import get_logger
 
 import label_anything.data.utils as utils
 from label_anything.data.examples import (
-    NWayExampleGenerator,
+    build_example_generator,
     uniform_sampling,
 )
 from label_anything.data.transforms import (
@@ -133,8 +133,9 @@ class CocoLVISDataset(Dataset):
         self.image_ids = list(self.images.keys())
 
         # example generator/selector
-        self.example_generator = NWayExampleGenerator(
+        self.example_generator = build_example_generator(
             n_ways=self.n_ways,
+            n_shots=None,
             categories_to_imgs=self.cat2img,
         )
 

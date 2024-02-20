@@ -172,7 +172,8 @@ class ExampleGenerator:
                 ):  # We found at least one image, we can take one of them and stop
                     found = True
                     example_id = self.image_sample_function(
-                        images_containing, image_ids,
+                        images_containing,
+                        image_ids,
                     )
                 else:  # We didn't find an image, we need to remove a class and try again
                     max_frequency_class = max(
@@ -194,7 +195,8 @@ class ExampleGenerator:
                     ) = self.backup_sampling(image_classes.tolist(), frequencies)
                     found = True
                     example_id = self.image_sample_function(
-                        images_containing, [],
+                        images_containing,
+                        [],
                     )  # Doesn't matter we take a sampled image
             image_ids.append(example_id)
             for cat in example_sampled_classes:
@@ -211,11 +213,13 @@ class NWayExampleGenerator(ExampleGenerator):
     Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
     """
 
-    def __init__(self, categories_to_imgs, n_ways="max", min_size=1, alpha=-2.0) -> None:
+    def __init__(
+        self, categories_to_imgs, n_ways="max", min_size=1, alpha=-2.0
+    ) -> None:
         if n_ways == "max":
             n_classes_sample_function = partial(sample_power_law, alpha=alpha)
         else:
-            n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways)) 
+            n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways))
         super().__init__(
             categories_to_imgs,
             n_classes_sample_function,
@@ -223,4 +227,82 @@ class NWayExampleGenerator(ExampleGenerator):
             uniform_sampling,
             min_size,
         )
-        
+
+
+class MaxWayMinShotsExampleGenerator(ExampleGenerator):
+    """
+    Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
+    """
+
+    def __init__(self, categories_to_imgs, min_size=1) -> None:
+        super().__init__(
+            categories_to_imgs,
+            lambda n: torch.tensor(n),
+            None,
+            uniform_sampling,
+            min_size,
+        )
+
+    def generate_examples(
+        self, query_image_id, image_classes, sampled_classes, num_examples
+    ):
+        """
+        Generates examples for a given query image and a set of classes.
+        For each example it sample a subset of classes given the frequencies over the past sampled
+        classes in the previous examples. Then it finds an image that contains all the classes in the
+        subset. If it cannot find an image, it removes the class with the highest frequency and tries
+        again.
+        Args:
+            query_image_id (int): id of the query image
+            image_classes (torch.Tensor): list of classes in the query image
+            sampled_classes (torch.Tensor): list of sampled classes, to use to select the examples
+            categories_to_imgs (dict): dictionary mapping category ids to image ids
+            num_examples (int): number of examples to generate
+
+        Returns:
+            image_ids (list): list of image ids of the sampled examples
+            examples_sampled_classes (list): list of sets of classes sampled for each example
+        """
+        examples_sampled_classes = []
+        image_ids = [query_image_id]
+        remaining_classes = set(sampled_classes.tolist())
+        while remaining_classes:
+            len_combinations = len(remaining_classes)
+            for i in range(len_combinations):
+                found = False
+                included_classes_combinations = torch.combinations(
+                    torch.tensor(list(remaining_classes)), len_combinations - i
+                ).tolist()
+                n = len(included_classes_combinations)
+                for k in range(n):
+                    included_classes = included_classes_combinations[k]
+                    images_containing = self.get_image_ids_intersection(
+                        included_classes, image_ids
+                    )
+                    if (
+                        len(images_containing) > 0
+                    ):  # We found at least one image, we can take one of them and stop
+                        example_id = self.image_sample_function(
+                            images_containing,
+                            image_ids,
+                        )
+                        found = True
+                        break
+                if found:
+                    image_ids.append(example_id)
+                    examples_sampled_classes.append(set(included_classes))
+                    remaining_classes = remaining_classes - set(included_classes)
+                    break
+        examples_sampled_classes.insert(
+            0, (set.union(*examples_sampled_classes))
+        )  # Query image has all classes in examples
+        return image_ids, examples_sampled_classes
+
+
+def build_example_generator(
+    categories_to_imgs, n_ways="max", n_shots=None, min_size=1, alpha=-2.0
+):
+    if n_shots == "min":
+        return MaxWayMinShotsExampleGenerator(categories_to_imgs, min_size)
+    else:
+        return NWayExampleGenerator(categories_to_imgs, n_ways, min_size, alpha)
