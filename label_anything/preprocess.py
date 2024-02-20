@@ -166,7 +166,7 @@ def preprocess_images_to_embeddings_huggingface(
         dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
     print("Dataloader created")
-    create_image_embeddings(model, dataloader, outfolder, device=device)
+    create_image_embeddings_huggingface(model, dataloader, outfolder, device=device)
 
 
 def rename_coco20i_json(instances_path: str):
