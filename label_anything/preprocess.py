@@ -138,6 +138,7 @@ def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cu
             logging.info(f"Step {idx}/{n_steps}")
 
 
+@torch.no_grad
 def preprocess_images_to_embeddings_huggingface(
     model_name,
     directory,
