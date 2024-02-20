@@ -12,6 +12,8 @@ from torch.nn import functional as F
 
 from typing import List, Tuple, Type
 
+from label_anything.utils.utils import ResultDict
+
 from .common import LayerNorm2d
 
 
@@ -53,10 +55,14 @@ class MaskDecoder(nn.Module):
         self.mask_tokens = nn.Embedding(self.num_mask_tokens, transformer_dim)
 
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
+            ),
             LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
+            ),
             activation(),
         )
         self.output_hypernetworks_mlps = nn.ModuleList(
@@ -120,8 +126,12 @@ class MaskDecoder(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
         # Concatenate output tokens
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight], dim=0)
-        output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
+        output_tokens = torch.cat(
+            [self.iou_token.weight, self.mask_tokens.weight], dim=0
+        )
+        output_tokens = output_tokens.unsqueeze(0).expand(
+            sparse_prompt_embeddings.size(0), -1, -1
+        )
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
 
         # Expand per-image data in batch direction to be per-mask
@@ -140,7 +150,9 @@ class MaskDecoder(nn.Module):
         upscaled_embedding = self.output_upscaling(src)
         hyper_in_list: List[torch.Tensor] = []
         for i in range(self.num_mask_tokens):
-            hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
+            hyper_in_list.append(
+                self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :])
+            )
         hyper_in = torch.stack(hyper_in_list, dim=1)
         b, c, h, w = upscaled_embedding.shape
         masks = (hyper_in @ upscaled_embedding.view(b, c, h * w)).view(b, -1, h, w)
@@ -149,7 +161,7 @@ class MaskDecoder(nn.Module):
         iou_pred = self.iou_prediction_head(iou_token_out)
 
         return masks, iou_pred
-    
+
 
 class MaskDecoderLam(nn.Module):
     def __init__(
@@ -157,8 +169,9 @@ class MaskDecoderLam(nn.Module):
         *,
         transformer_dim: int,
         transformer: nn.Module,
-        spatial_convs = None,
+        spatial_convs=None,
         activation: Type[nn.Module] = nn.GELU,
+        segment_example_logits: bool = False,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -172,12 +185,17 @@ class MaskDecoderLam(nn.Module):
         """
         super().__init__()
         self.attention_dim = transformer_dim
+        self.segment_example_logits = segment_example_logits
 
         self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(transformer_dim, transformer_dim // 4, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
+            ),
             LayerNorm2d(transformer_dim // 4),
             activation(),
-            nn.ConvTranspose2d(transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2),
+            nn.ConvTranspose2d(
+                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
+            ),
             activation(),
         )
         self.transformer = transformer
@@ -186,7 +204,12 @@ class MaskDecoderLam(nn.Module):
             module_list = []
             for i in range(spatial_convs):
                 module_list.append(
-                    nn.Conv2d(transformer_dim // 8, transformer_dim // 8, kernel_size=3, padding=1)
+                    nn.Conv2d(
+                        transformer_dim // 8,
+                        transformer_dim // 8,
+                        kernel_size=3,
+                        padding=1,
+                    )
                 )
                 if i < spatial_convs - 1:
                     module_list.append(LayerNorm2d(transformer_dim // 8))
@@ -206,24 +229,37 @@ class MaskDecoderLam(nn.Module):
         Arguments:
           image_embeddings (torch.Tensor): the embeddings from the image encoder
           image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
-          class_embeddings (torch.Tensor): the embeddings of the points and boxes over the examples
+          class_embeddings ResultDict: the embeddings of each example and class
 
         Returns:
           torch.Tensor: batched predicted segmentations
         """
-        b, c, h, w = image_embeddings.shape
-        class_embeddings, image_embeddings = self.transformer(image_embeddings, image_pe, class_embeddings)
-        image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)        
-        
+        b, d, h, w = image_embeddings.shape
+        _, c, _ = class_embeddings[ResultDict.CLASS_EMBS].shape
+        if self.segment_example_logits:
+            class_embeddings = rearrange(
+                class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
+            )
+        else:
+            class_embeddings = class_embeddings[ResultDict.CLASS_EMBS]
+        class_embeddings, image_embeddings = self.transformer(
+            image_embeddings, image_pe, class_embeddings
+        )
+        image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)
+
         upscaled_embeddings = self.output_upscaling(image_embeddings)
         if self.spatial_convs is not None:
             upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
-        b, c, h, w = upscaled_embeddings.shape
+        b, d, h, w = upscaled_embeddings.shape
 
         class_embeddings = self.class_mlp(class_embeddings)
-        seg = (class_embeddings @ upscaled_embeddings.view(b, c, h * w)).view(b, -1, h, w)
+        seg = (class_embeddings @ upscaled_embeddings.view(b, d, h * w)).view(
+            b, -1, h, w
+        )
+        if self.segment_example_logits:
+            seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
+            seg = seg.max(dim=1).values
         return seg
-
 
 
 # Lightly adapted from

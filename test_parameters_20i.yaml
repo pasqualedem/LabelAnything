@@ -67,6 +67,7 @@ parameters:
     spatial_convs: [3]
     class_attention: [True]
     embed_dim: [512]
+    segment_example_logits: [True]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

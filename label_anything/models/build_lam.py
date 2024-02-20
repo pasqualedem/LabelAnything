@@ -64,6 +64,7 @@ def _build_lam(
     encoder_attention_downsample_rate: int = 2,
     decoder_attention_downsample_rate: int = 2,
     fusion_transformer="TwoWayTransformer",
+    segment_example_logits=False,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -118,6 +119,7 @@ def _build_lam(
             transformer_dim=embed_dim,
             spatial_convs=spatial_convs,
             transformer=fusion_transformer,
+            segment_example_logits=segment_example_logits
         ),
     )
     lam.eval()
