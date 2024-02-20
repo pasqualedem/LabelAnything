@@ -64,7 +64,7 @@ def validate(parameters):
 )
 @click.option(
     "--directory",
-    default="data/raw/train2017",
+    default="/leonardo_scratch/large/userexternal/nfanelli/train_val_2017",
     help="Select the file to use as checkpoint",
 )
 @click.option(
