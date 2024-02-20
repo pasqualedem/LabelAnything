@@ -301,7 +301,7 @@ class PromptImageEncoder(PromptEncoder):
             )
 
         self.not_a_mask_embed = nn.Embedding(
-            1, embed_dim // 4
+            1, image_embedding_size[0]
         )  # For classes/examples with missing masks
 
     def _embed_masks(

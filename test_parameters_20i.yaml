@@ -61,11 +61,12 @@ parameters:
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [dummy] # path to model class or model name contained in EzDL or super-gradients
-    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    # use_sam_checkpoint: [True]
-    # spatial_convs: [3]
-    # class_attention: [True]
+    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    use_sam_checkpoint: [True]
+    spatial_convs: [3]
+    class_attention: [True]
+    embed_dim: [512]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

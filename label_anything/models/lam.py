@@ -13,6 +13,7 @@ from torch.nn import functional as F
 
 from label_anything.data.utils import get_preprocess_shape
 from label_anything.models.transformer import TwoWayTransformer
+from label_anything.models.common import SAM_EMBED_DIM
 from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
@@ -29,6 +30,7 @@ class Lam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptImageEncoder,
         mask_decoder: MaskDecoder,
+        neck: nn.Module,
         image_size: int = 1024,
     ) -> None:
         """
@@ -47,6 +49,7 @@ class Lam(nn.Module):
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
         self.class_embeddings = None
+        self.neck = neck
 
     def forward(
         self, batched_input: List[Dict[str, Any]]
@@ -112,18 +115,22 @@ class Lam(nn.Module):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
             B, N, C, H, W = embeddings.shape
-            query_embeddings = embeddings[:, 0]
-            prompt_embeddings = embeddings[:, 1:]
+            if self.neck is not None:
+                embeddings = rearrange(embeddings, "b n c h w -> (b n) c h w", b=B)  
+                embeddings = self.neck(embeddings)
+                embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         elif "images" in batched_input:
             B, N, C, H, W = batched_input["images"].shape
             images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
-            embeddings = rearrange(
-                self.image_encoder(images), "(b n) c h w -> b n c h w", b=B
-            )
-            query_embeddings = embeddings[:, 0]
-            prompt_embeddings = embeddings[:, 1:]
+            embeddings = self.image_encoder(images)
+            if self.neck is not None:
+                embeddings = self.neck(embeddings)
+            embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)   
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
+        
+        query_embeddings = embeddings[:, 0]
+        prompt_embeddings = embeddings[:, 1:]
 
         return query_embeddings, prompt_embeddings
 
@@ -167,7 +174,7 @@ class Lam(nn.Module):
         else:
             masks = None
 
-        return points, boxes, masks, batched_input['flag_examples']
+        return points, boxes, masks, batched_input["flag_examples"]
 
     def init_pretrained_weights(self, weights):
         """
@@ -181,57 +188,62 @@ class Lam(nn.Module):
                 if k.startswith("image_encoder")
             }
             self.image_encoder.load_state_dict(image_encoder_weights)
+        if self.prompt_encoder.pe_layer.positional_encoding_gaussian_matrix.shape[1] == 2*SAM_EMBED_DIM:
         # Load weights for the prompt encoder
-        pe_layer_weights = {
-            k[len("prompt_encoder.pe_layer.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.pe_layer")
-        }
-        self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
-        point_embeddings_weights = {
-            k[len("prompt_encoder.point_embeddings.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.point_embeddings")
-        }
-        self.prompt_encoder.point_embeddings.load_state_dict(point_embeddings_weights)
-        not_a_point_embed_weights = {
-            k[len("prompt_encoder.not_a_point_embed.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.not_a_point_embed")
-        }
-        self.prompt_encoder.not_a_point_embed.load_state_dict(not_a_point_embed_weights)
-        mask_downscaling_weights = {
-            k[len("prompt_encoder.mask_downscaling.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.mask_downscaling")
-        }
-        self.prompt_encoder.mask_downscaling.load_state_dict(mask_downscaling_weights)
-        no_mask_embed_weights = {
-            k[len("prompt_encoder.no_mask_embed.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.no_mask_embed")
-        }
-        self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
+            pe_layer_weights = {
+                k[len("prompt_encoder.pe_layer.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.pe_layer")
+            }
+            self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
+            point_embeddings_weights = {
+                k[len("prompt_encoder.point_embeddings.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.point_embeddings")
+            }
+            self.prompt_encoder.point_embeddings.load_state_dict(point_embeddings_weights)
+            not_a_point_embed_weights = {
+                k[len("prompt_encoder.not_a_point_embed.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.not_a_point_embed")
+            }
+            self.prompt_encoder.not_a_point_embed.load_state_dict(not_a_point_embed_weights)
+            mask_downscaling_weights = {
+                k[len("prompt_encoder.mask_downscaling.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.mask_downscaling")
+            }
+            self.prompt_encoder.mask_downscaling.load_state_dict(mask_downscaling_weights)
+            no_mask_embed_weights = {
+                k[len("prompt_encoder.no_mask_embed.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.no_mask_embed")
+            }
+            self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
 
-        # Load tranformer weights
-        transformer_weights = {
-            k[len("mask_decoder.transformer.") :]: v
-            for k, v in weights.items()
-            if k.startswith("mask_decoder.transformer")
-        }
-        self.prompt_encoder.transformer.load_state_dict(transformer_weights)
+            # Load tranformer weights
+            transformer_weights = {
+                k[len("mask_decoder.transformer.") :]: v
+                for k, v in weights.items()
+                if k.startswith("mask_decoder.transformer")
+            }
+            if self.prompt_encoder.transformer.attention_downsample_rate == 2:
+                self.prompt_encoder.transformer.load_state_dict(transformer_weights)
 
-        # Load weights for the mask decoder transformer
-        if isinstance(self.mask_decoder.transformer, TwoWayTransformer):
-            self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
+            # Load weights for the mask decoder transformer
+            if (
+                isinstance(self.mask_decoder.transformer, TwoWayTransformer)
+                and self.mask_decoder.transformer.attention_downsample_rate == 2
+            ):
+                self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
 
-        # Load weights for the mask decoder output upscaling
-        output_upscaling_weights = {
-            k[len("mask_decoder.output_upscaling.") :]: v
-            for k, v in weights.items()
-            if k.startswith("mask_decoder.output_upscaling")
-        }
-        self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+            # Load weights for the mask decoder output upscaling
+            output_upscaling_weights = {
+                k[len("mask_decoder.output_upscaling.") :]: v
+                for k, v in weights.items()
+                if k.startswith("mask_decoder.output_upscaling")
+            }
+            self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
 
     def get_learnable_params(self, training_params: dict) -> list:
         """

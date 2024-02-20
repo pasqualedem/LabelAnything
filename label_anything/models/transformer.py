@@ -168,6 +168,7 @@ class TwoWayTransformer(nn.Module):
         self.num_heads = num_heads
         self.mlp_dim = mlp_dim
         self.layers = nn.ModuleList()
+        self.attention_downsample_rate = attention_downsample_rate
 
         for i in range(depth):
             self.layers.append(
