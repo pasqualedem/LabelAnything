@@ -69,7 +69,7 @@ def validate(parameters):
 )
 @click.option(
     "--batch_size",
-    default=256,
+    default=64,
     help="Batch size for the dataloader",
 )
 @click.option(
