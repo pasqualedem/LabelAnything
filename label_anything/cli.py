@@ -51,6 +51,56 @@ def validate(parameters):
     validate_fn(param_path=parameters)
 
 
+@main.command("preprocess_huggingface")
+@click.option(
+    "--model_name",
+    default="google/vit-base-patch16-224",
+    help="Select model to use",
+)
+@click.option(
+    "--compile",
+    is_flag=True,
+    help="Select if the model should be compiled",
+)
+@click.option(
+    "--directory",
+    default="data/raw/train2017",
+    help="Select the file to use as checkpoint",
+)
+@click.option(
+    "--batch_size",
+    default=256,
+    help="Batch size for the dataloader",
+)
+@click.option(
+    "--num_workers",
+    default=8,
+    help="Number of workers for the dataloader",
+)
+@click.option(
+    "--outfolder",
+    default="/leonardo_scratch/large/userexternal/rscaring/vit_embeddings",
+    help="Folder to save the embeddings",
+)
+def preprocess_huggingface(
+        model_name,
+        directory,
+        batch_size,
+        num_workers,
+        outfolder,
+        compile,
+):
+    from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
+    preprocess_images_to_embeddings_huggingface(
+        model_name=model_name,
+        directory=directory,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        outfolder=outfolder,
+        compile=compile,
+    )
+
+
 @main.command("preprocess")
 @click.option(
     "--encoder",

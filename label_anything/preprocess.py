@@ -14,6 +14,8 @@ from label_anything.data.transforms import PromptsProcessor
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.models import model_registry
 import safetensors.torch as safetch
+from transformers import ViTModel
+from einops import rearrange
 
 
 def generate_ground_truths(dataset_name, anns_path, outfolder):
@@ -90,6 +92,63 @@ def preprocess_images_to_embeddings(
     model = model_registry[encoder_name](
         checkpoint=checkpoint, use_sam_checkpoint=use_sam_checkpoint
     )
+    print("Model loaded")
+    model = model.to(device)
+    print("Model moved to device")
+    if compile:
+        model = torch.compile(model, dynamic=True)
+        print("Model compiled")
+    preprocess_image = Compose(
+        [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
+    )
+    dataset = LabelAnyThingOnlyImageDataset(
+        directory=directory, preprocess=preprocess_image
+    )
+    print("Dataset created")
+    dataloader = torch.utils.data.DataLoader(
+        dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+    )
+    print("Dataloader created")
+    create_image_embeddings(model, dataloader, outfolder, device=device)
+
+
+@torch.no_grad()
+def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cuda"):
+    """
+    Create image embeddings for all images in dataloader and save them to outfolder.
+    """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%Y-%m-%d %H-%M-%S",
+    )
+    n_steps = len(dataloader)
+
+    for idx, batch in enumerate(dataloader):
+        img, image_id = batch
+        img = img.to(device)
+        out = model(img).last_hidden_state[:, 1:, :].cpu()
+        out = rearrange(out, "b (h w) c -> b c h w", h=64)
+        for i in range(out.shape[0]):
+            save_file(
+                {"embedding": out[i]},
+                os.path.join(outfolder, f"{image_id[i]}.safetensors"),
+            )
+        if idx % 10 == 0:
+            logging.info(f"Step {idx}/{n_steps}")
+
+
+def preprocess_images_to_embeddings_huggingface(
+    model_name,
+    directory,
+    batch_size=1,
+    num_workers=0,
+    outfolder="data/processed/embeddings",
+    device="cuda",
+    compile=False,
+):
+    os.makedirs(outfolder, exist_ok=True)
+    model = ViTModel.from_pretrained(model_name)
     print("Model loaded")
     model = model.to(device)
     print("Model moved to device")
