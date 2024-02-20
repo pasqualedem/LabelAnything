@@ -128,7 +128,7 @@ def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cu
         img, image_id = batch
         img = img.to(device)
         out = model(img, interpolate_pos_encoding=True).last_hidden_state[:, 1:, :].cpu()
-        out = rearrange(out, "b (h w) c -> b c h w", h=64)
+        out = rearrange(out, "b (h w) c -> b c h w", h=64).contiguous()
         for i in range(out.shape[0]):
             save_file(
                 {"embedding": out[i]},
