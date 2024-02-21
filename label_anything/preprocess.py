@@ -113,7 +113,7 @@ def preprocess_images_to_embeddings(
 
 
 @torch.no_grad()
-def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cuda"):
+def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cuda", image_resolution=480):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
     """
@@ -128,7 +128,7 @@ def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cu
         img, image_id = batch
         img = img.to(device)
         out = model(img, interpolate_pos_encoding=True).last_hidden_state[:, 1:, :].cpu()
-        out = rearrange(out, "b (h w) c -> b c h w", h=64).contiguous()
+        out = rearrange(out, "b (h w) c -> b c h w", h=image_resolution//16).contiguous()
         for i in range(out.shape[0]):
             save_file(
                 {"embedding": out[i]},
@@ -147,6 +147,7 @@ def preprocess_images_to_embeddings_huggingface(
     outfolder="data/processed/embeddings",
     device="cuda",
     compile=False,
+    image_resolution=480,
 ):
     os.makedirs(outfolder, exist_ok=True)
     model = ViTModel.from_pretrained(model_name)
@@ -157,7 +158,7 @@ def preprocess_images_to_embeddings_huggingface(
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
     preprocess_image = Compose(
-        [CustomResize(480), PILToTensor(), CustomNormalize(480)]
+        [CustomResize(image_resolution), PILToTensor(), CustomNormalize(image_resolution)]
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
@@ -167,7 +168,7 @@ def preprocess_images_to_embeddings_huggingface(
         dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
     print("Dataloader created")
-    create_image_embeddings_huggingface(model, dataloader, outfolder, device=device)
+    create_image_embeddings_huggingface(model, dataloader, outfolder, device=device, image_resolution=image_resolution)
 
 
 def rename_coco20i_json(instances_path: str):

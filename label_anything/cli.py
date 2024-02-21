@@ -82,6 +82,11 @@ def validate(parameters):
     default="/leonardo_scratch/large/userexternal/rscaring/vit_embeddings",
     help="Folder to save the embeddings",
 )
+@click.option(
+    "--image_resolution",
+    default=480,
+    help='Image resolution for ViT',
+)
 def preprocess_huggingface(
         model_name,
         directory,
@@ -89,6 +94,7 @@ def preprocess_huggingface(
         num_workers,
         outfolder,
         compile,
+        image_resolution,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
     preprocess_images_to_embeddings_huggingface(
@@ -98,6 +104,7 @@ def preprocess_huggingface(
         num_workers=num_workers,
         outfolder=outfolder,
         compile=compile,
+        image_resolution=image_resolution,
     )
 
 
