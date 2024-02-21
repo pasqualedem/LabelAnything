@@ -66,6 +66,7 @@ class Coco20iDataset(CocoLVISDataset):
 
         # update dicts
         (
+            self.image_annotations,
             self.img2cat,
             self.img2cat_annotations,
             self.cat2img,

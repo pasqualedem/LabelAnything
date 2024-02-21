@@ -119,6 +119,7 @@ class CocoLVISDataset(Dataset):
 
         # useful dicts
         (
+            self.img_annotations,
             self.img2cat,
             self.img2cat_annotations,
             self.cat2img,
@@ -147,16 +148,18 @@ class CocoLVISDataset(Dataset):
             long_side_length=self.image_size, masks_side_length=256,
         )
 
-    def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict]:
+    def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict, dict]:
         """Load useful annotation dicts.
 
         Returns:
-            (dict, dict, dict, dict): Returns four dictionaries:
+            (dict, dict, dict, dict, dict): Returns four dictionaries:
+                0. img_annotations: A dictionary mapping image ids to lists of annotations.
                 1. img2cat: A dictionary mapping image ids to sets of category ids.
                 2. img2cat_annotations: A dictionary mapping image ids to dictionaries mapping category ids to annotations.
                 3. cat2img: A dictionary mapping category ids to sets of image ids.
                 4. cat2img_annotations: A dictionary mapping category ids to dictionaries mapping image ids to annotations.
         """
+        img_annotations = {}
         img2cat_annotations = {}
         cat2img_annotations = {}
 
@@ -171,6 +174,10 @@ class CocoLVISDataset(Dataset):
 
             if ann[AnnFileKeys.CATEGORY_ID] not in category_ids:
                 continue
+
+            if ann[AnnFileKeys.IMAGE_ID] not in img_annotations:
+                img_annotations[ann[AnnFileKeys.IMAGE_ID]] = []
+            img_annotations[ann[AnnFileKeys.IMAGE_ID]].append(ann)
 
             if ann[AnnFileKeys.IMAGE_ID] not in img2cat_annotations:
                 img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]] = {}
@@ -202,7 +209,7 @@ class CocoLVISDataset(Dataset):
             cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]][
                 ann[AnnFileKeys.IMAGE_ID]
             ].append(ann)
-        return img2cat, img2cat_annotations, cat2img, cat2img_annotations
+        return img_annotations, img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
         """Open a safetensors file and load the embedding and the ground truth.
@@ -434,29 +441,23 @@ class CocoLVISDataset(Dataset):
         Returns:
             list[torch.Tensor]: A list of tensors containing the ground truths (per image).
         """
-        ground_truths = [dict() for _ in range(len(image_ids))]
+        ground_truths = []
+
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
-            for cat_id in cat_ids:
-                ground_truths[i][cat_id] = np.zeros(img_size, dtype=np.int64)
-                # zero mask for no segmentation
-                if cat_id not in self.img2cat_annotations[image_id]:
+            ground_truths.append(np.zeros(img_size, dtype=np.int64))
+
+            for ann in self.img_annotations[image_id]:
+                ann_cat = ann[AnnFileKeys.CATEGORY_ID]
+                if ann_cat not in cat_ids:
                     continue
-                for ann in self.img2cat_annotations[image_id][cat_id]:
-                    ground_truths[i][cat_id] = np.logical_or(
-                        ground_truths[i][cat_id],
-                        self.prompts_processor.convert_mask(
-                            ann["segmentation"], *img_size
-                        ),
-                    )
-            # make the ground truth tensor for image img_id
-            ground_truth = torch.from_numpy(
-                np.array(
-                    [ground_truths[i][cat_id].astype(np.int64) for cat_id in cat_ids]
+                cat_idx = cat_ids.index(ann_cat) + 1 # +1 to account for the background class
+
+                ann_mask = self.prompts_processor.convert_mask(
+                    ann[AnnFileKeys.SEGMENTATION], *img_size
                 )
-            )
-            ground_truths[i] = torch.argmax(ground_truth, 0)
+                ground_truths[i][ann_mask == 1] = cat_idx
 
         return ground_truths
 
