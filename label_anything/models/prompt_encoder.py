@@ -301,7 +301,7 @@ class PromptImageEncoder(PromptEncoder):
             )
 
         self.not_a_mask_embed = nn.Embedding(
-            1, image_embedding_size[0]
+            1, embed_dim
         )  # For classes/examples with missing masks
 
     def _embed_masks(
@@ -537,6 +537,12 @@ class PromptImageEncoder(PromptEncoder):
             1, 1, c, 1, 1, 1
         )
         src = rearrange(src, "b m c d h w -> (b m c) d h w")
+        if src.shape[-2:] != dense_embeddings.shape[-2:]:
+            dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
+            dense_embeddings = nn.functional.interpolate(
+                dense_embeddings, size=src.shape[-2:], mode="bilinear", align_corners=False
+            )
+            dense_embeddings = rearrange(dense_embeddings, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
         src = src + dense_embeddings
         pos_src = torch.repeat_interleave(
             self.get_dense_pe(), sparse_embeddings.shape[0], dim=0
