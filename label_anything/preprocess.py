@@ -157,7 +157,7 @@ def preprocess_images_to_embeddings_huggingface(
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
     preprocess_image = Compose(
-        [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
+        [CustomResize(480), PILToTensor(), CustomNormalize(480)]
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image

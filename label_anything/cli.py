@@ -54,7 +54,7 @@ def validate(parameters):
 @main.command("preprocess_huggingface")
 @click.option(
     "--model_name",
-    default="google/vit-base-patch16-224",
+    default="facebook/vim-mae-base",
     help="Select model to use",
 )
 @click.option(
@@ -69,7 +69,7 @@ def validate(parameters):
 )
 @click.option(
     "--batch_size",
-    default=64,
+    default=16,
     help="Batch size for the dataloader",
 )
 @click.option(
