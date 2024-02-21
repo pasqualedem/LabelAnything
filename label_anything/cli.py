@@ -54,7 +54,7 @@ def validate(parameters):
 @main.command("preprocess_huggingface")
 @click.option(
     "--model_name",
-    default="facebook/vim-mae-base",
+    default="facebook/vit-mae-base",
     help="Select model to use",
 )
 @click.option(
