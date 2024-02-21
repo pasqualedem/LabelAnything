@@ -12,6 +12,9 @@ import torch.nn as nn
 from typing import Type
 
 
+SAM_EMBED_DIM = 256
+
+
 class MLPBlock(nn.Module):
     def __init__(
         self,

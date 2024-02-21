@@ -22,8 +22,9 @@ TEST_DATASETS = {
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
     SIZE = 1024
+    size = dataset_args.get("common", {}).get("image_size", SIZE)
 
-    preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
+    preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")

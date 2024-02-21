@@ -143,7 +143,7 @@ class PromptsProcessor:
         original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], 1024)
+        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
         coords = deepcopy(coords).astype(float)
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
@@ -157,7 +157,7 @@ class PromptsProcessor:
         original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], 1024)
+        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
         coords = coords.clone().float()
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
@@ -183,10 +183,10 @@ class PromptsProcessor:
         mask = torch.as_tensor(np.logical_or.reduce(masks).astype(np.uint8)).unsqueeze(
             0
         )
-        new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], 1024)
+        new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], self.long_side_length)
         mask = resize(mask, (new_h, new_w), interpolation=Image.NEAREST)
-        padw = 1024 - new_w
-        padh = 1024 - new_h
+        padw = self.long_side_length - new_w
+        padh = self.long_side_length - new_h
         mask = F.pad(mask, (0, padw, 0, padh))
         mask = resize(
             mask,

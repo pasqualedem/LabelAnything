@@ -172,7 +172,6 @@ class Coco20iDataset(CocoLVISDataset):
             return data_dict
 
     def __len__(self):
-        return 10
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
         elif self.split == Coco20iSplit.VAL:

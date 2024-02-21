@@ -349,6 +349,9 @@ class Run:
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
+            long_side_length=self.dataset_params.get("common", {}).get(
+                "image_size", None
+            ),
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
