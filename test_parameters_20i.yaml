@@ -55,7 +55,7 @@ parameters:
       # warmup_steps: [2500] 
     substitute: [False]
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-    validation_reruns: [5]
+    validation_reruns: [2]
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches

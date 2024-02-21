@@ -376,14 +376,14 @@ class CocoLVISDataset(Dataset):
                         # take the mask
                         masks[i][cat_id].append(
                             self.prompts_processor.convert_mask(
-                                ann["segmentation"],
+                                ann[AnnFileKeys.SEGMENTATION],
                                 *img_size,
                             )
                         )
                     elif prompt_type == PromptType.POINT:
                         # take the point
                         mask = self.prompts_processor.convert_mask(
-                            ann["segmentation"],
+                            ann[AnnFileKeys.SEGMENTATION],
                             *img_size,
                         )
                         num_points = self._sample_num_points(img_id, ann)
@@ -451,14 +451,14 @@ class CocoLVISDataset(Dataset):
                 ann_cat = ann[AnnFileKeys.CATEGORY_ID]
                 if ann_cat not in cat_ids:
                     continue
-                cat_idx = cat_ids.index(ann_cat) + 1 # +1 to account for the background class
+                cat_idx = cat_ids.index(ann_cat)
 
                 ann_mask = self.prompts_processor.convert_mask(
                     ann[AnnFileKeys.SEGMENTATION], *img_size
                 )
                 ground_truths[i][ann_mask == 1] = cat_idx
 
-        return ground_truths
+        return [torch.tensor(x) for x in ground_truths]
 
     def annotations_to_tensor(
         self, annotations: list, img_sizes: list, prompt_type: PromptType
@@ -753,14 +753,14 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
                         # take the mask
                         masks[i][cat_id].append(
                             self.prompts_processor.convert_mask(
-                                ann["segmentation"],
+                                ann[AnnFileKeys.SEGMENTATION],
                                 *img_size,
                             )
                         )
                     elif prompt_type == PromptType.POINT:
                         # take the point
                         mask = self.prompts_processor.convert_mask(
-                            ann["segmentation"],
+                            ann[AnnFileKeys.SEGMENTATION],
                             *img_size,
                         )
                         points[i][cat_id].append(
