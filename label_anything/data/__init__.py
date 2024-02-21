@@ -22,7 +22,7 @@ TEST_DATASETS = {
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
     SIZE = 1024
-    size = dataloader_args.pop("image_size", SIZE)
+    size = dataset_args.get("common", {}).get("image_size", SIZE)
 
     preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
     datasets_params = dataset_args.get("datasets")

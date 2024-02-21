@@ -66,8 +66,10 @@ parameters:
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
-    embed_dim: [512]
     segment_example_logits: [True]
+    image_embed_dim: [256]
+    embed_dim: [256]
+    image_size: &image_size [480]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -94,7 +96,8 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      n_ways: [max]
+      n_ways: [1]
+      image_size: *image_size
   dataloader:
     num_workers: [0]
     possible_batch_example_nums: [[[1, 1]]]
