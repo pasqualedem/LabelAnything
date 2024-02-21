@@ -404,6 +404,7 @@ class CocoLVISDataset(Dataset):
         Returns:
             (torch.Tensor, str, Optional[torch.Tensor]): Returns a tuple containing the images or the embeddings, the key of the returned tensor and the ground truths.
         """
+        return torch.rand(len(image_ids), 768, 30, 30), BatchKeys.EMBEDDINGS, None 
         if self.load_embeddings:
             embeddings_gts = [
                 self._load_safe(image_data)

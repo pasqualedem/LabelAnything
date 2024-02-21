@@ -69,7 +69,7 @@ parameters:
     segment_example_logits: [True]
     image_embed_dim: [256]
     embed_dim: [256]
-    image_size: &image_size [480]
+    image_size: &image_size [1024]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

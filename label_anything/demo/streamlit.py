@@ -155,7 +155,7 @@ def load_model(_accelerator: Accelerator, run_id):
     model_file, config_file = load_from_wandb(run_id, folder)
     if config_file is not None:
         config = load_yaml(config_file)
-        model_params = config["model"]["value"]
+        model_params = config["model"]
         name = model_params.pop("name")
     else:
         model_params = {}

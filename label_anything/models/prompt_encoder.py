@@ -325,7 +325,9 @@ class PromptImageEncoder(PromptEncoder):
         )
         H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == Label.NULL] = 0.0
-        mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
+        mask_embedding[masks_flags == Label.NULL] += rearrange(
+            self.not_a_mask_embed.weight, "1 d -> 1 d 1 1"
+        )
         return mask_embedding
 
     def _get_batch_examples_class_size(
@@ -538,11 +540,9 @@ class PromptImageEncoder(PromptEncoder):
         )
         src = rearrange(src, "b m c d h w -> (b m c) d h w")
         if src.shape[-2:] != dense_embeddings.shape[-2:]:
-            dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
             dense_embeddings = nn.functional.interpolate(
                 dense_embeddings, size=src.shape[-2:], mode="bilinear", align_corners=False
             )
-            dense_embeddings = rearrange(dense_embeddings, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
         src = src + dense_embeddings
         pos_src = torch.repeat_interleave(
             self.get_dense_pe(), sparse_embeddings.shape[0], dim=0
