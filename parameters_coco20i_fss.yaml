@@ -52,6 +52,7 @@ parameters:
     spatial_convs: [3]
     class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
+    image_embed_dim: [768]
     embed_dim: [512]
     image_size: &image_size [480]
 
