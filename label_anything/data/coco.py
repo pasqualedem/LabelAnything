@@ -51,6 +51,7 @@ class CocoLVISDataset(Dataset):
         max_points_annotations: int = 50,
         n_ways: int = "max",
         preprocess=ToTensor(),
+        image_size: int = 1024,
         load_embeddings: bool = None,
         load_gts: bool = False,
         do_subsample: bool = True,
@@ -105,6 +106,7 @@ class CocoLVISDataset(Dataset):
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.n_ways = n_ways
+        self.image_size = image_size
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -142,7 +144,7 @@ class CocoLVISDataset(Dataset):
         # processing
         self.preprocess = preprocess
         self.prompts_processor = PromptsProcessor(
-            long_side_length=1024, masks_side_length=256,
+            long_side_length=self.image_size, masks_side_length=256,
         )
 
     def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict]:

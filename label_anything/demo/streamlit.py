@@ -118,8 +118,9 @@ ANNOTATIONS_DIR = "data/annotations/instances_val2017.json"
 EMBEDDINGS_DIR = "/ext/stalla/LabelAnything/embeddings"
 MAX_EXAMPLES = 30
 
+SIZE = 1024
 
-preprocess = Compose([CustomResize(1024), PILToTensor(), CustomNormalize()])
+preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
 
 
 @st.cache_resource
