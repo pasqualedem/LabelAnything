@@ -47,8 +47,9 @@ def test(parameters):
 
 @main.command("validate")
 @click.option("--parameters", default="test.yaml")
-def validate(parameters):
-    validate_fn(param_path=parameters)
+@click.option("--generate_json", default=False, is_flag=True)
+def validate(parameters, generate_json):
+    validate_fn(param_path=parameters, generate_json=generate_json)
 
 
 @main.command("preprocess")
