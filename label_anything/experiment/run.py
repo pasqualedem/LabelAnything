@@ -49,6 +49,7 @@ from .utils import (
 )
 
 logger = get_logger(__name__)
+SIZE = 1024
 
 
 class Run:
@@ -123,6 +124,7 @@ class Run:
         logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
+        self.input_image_size = self.model_params.get("image_size", SIZE)
 
         logger.info("Creating optimizer")
         self.optimizer = AdamW(
@@ -418,6 +420,7 @@ class Run:
                         step=tot_steps,
                         substitution_step=i,
                         input_dict=input_dict,
+                        input_shape=self.input_image_size,
                         gt=gt,
                         pred=outputs,
                         dataset=self.train_loader.dataset,
@@ -554,6 +557,7 @@ class Run:
                     step=tot_steps,
                     substitution_step=0,
                     input_dict=image_dict,
+                    input_shape=self.input_image_size,
                     gt=gt,
                     pred=outputs,
                     dataset=self.val_loader.dataset,
