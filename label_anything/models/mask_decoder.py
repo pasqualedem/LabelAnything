@@ -172,6 +172,7 @@ class MaskDecoderLam(nn.Module):
         spatial_convs=None,
         activation: Type[nn.Module] = nn.GELU,
         segment_example_logits: bool = False,
+        classification_layer_downsample_rate: int = 8,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -188,14 +189,26 @@ class MaskDecoderLam(nn.Module):
         self.attention_dim = transformer_dim
         self.segment_example_logits = segment_example_logits
 
+        first_layer_downsample_rate = (
+            classification_layer_downsample_rate * 2
+            if classification_layer_downsample_rate > 1
+            else 1
+        )
+
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(
-                transformer_dim, transformer_dim // 4, kernel_size=2, stride=2
+                transformer_dim,
+                transformer_dim // first_layer_downsample_rate,
+                kernel_size=2,
+                stride=2,
             ),
-            LayerNorm2d(transformer_dim // 4),
+            LayerNorm2d(transformer_dim // first_layer_downsample_rate),
             activation(),
             nn.ConvTranspose2d(
-                transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
+                transformer_dim // first_layer_downsample_rate,
+                transformer_dim // classification_layer_downsample_rate,
+                kernel_size=2,
+                stride=2,
             ),
             activation(),
             nn.Dropout2d(dropout) if dropout > 0 else nn.Identity(),
@@ -207,17 +220,27 @@ class MaskDecoderLam(nn.Module):
             for i in range(spatial_convs):
                 module_list.append(
                     nn.Conv2d(
-                        transformer_dim // 8,
-                        transformer_dim // 8,
+                        transformer_dim // classification_layer_downsample_rate,
+                        transformer_dim // classification_layer_downsample_rate,
                         kernel_size=3,
                         padding=1,
                     )
                 )
                 if i < spatial_convs - 1:
-                    module_list.append(LayerNorm2d(transformer_dim // 8))
+                    module_list.append(
+                        LayerNorm2d(
+                            transformer_dim // classification_layer_downsample_rate
+                        )
+                    )
                 module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
-        self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3, dropout=dropout)
+        self.class_mlp = MLP(
+            transformer_dim,
+            transformer_dim,
+            transformer_dim // classification_layer_downsample_rate,
+            3,
+            dropout=dropout,
+        )
 
     def forward(
         self,
@@ -287,7 +310,11 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = self.dropout(F.relu(layer(x))) if i < self.num_layers - 1 else self.dropout(layer(x))
+            x = (
+                self.dropout(F.relu(layer(x)))
+                if i < self.num_layers - 1
+                else self.dropout(layer(x))
+            )
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x

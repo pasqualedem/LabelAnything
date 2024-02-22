@@ -63,6 +63,7 @@ def _build_lam(
     spatial_convs=None,
     encoder_attention_downsample_rate: int = 2,
     decoder_attention_downsample_rate: int = 2,
+    classification_layer_downsample_rate: int = 8,
     fusion_transformer="TwoWayTransformer",
     segment_example_logits=False,
     dropout: float = 0.0,
@@ -123,6 +124,7 @@ def _build_lam(
             spatial_convs=spatial_convs,
             transformer=fusion_transformer,
             segment_example_logits=segment_example_logits,
+            classification_layer_downsample_rate=classification_layer_downsample_rate,
             dropout=dropout,
         ),
     )
