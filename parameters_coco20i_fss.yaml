@@ -54,7 +54,7 @@ parameters:
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
     embed_dim: [512]
-    image_size: &image_size [480]
+    image_size: &image_size [1024]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
