@@ -312,20 +312,24 @@ class Lam(nn.Module):
             is given by original_size.
         """
         max_original_size = torch.max(original_sizes.view(-1, 2), 0).values.tolist()
-        original_sizes = original_sizes[:, 0, :]
+        original_sizes = original_sizes[:, 0, :] # get real sizes of the query images
         input_sizes = [
             get_preprocess_shape(h, w, self.image_size) for (h, w) in original_sizes
-        ]
+        ] # these are the input sizes without padding
+
+        # interpolate masks to the model size
         masks = F.interpolate(
             masks,
             (self.image_size, self.image_size),
             mode="bilinear",
             align_corners=False,
         )
+        # remove padding from masks
         masks = [
             masks[i, :, : input_size[0], : input_size[1]]
             for i, input_size in enumerate(input_sizes)
         ]
+        # interpolate masks to the original size
         masks = [
             F.interpolate(
                 torch.unsqueeze(masks[i], 0),
@@ -336,6 +340,7 @@ class Lam(nn.Module):
             for i, original_size in enumerate(original_sizes)
         ]
 
+        # pad masks to the same size, use -inf so they don't affect the softmax
         masks = torch.cat(
             [
                 F.pad(
@@ -352,7 +357,9 @@ class Lam(nn.Module):
                 for i, mask in enumerate(masks)
             ]
         )
+        
+        # set padding to background class
         masks[:, 0, :, :][
             masks[:, 0, :, :] == float("-inf")
-        ] = 0  # background class for padding
+        ] = 0 
         return masks
