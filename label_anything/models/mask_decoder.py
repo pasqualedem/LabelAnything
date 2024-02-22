@@ -172,6 +172,7 @@ class MaskDecoderLam(nn.Module):
         spatial_convs=None,
         activation: Type[nn.Module] = nn.GELU,
         segment_example_logits: bool = False,
+        dropout: float = 0.0,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -197,6 +198,7 @@ class MaskDecoderLam(nn.Module):
                 transformer_dim // 4, transformer_dim // 8, kernel_size=2, stride=2
             ),
             activation(),
+            nn.Dropout2d(dropout) if dropout > 0 else nn.Identity(),
         )
         self.transformer = transformer
         self.spatial_convs = None
@@ -215,7 +217,7 @@ class MaskDecoderLam(nn.Module):
                     module_list.append(LayerNorm2d(transformer_dim // 8))
                 module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
-        self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+        self.class_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3, dropout=dropout)
 
     def forward(
         self,
@@ -272,6 +274,7 @@ class MLP(nn.Module):
         output_dim: int,
         num_layers: int,
         sigmoid_output: bool = False,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.num_layers = num_layers
@@ -280,10 +283,11 @@ class MLP(nn.Module):
             nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])
         )
         self.sigmoid_output = sigmoid_output
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = self.dropout(F.relu(layer(x))) if i < self.num_layers - 1 else self.dropout(layer(x))
         if self.sigmoid_output:
             x = F.sigmoid(x)
         return x

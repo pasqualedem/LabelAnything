@@ -244,6 +244,7 @@ class PromptImageEncoder(PromptEncoder):
         class_example_attention: bool = True,
         class_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
+        dropout: float = 0.0,
     ) -> None:
         """
         Encodes prompts for input to LAM's mask decoder.
@@ -276,6 +277,7 @@ class PromptImageEncoder(PromptEncoder):
             downsample_rate=attention_downsample_rate,
             mlp_dim=mlp_dim,
             act=activation,
+            dropout=dropout,
         )
         self.no_sparse_embedding = nn.Embedding(
             1, embed_dim
@@ -289,6 +291,7 @@ class PromptImageEncoder(PromptEncoder):
                 downsample_rate=attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
+                dropout=dropout,
             )
 
         if class_example_attention:
@@ -298,6 +301,7 @@ class PromptImageEncoder(PromptEncoder):
                 downsample_rate=attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
+                dropout=dropout,
             )
 
         self.not_a_mask_embed = nn.Embedding(

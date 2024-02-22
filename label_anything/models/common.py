@@ -21,14 +21,19 @@ class MLPBlock(nn.Module):
         embedding_dim: int,
         mlp_dim: int,
         act: Type[nn.Module] = nn.GELU,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.lin1 = nn.Linear(embedding_dim, mlp_dim)
         self.lin2 = nn.Linear(mlp_dim, embedding_dim)
         self.act = act()
+        if dropout > 0.0:
+            self.drop = nn.Dropout(dropout)
+        else:
+            self.drop = nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.lin2(self.act(self.lin1(x)))
+        return self.lin2(self.drop(self.act(self.lin1(x))))
 
 
 # From https://github.com/facebookresearch/detectron2/blob/main/detectron2/layers/batch_norm.py # noqa
@@ -59,11 +64,16 @@ class Attention(nn.Module):
         embedding_dim: int,
         num_heads: int,
         downsample_rate: int = 1,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.embedding_dim = embedding_dim
         self.internal_dim = embedding_dim // downsample_rate
         self.num_heads = num_heads
+        if dropout > 0.0:
+            self.drop = nn.Dropout(dropout)
+        else:
+            self.drop = nn.Identity()
         assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
@@ -97,6 +107,7 @@ class Attention(nn.Module):
         attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
         attn = torch.softmax(attn, dim=-1)
+        attn = self.drop(attn)
 
         # Get output
         out = attn @ v
@@ -114,11 +125,12 @@ class AttentionMLPBlock(nn.Module):
         mlp_dim: int,
         num_heads: int,
         act: Type[nn.Module] = nn.GELU,
+        dropout: float = 0.0,
     ) -> None:
         super().__init__()
         self.norm = nn.LayerNorm(embed_dim)
-        self.mlp = MLPBlock(embed_dim, mlp_dim, act)
-        self.attn = Attention(embed_dim, num_heads=num_heads, downsample_rate=downsample_rate)
+        self.mlp = MLPBlock(embed_dim, mlp_dim, act, dropout=dropout)
+        self.attn = Attention(embed_dim, num_heads=num_heads, downsample_rate=downsample_rate, dropout=dropout)
 
     def forward(self, q: torch.Tensor, k: torch.Tensor = None, v: torch.Tensor = None) -> torch.Tensor:
         if k is None:
