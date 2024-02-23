@@ -102,4 +102,4 @@ other_grids:
       fusion_transformer: [TwoWayTransformer]
       image_embed_dim: [256]
       embed_dim: [256]
-      image_size: &image_size [1024]
+      image_size: *image_size
