@@ -64,6 +64,7 @@ def _build_lam(
     encoder_attention_downsample_rate: int = 2,
     decoder_attention_downsample_rate: int = 2,
     classification_layer_downsample_rate: int = 8,
+    use_broken_no_mask=False,
     fusion_transformer="TwoWayTransformer",
     segment_example_logits=False,
     dropout: float = 0.0,
@@ -110,6 +111,7 @@ def _build_lam(
             mask_in_chans=16,
             class_attention=class_attention,
             dropout=dropout,
+            use_broken_no_mask=use_broken_no_mask,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=embed_dim,

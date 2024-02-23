@@ -244,6 +244,7 @@ class PromptImageEncoder(PromptEncoder):
         class_example_attention: bool = True,
         class_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
+        use_broken_no_mask: bool = False,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -303,10 +304,13 @@ class PromptImageEncoder(PromptEncoder):
                 act=activation,
                 dropout=dropout,
             )
-
-        self.not_a_mask_embed = nn.Embedding(
-            1, embed_dim
-        )  # For classes/examples with missing masks
+        self.use_broken_no_mask = use_broken_no_mask
+        if use_broken_no_mask:
+            self.not_a_mask_embed = nn.Embedding(1, embed_dim // 8)
+        else:
+            self.not_a_mask_embed = nn.Embedding(
+                1, embed_dim
+            )  # For classes/examples with missing masks
 
     def _embed_masks(
         self, masks: torch.Tensor, masks_flags: torch.Tensor, chunk_size=None
@@ -329,9 +333,12 @@ class PromptImageEncoder(PromptEncoder):
         )
         H, W = mask_embedding.shape[-2:]
         mask_embedding[masks_flags == Label.NULL] = 0.0
-        mask_embedding[masks_flags == Label.NULL] += rearrange(
-            self.not_a_mask_embed.weight, "1 d -> 1 d 1 1"
-        )
+        if self.use_broken_no_mask:
+            mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
+        else:
+            mask_embedding[masks_flags == Label.NULL] += rearrange(
+                self.not_a_mask_embed.weight, "1 d -> 1 d 1 1"
+            )
         return mask_embedding
 
     def _get_batch_examples_class_size(
