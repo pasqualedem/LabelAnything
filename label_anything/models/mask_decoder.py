@@ -190,7 +190,7 @@ class MaskDecoderLam(nn.Module):
         self.segment_example_logits = segment_example_logits
 
         first_layer_downsample_rate = (
-            classification_layer_downsample_rate / 2
+            classification_layer_downsample_rate // 2
             if classification_layer_downsample_rate > 1
             else 1
         )
