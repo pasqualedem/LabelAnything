@@ -108,10 +108,24 @@ class Coco20iDataset(CocoLVISDataset):
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
             idx, metadata = idx_batchmetadata
-            # sample a random category
-            cat_ids = [-1, random.choice(list(self.categories.keys()))]
-            # sample random img ids
-            image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
+            if self.n_ways == 1:
+                # sample a random category
+                cat_ids = [-1, random.choice(list(self.categories.keys()))]
+                # sample random img ids
+                image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
+            else:         
+                # sample n_ways categories
+                cat_ids = random.sample(list(self.categories.keys()), self.n_ways)
+                # Choose a random image from the first category
+                query_image_id = random.choice(list(self.cat2img[cat_ids[0]]))
+                
+                # sample n_shots images from each category
+                image_ids = [query_image_id]
+                for cat_id in cat_ids:
+                    cat_image_ids = self.cat2img[cat_id]
+                    cat_image_ids = random.sample(cat_image_ids, self.n_shots)
+                    image_ids += cat_image_ids
+                cat_ids = [-1] + sorted(cat_ids)
 
             # load, stack and preprocess the images
             images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
@@ -174,6 +188,7 @@ class Coco20iDataset(CocoLVISDataset):
             return data_dict
 
     def __len__(self):
+        return 10
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
         elif self.split == Coco20iSplit.VAL:

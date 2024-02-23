@@ -48,13 +48,7 @@ class AbstractLogger:
     def _get_class_ids(self, classes):
         res_classes = []
         for c in classes:
-            max_len = 0
-            max_idx = 0
-            for i, x in enumerate(c):
-                max_len = max(max_len, len(x))
-                if len(x) == max_len:
-                    max_idx = i
-            res_classes.append(list(c[max_idx]))
+            res_classes.append(sorted(list(set(sum(c, [])))))
         return res_classes
 
     def log_batch(

@@ -226,7 +226,7 @@ def generate_examples(
         num_examples=num_examples,
     )
 
-    cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+    cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
     st.session_state["named_classes"] = ["background"] + [
         coco_dataset.categories[cat]["name"] for cat in cat_ids
     ]

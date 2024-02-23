@@ -537,7 +537,7 @@ class CocoLVISDataset(Dataset):
 
         base_image_data = self.images[self.image_ids[idx]]
         image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
-        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
         cat_ids.insert(0, -1)  # add the background class
 
         # load, stack and preprocess the images
@@ -678,7 +678,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
             prompt_images
         )
 
-        cat_ids = list(self.categories.keys())
+        cat_ids = sorted(list(self.categories.keys()))
         bboxes, masks, points, _, image_sizes = self._get_prompts(
             image_ids, cat_ids, images, img2cat_annotations
         )
@@ -778,7 +778,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
     def __getitem__(self, item):
         image_id = self.image_ids[item]
         data, data_key, gt = self._get_images_or_embeddings([self.images[image_id]])
-        cat_ids = list(self.cat2img.keys())
+        cat_ids = sorted(list(self.cat2img.keys()))
         if gt is None:
             gt = self.compute_ground_truths([image_id], cat_ids)[0]
         else:

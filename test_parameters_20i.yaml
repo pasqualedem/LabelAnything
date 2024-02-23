@@ -61,16 +61,16 @@ parameters:
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    name: [dummy] # path to model class or model name contained in EzDL or super-gradients
     # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
     # use_sam_checkpoint: [True]
-    spatial_convs: [3]
-    class_attention: [True]
-    segment_example_logits: [True]
-    image_embed_dim: [256]
-    embed_dim: [256]
-    image_size: &image_size [1024]
-    dropout: [0.1]
+    # spatial_convs: [3]
+    # class_attention: [True]
+    # segment_example_logits: [True]
+    # image_embed_dim: [256]
+    # embed_dim: [256]
+    # image_size: &image_size [1024]
+    # dropout: [0.1]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -88,8 +88,8 @@ parameters:
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
-        n_ways: [max]
-        n_shots: [min]
+        n_ways: [2]
+        n_shots: [2]
         do_subsample: [False]
         add_box_noise: [False]
     common:
@@ -97,11 +97,10 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      n_ways: [1]
-      image_size: *image_size
+      image_size: [1024]
   dataloader:
     num_workers: [0]
-    possible_batch_example_nums: [[[1, 1]]]
+    possible_batch_example_nums: [[[1, 4]]]
     val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     val_prompt_types: [["mask"]]
