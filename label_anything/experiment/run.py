@@ -477,7 +477,7 @@ class Run:
                "json": {},
            }
         if self.train_params.get("validation_reruns", None) is None:
-            metrics = self.validate_run(epoch, None, generate_json=generate_json)
+            metrics = self.validate_run(epoch, None)
         else:
             overall_metrics = []
             for validation_run in range(self.train_params["validation_reruns"]):
