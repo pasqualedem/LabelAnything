@@ -160,7 +160,7 @@ class WandBLogger(AbstractLogger):
                 logger.warning(run)
             logger.warning(f"Using {runs[0]}")
         run = runs[0]
-        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", "latest")
+        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", checkpoint_type)
         logger.info(f"Resuming from {self.accelerator_state_dir}")
         
     def _save_code(self):

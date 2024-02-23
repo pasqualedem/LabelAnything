@@ -60,6 +60,7 @@ def load_yaml(file_path):
         print(f"File '{file_path}' not found.")
     except yaml.YAMLError as e:
         print(f"Error parsing YAML file: {e}")
+        raise e
         
 
 def write_yaml(data: dict, file_path: str = None, file=None):
