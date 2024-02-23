@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: Rerun # name of group of experiments for the logger platform
+  group: Dropout # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -20,7 +20,6 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
-      tags: [[NewGT, NoMaskFix]]
 
   train_params:
     loss:
@@ -35,7 +34,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [50]
+    max_epochs: [20]
     compile: [False]
     initial_lr: [0.00005]
     optimizer: [AdamW]
@@ -55,6 +54,7 @@ parameters:
     spatial_convs: [3]
     class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
+    dropout: [0.1]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

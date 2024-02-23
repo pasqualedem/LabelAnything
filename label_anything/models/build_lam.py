@@ -63,8 +63,10 @@ def _build_lam(
     spatial_convs=None,
     encoder_attention_downsample_rate: int = 2,
     decoder_attention_downsample_rate: int = 2,
+    classification_layer_downsample_rate: int = 8,
     fusion_transformer="TwoWayTransformer",
     segment_example_logits=False,
+    dropout: float = 0.0,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -107,19 +109,23 @@ def _build_lam(
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
             class_attention=class_attention,
+            dropout=dropout,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=embed_dim,
                 mlp_dim=2048,
                 attention_downsample_rate=encoder_attention_downsample_rate,
                 num_heads=8,
+                dropout=dropout,
             ),
         ),
         mask_decoder=MaskDecoderLam(
             transformer_dim=embed_dim,
             spatial_convs=spatial_convs,
             transformer=fusion_transformer,
-            segment_example_logits=segment_example_logits
+            segment_example_logits=segment_example_logits,
+            classification_layer_downsample_rate=classification_layer_downsample_rate,
+            dropout=dropout,
         ),
     )
     lam.eval()

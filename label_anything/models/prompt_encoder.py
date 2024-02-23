@@ -244,6 +244,7 @@ class PromptImageEncoder(PromptEncoder):
         class_example_attention: bool = True,
         class_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
+        dropout: float = 0.0,
     ) -> None:
         """
         Encodes prompts for input to LAM's mask decoder.
@@ -276,6 +277,7 @@ class PromptImageEncoder(PromptEncoder):
             downsample_rate=attention_downsample_rate,
             mlp_dim=mlp_dim,
             act=activation,
+            dropout=dropout,
         )
         self.no_sparse_embedding = nn.Embedding(
             1, embed_dim
@@ -289,6 +291,7 @@ class PromptImageEncoder(PromptEncoder):
                 downsample_rate=attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
+                dropout=dropout,
             )
 
         if class_example_attention:
@@ -298,6 +301,7 @@ class PromptImageEncoder(PromptEncoder):
                 downsample_rate=attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
+                dropout=dropout,
             )
 
         self.not_a_mask_embed = nn.Embedding(
@@ -577,114 +581,3 @@ class PromptImageEncoder(PromptEncoder):
             ResultDict.EXAMPLES_CLASS_EMBS: src,
         }
 
-
-class PromptMaskImageEncoder(PromptEncoder):
-    def __init__(
-        self,
-        embed_dim: int,
-        image_embedding_size: Tuple[int, int],
-        input_image_size: Tuple[int, int],
-        mask_in_chans: int,
-        transformer: nn.Module,
-        activation: Type[nn.Module] = nn.GELU,
-    ) -> None:
-        """
-        Encodes prompts for input to LAM's mask decoder.
-
-        Arguments:
-          embed_dim (int): The prompts' embedding dimension
-          image_embedding_size (tuple(int, int)): The spatial size of the
-            image embedding, as (H, W).
-          input_image_size (int): The padded size of the image as input
-            to the image encoder, as (H, W).
-          mask_in_chans (int): The number of hidden channels used for
-            encoding input masks.
-          activation (nn.Module): The activation to use when encoding
-            input masks.
-        """
-        super().__init__(
-            embed_dim, image_embedding_size, input_image_size, mask_in_chans, activation
-        )
-
-        num_heads: int = 8
-        attention_downsample_rate: int = 2
-        mlp_dim: int = 2048
-
-        self.example_attention = Attention(
-            embed_dim, num_heads, downsample_rate=attention_downsample_rate
-        )
-        self.norm_example_attention = nn.LayerNorm(embed_dim)
-        self.example_mlp = MLPBlock(embed_dim, mlp_dim)
-        self.norm_example_mlp = nn.LayerNorm(embed_dim)
-
-        self.not_a_mask_embed = nn.Embedding(
-            1, embed_dim // 4
-        )  # For classes/examples with missing masks
-
-    def _embed_masks(
-        self, masks: torch.Tensor, masks_flags: torch.Tensor
-    ) -> torch.Tensor:
-        """Embeds mask inputs. (B, C, H, W)"""
-        B, M, C, _, _ = masks.shape
-        masks = rearrange(masks, "b m c h w -> (b m c) 1 h w")
-        mask_embedding = self.mask_downscaling(masks)
-        mask_embedding = rearrange(
-            mask_embedding, "(b m c) d h w -> b m c d h w", b=B, m=M
-        )
-        H, W = mask_embedding.shape[-2:]
-        mask_embedding[masks_flags == Label.NULL] = 0.0
-        mask_embedding[masks_flags == Label.NULL] += self.not_a_mask_embed.weight
-        return mask_embedding
-
-    def _get_batch_examples_class_size(
-        self,
-        masks: Optional[torch.Tensor],
-    ) -> int:
-        """
-        Gets the batch size and the number classes of the output
-        given the batch size and the number of classes of the input prompts.
-        """
-        if masks is not None:
-            masks = masks[0]
-            return masks.shape[0], masks.shape[1], masks.shape[2]
-        else:
-            return 1
-
-    def forward(
-        self,
-        image_embeddings: torch.Tensor,
-        masks: Optional[torch.Tensor],
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Embeds masks, returning class embeddings
-
-        Arguments:
-          masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
-
-        Returns:
-          torch.Tensor: sparse embeddings for the points and boxes, with shape
-            BxNx(embed_dim), where N is determined by the number of input points
-            and boxes.
-          torch.Tensor: dense embeddings for the masks, in the shape
-            Bx(embed_dim)x(embed_H)x(embed_W)
-        """
-        dense_embeddings = self._embed_masks(masks)
-        b, m, c, d, h, w = dense_embeddings.shape
-        dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
-
-        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(
-            1, 1, c, 1, 1, 1
-        )
-        src = rearrange(src, "b m c d h w -> (b m c) d h w")
-        src = src + dense_embeddings
-        src = rearrange(src, "(b m c) d h w -> b (m c) d", b=b, m=m, c=c)
-
-        src = self.example_attention(src, src, src)
-        src = self.norm_example_attention(src)
-        src = self.example_mlp(src) + src
-        src = self.norm_example_mlp(src)
-
-        # Average over examples
-        src = rearrange(src, "b (m c) d -> b m c d", c=c)
-        src = torch.mean(src, dim=1)  # (B, C, D)
-        return src

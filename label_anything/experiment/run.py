@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import subprocess
@@ -49,6 +50,7 @@ from .utils import (
 )
 
 logger = get_logger(__name__)
+SIZE = 1024
 
 
 class Run:
@@ -71,6 +73,7 @@ class Run:
             sys.path.extend(".")
         self.global_train_step = 0
         self.global_val_step = 0
+        self.validation_json = None
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -123,6 +126,7 @@ class Run:
         logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
+        self.input_image_size = self.model_params.get("image_size", SIZE)
 
         logger.info("Creating optimizer")
         self.optimizer = AdamW(
@@ -350,7 +354,7 @@ class Run:
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
             long_side_length=self.dataset_params.get("common", {}).get(
-                "image_size", None
+                "image_size", SIZE
             ),
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
@@ -418,6 +422,7 @@ class Run:
                         step=tot_steps,
                         substitution_step=i,
                         input_dict=input_dict,
+                        input_shape=self.input_image_size,
                         gt=gt,
                         pred=outputs,
                         dataset=self.train_loader.dataset,
@@ -455,10 +460,24 @@ class Run:
             metrics=metric_dict,
             epoch=epoch,
         )
+        
+    def _add_to_json(self, input_dict, validation_run):
+        if self.validation_json is None:
+            return
+        if validation_run is None:
+            validation_run = 0
+        if validation_run not in self.validation_json["json"]:
+            self.validation_json["json"][validation_run] = []
+        self.validation_json["json"][validation_run].append(input_dict[BatchKeys.IMAGE_IDS])
 
-    def validate(self, epoch: int):
+    def validate(self, epoch: int, generate_json=False):
+        if generate_json:
+           self.validation_json = {
+               "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
+               "json": {},
+           }
         if self.train_params.get("validation_reruns", None) is None:
-            metrics = self.validate_run(epoch, None)
+            metrics = self.validate_run(epoch, None, generate_json=generate_json)
         else:
             overall_metrics = []
             for validation_run in range(self.train_params["validation_reruns"]):
@@ -474,6 +493,11 @@ class Run:
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {k}: {v}")
+                
+        if generate_json:
+            with open(self.validation_json["file"], "w") as f:
+                json.dump(self.validation_json["json"], f)
+            self.validation_json = None
 
         logger.info(f"Validation epoch {epoch} finished")
         return metrics
@@ -526,6 +550,7 @@ class Run:
                 batch_dict = next(iter(substitutor))
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
+                self._add_to_json(image_dict, validation_run)
 
                 result_dict = self.model(image_dict, gt)
                 outputs = result_dict[ResultDict.LOGITS]
@@ -554,6 +579,7 @@ class Run:
                     step=tot_steps,
                     substitution_step=0,
                     input_dict=image_dict,
+                    input_shape=self.input_image_size,
                     gt=gt,
                     pred=outputs,
                     dataset=self.val_loader.dataset,

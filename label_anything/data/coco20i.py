@@ -20,6 +20,7 @@ class Coco20iDataset(CocoLVISDataset):
         val_fold_idx: int,
         n_folds: int,
         n_shots: int = None,
+        val_num_samples: int = 1000,
         *args,
         **kwargs
     ):
@@ -41,6 +42,7 @@ class Coco20iDataset(CocoLVISDataset):
         self.val_fold_idx = val_fold_idx
         self.n_folds = n_folds
         self.n_shots = n_shots
+        self.val_num_samples = val_num_samples
         self._prepare_benchmark()
 
     def _prepare_benchmark(self):
@@ -175,4 +177,4 @@ class Coco20iDataset(CocoLVISDataset):
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
         elif self.split == Coco20iSplit.VAL:
-            return 1000
+            return self.val_num_samples

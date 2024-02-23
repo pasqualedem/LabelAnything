@@ -62,14 +62,15 @@ parameters:
 
   model:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    # checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
+    # use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
     segment_example_logits: [True]
     image_embed_dim: [256]
     embed_dim: [256]
     image_size: &image_size [1024]
+    dropout: [0.1]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
