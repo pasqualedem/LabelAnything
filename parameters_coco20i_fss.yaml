@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: Coco20iBigEmbedding # name of group of experiments for the logger platform
+  group: Rerun # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -20,6 +20,7 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      tags: [[NewGT, NoMaskFix]]
 
   train_params:
     loss:
@@ -49,19 +50,18 @@ parameters:
     check_nan: [1] # check for nan every n batches
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
+    use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
-    image_embed_dim: [768]
-    embed_dim: [512]
-    image_size: &image_size [1024]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       coco20i:
         name: [coco]
         instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/rscaring/vit_large_embeddings]
+        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/nfanelli/embeddings]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
         split: ["train"]
         val_fold_idx: [0]
@@ -83,7 +83,6 @@ parameters:
       max_points_annotations: [50]
       max_points_per_annotation: [10]
       load_gts: [False]
-      image_size: *image_size
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
