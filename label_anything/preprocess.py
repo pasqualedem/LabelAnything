@@ -124,6 +124,7 @@ def preprocess_images_to_embeddings(
         create_image_embeddings(model, dataloader, outfolder, device=device)
 
 
+@torch.no_grad()
 def create_image_and_neck_embeddings(
         model,
         dataloader,
