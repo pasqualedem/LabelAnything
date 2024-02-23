@@ -149,6 +149,11 @@ def preprocess_huggingface(
     default="data/processed/embeddings",
     help="Folder to save the embeddings",
 )
+@click.option(
+    "--last_block_dir",
+    default=None,
+    help="Folder to save last transformer block",
+)
 def preprocess(
     encoder,
     checkpoint,
@@ -158,6 +163,7 @@ def preprocess(
     batch_size,
     num_workers,
     outfolder,
+    last_block_dir,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings
 
@@ -169,6 +175,7 @@ def preprocess(
         batch_size=batch_size,
         num_workers=num_workers,
         outfolder=outfolder,
+        last_block_dir=last_block_dir,
         compile=compile,
     )
 
