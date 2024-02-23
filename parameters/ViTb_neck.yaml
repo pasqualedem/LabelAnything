@@ -93,7 +93,7 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
--   model:
+  - model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [True]
