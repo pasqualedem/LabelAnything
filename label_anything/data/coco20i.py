@@ -122,7 +122,7 @@ class Coco20iDataset(CocoLVISDataset):
                 # sample n_shots images from each category
                 image_ids = [query_image_id]
                 for cat_id in cat_ids:
-                    cat_image_ids = self.cat2img[cat_id]
+                    cat_image_ids = list(self.cat2img[cat_id])
                     cat_image_ids = random.sample(cat_image_ids, self.n_shots)
                     image_ids += cat_image_ids
                 cat_ids = [-1] + sorted(cat_ids)
