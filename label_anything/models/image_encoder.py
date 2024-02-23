@@ -105,7 +105,7 @@ class ImageEncoderViT(nn.Module):
             LayerNorm2d(out_chans),
         )
 
-    def forward(self, x: torch.Tensor, last_block_state: bool = False) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_last_block_state: bool = False) -> torch.Tensor:
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
@@ -114,12 +114,12 @@ class ImageEncoderViT(nn.Module):
             x = blk(x)
         x = x.permute(0, 3, 1, 2)
 
-        if last_block_state:
+        if return_last_block_state:
             last_block = x.clone()
 
         x = self.neck(x)
 
-        return x if not last_block_state else {
+        return x if not return_last_block_state else {
             ResultDict.LAST_HIDDEN_STATE: x,
             ResultDict.LAST_BLOCK_STATE: last_block,
         }

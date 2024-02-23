@@ -16,6 +16,7 @@ from label_anything.models import model_registry
 import safetensors.torch as safetch
 from transformers import ViTModel
 from einops import rearrange
+from label_anything.utils.utils import ResultDict
 
 
 def generate_ground_truths(dataset_name, anns_path, outfolder):
@@ -72,6 +73,7 @@ def preprocess_images_to_embeddings(
     batch_size=1,
     num_workers=0,
     outfolder="data/processed/embeddings",
+    last_block_dir=None,
     device="cuda",
     compile=False,
 ):
@@ -109,7 +111,52 @@ def preprocess_images_to_embeddings(
         dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
     print("Dataloader created")
-    create_image_embeddings(model, dataloader, outfolder, device=device)
+
+    if last_block_dir is not None:
+        create_image_and_neck_embeddings(
+            model=model,
+            dataloader=dataloader,
+            last_hidden_dir=outfolder,
+            last_block_dir=last_block_dir,
+            device=device
+        )
+    else:
+        create_image_embeddings(model, dataloader, outfolder, device=device)
+
+
+def create_image_and_neck_embeddings(
+        model,
+        dataloader,
+        last_hidden_dir,
+        last_block_dir,
+        device='cuda',
+):
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(message)s",
+        datefmt="%Y-%m-%d %H-%M-%S",
+    )
+    n_steps = len(dataloader)
+
+    for idx, batch in enumerate(dataloader):
+        img, image_id = batch
+        img = img.to(device)
+        out = model(img, return_last_block_state=True)
+        last_hidden_state = out[ResultDict.LAST_HIDDEN_STATE].cpu()
+        last_block_state = out[ResultDict.LAST_BLOCK_STATE].cpu()
+        for i in range(last_hidden_state.shape[0]):
+            save_file(
+                {"embedding": last_hidden_state[i]},
+                os.path.join(last_hidden_dir, f"{image_id[i]}.safetensors"),
+            )
+
+            save_file(
+                {"embedding": last_block_state[i]},
+                os.path.join(last_block_dir, f"{image_id[i]}.safetensors"),
+            )
+
+        if idx % 10 == 0:
+            logging.info(f"Step {idx}/{n_steps}")
 
 
 @torch.no_grad()
