@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from scipy.ndimage import label, binary_dilation
 from PIL import Image
 import json
+from tqdm import tqdm
 
 url_voc = "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
 download_command = f"wget {url_voc}"
@@ -25,7 +26,7 @@ instances_voc12 = {
     "categories": [],
 }
 
-VOC2012 = pathlib.Path("VOCdevkit/VOC2012/")
+VOC2012 = pathlib.Path("data/raw/VOCdevkit/VOC2012")
 
 
 def get_items(root, ids):
@@ -34,7 +35,7 @@ def get_items(root, ids):
     all_masks = []
     all_labels = []
 
-    for image_id in ids:
+    for image_id in tqdm(ids):
         image = _get_images(root, image_id)
         boxes, labels = _get_annotations(root, image_id)
         masks = _get_masks(root, image_id)
@@ -190,7 +191,7 @@ if __name__ == "__main__":
         instances_voc12,
     )
 
-    with open(f"annotations/instances_voc12.json", "w") as f:
+    with open(f"data/annotations/instances_voc12.json", "w") as f:
         json.dump(annotations, f)
 
     print("Done!")
