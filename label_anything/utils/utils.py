@@ -56,8 +56,9 @@ def load_yaml(file_path):
             data = yaml.safe_load(yaml_file.read())
             data = strip_wandb_keys(data)
             return data
-    except FileNotFoundError:
+    except FileNotFoundError as e:
         print(f"File '{file_path}' not found.")
+        raise e
     except yaml.YAMLError as e:
         print(f"Error parsing YAML file: {e}")
         raise e
