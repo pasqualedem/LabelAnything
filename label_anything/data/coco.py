@@ -171,6 +171,9 @@ class CocoLVISDataset(Dataset):
         category_ids = set(self.categories.keys())
 
         for ann in self.annotations.values():
+            if self._remove_small_annotations(ann):
+                continue
+            
             if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
                 continue
 
@@ -378,8 +381,6 @@ class CocoLVISDataset(Dataset):
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
                 ):
-                    if self._remove_small_annotations(ann):
-                        continue
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -465,8 +466,6 @@ class CocoLVISDataset(Dataset):
             ground_truths.append(np.zeros(img_size, dtype=np.int64))
 
             for ann in self.img_annotations[image_id]:
-                if self._remove_small_annotations(ann):
-                    continue
                 ann_cat = ann[AnnFileKeys.CATEGORY_ID]
                 if ann_cat not in cat_ids:
                     continue
