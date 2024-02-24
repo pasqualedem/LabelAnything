@@ -210,7 +210,7 @@ class ExampleGenerator:
 
 class NWayExampleGenerator(ExampleGenerator):
     """
-    Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
+    Generate examples with fixed number of classes up to n
     """
 
     def __init__(

@@ -88,7 +88,6 @@ parameters:
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
-        n_ways: [2]
         n_shots: [2]
         do_subsample: [False]
         add_box_noise: [False]

@@ -79,6 +79,7 @@ parameters:
         val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
+        n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
         load_gts: [False]

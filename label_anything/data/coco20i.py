@@ -37,6 +37,9 @@ class Coco20iDataset(CocoLVISDataset):
         assert split in [Coco20iSplit.TRAIN, Coco20iSplit.VAL]
         assert val_fold_idx < n_folds
         assert split == Coco20iSplit.TRAIN or n_shots is not None
+        # If n_shots is min, n_ways should be max
+        assert n_shots != "min" or self.n_ways == "max", "If n_shots is min, n_ways should be max"
+        assert self.n_ways != "max" or n_shots == "min", "If n_ways is max, n_shots should be min"
 
         self.split = split
         self.val_fold_idx = val_fold_idx
