@@ -34,8 +34,8 @@ dataset:
       img_dir: /ext/stalla/LabelAnything/images/train2017
       instances_path: data/annotations/instances_val2014.json
       n_folds: 4
-      n_shots: 2
-      n_ways: 2
+      n_shots: min
+      n_ways: max
       name: coco
       split: val
       val_fold_idx: 0
