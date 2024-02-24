@@ -56,6 +56,7 @@ class CocoLVISDataset(Dataset):
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
+        remove_small_annotations: bool = False,
         dtype=torch.float32,
     ):
         """Initialize the dataset.
@@ -107,6 +108,7 @@ class CocoLVISDataset(Dataset):
         self.add_box_noise = add_box_noise
         self.n_ways = n_ways
         self.image_size = image_size
+        self.remove_small_annotations = remove_small_annotations
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -316,6 +318,19 @@ class CocoLVISDataset(Dataset):
         return np.clip(
             np.random.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
         )
+        
+    def _remove_small_annotations(self, ann: dict) -> bool:
+        """Remove annotation smaller than 2*32*32 pixels.
+
+        Args:
+            ann (dict): The annotation.
+
+        Returns:
+            bool: True if the annotation is too small, False otherwise.
+        """
+        if self.remove_small_annotations:
+            return ann["area"] < 2 * 32 * 32
+        return False
 
     def _get_prompts(
         self, image_ids: list, cat_ids: list, possible_prompt_types: list[PromptType]
@@ -363,6 +378,8 @@ class CocoLVISDataset(Dataset):
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
                 ):
+                    if self._remove_small_annotations(ann):
+                        continue
                     if prompt_type == PromptType.BBOX:
                         # take the bbox
                         bboxes[i][cat_id].append(
@@ -448,6 +465,8 @@ class CocoLVISDataset(Dataset):
             ground_truths.append(np.zeros(img_size, dtype=np.int64))
 
             for ann in self.img_annotations[image_id]:
+                if self._remove_small_annotations(ann):
+                    continue
                 ann_cat = ann[AnnFileKeys.CATEGORY_ID]
                 if ann_cat not in cat_ids:
                     continue

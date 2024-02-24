@@ -80,6 +80,7 @@ parameters:
         img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
         split: ["train"]
         val_fold_idx: [0]
+        remove_small_annotations: [True]
         n_folds: [4]
       val_coco20i:
         name: [coco]
