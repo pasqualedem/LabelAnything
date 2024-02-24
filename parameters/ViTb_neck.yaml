@@ -95,12 +95,12 @@ parameters:
 
 other_grids:
   -   model:
-      name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
-      spatial_convs: [3]
-      class_attention: [True]
-      checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
-      use_sam_checkpoint: [True]
-      fusion_transformer: [TwoWayTransformer]
-      image_embed_dim: [256]
-      embed_dim: [256]
-      image_size: *image_size
+        name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+        spatial_convs: [3]
+        class_attention: [True]
+        checkpoint: [checkpoints/sam_vit_h_4b8939.pth] # model parameters
+        use_sam_checkpoint: [True]
+        fusion_transformer: [TwoWayTransformer]
+        image_embed_dim: [256]
+        embed_dim: [256]
+        image_size: *image_size
