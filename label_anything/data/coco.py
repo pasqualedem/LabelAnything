@@ -141,6 +141,7 @@ class CocoLVISDataset(Dataset):
         self.example_generator = build_example_generator(
             n_ways=self.n_ways,
             n_shots=None,
+            images_to_categories=self.img2cat,
             categories_to_imgs=self.cat2img,
         )
 

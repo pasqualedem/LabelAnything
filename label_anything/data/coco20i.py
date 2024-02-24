@@ -92,7 +92,8 @@ class Coco20iDataset(CocoLVISDataset):
         self.example_generator = build_example_generator(
             n_ways=self.n_ways,
             n_shots=self.n_shots,
-            categories_to_imgs=self.cat2img
+            categories_to_imgs=self.cat2img,
+            images_to_categories=self.img2cat,
         )
 
     def __getitem__(self, idx_batchmetadata: tuple[int, int]) -> dict:
