@@ -123,7 +123,7 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     for enum, id_ in enumerate(ids):
         # print(ids[i])
         image = {
-            "file_name": id_,  # This is the only field that is compulsory
+            "file_name": f"{id_}.jpg",  # This is the only field that is compulsory
             "url": f"JPEGImages/{id_}.jpg",
             "height": images[enum].shape[0],
             "width": images[enum].shape[1],
@@ -163,25 +163,28 @@ def generate_dataset_file(voc_folder):
         f.write(contents)
 
 
-if __name__ == "__main__":
-    if not os.path.exists(VOC2012):
+def preprocess_voc(input_folder=None, output_folder=None):
+    input_folder = input_folder or VOC2012
+    output_folder = output_folder or pathlib.Path("data/annotations")
+        
+    if not os.path.exists(input_folder):
         print("Downloading VOC2012 dataset...")
         os.system(download_command)
         os.system(tar_command)
     else:
         print("VOC2012 dataset already exists!")
 
-    if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
+    if not os.path.exists(os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")):
         print("Generating dataset file...")
-        dataset = generate_dataset_file(VOC2012)
+        dataset = generate_dataset_file(input_folder)
     else:
         print("Dataset file already exists!")
 
-    dataset = os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")
+    dataset = os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")
 
     ids = _read_image_ids(dataset)
     print(f"len ids: {len(ids)}")
-    images, boxes, polygons, labels = get_items(VOC2012, ids)
+    images, boxes, polygons, labels = get_items(input_folder, ids)
     annotations = create_annotation(
         ids,
         images,
