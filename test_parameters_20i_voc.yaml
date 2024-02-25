@@ -77,7 +77,7 @@ parameters:
       voc5i:
         name: [voc]
         instances_path: [data/annotations/instances_voc12.json]
-        img_dir: &img_dir [/ext/stalla/LabelAnything/VOCdevkit/VOC2012/JPEGImages]
+        img_dir: &img_dir [data/raw/VOCdevkit/VOC2012]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
