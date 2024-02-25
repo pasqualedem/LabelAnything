@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, PILToTensor
+from torchvision.transforms import Compose, PILToTensor, Resize, Normalize, ToTensor
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
@@ -26,7 +26,15 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     SIZE = 1024
     size = dataset_args.get("common", {}).get("image_size", SIZE)
 
-    preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+    if "custom_preprocess" in dataset_args.get("common", {}):
+        custom_preprocess = dataset_args["common"].pop("custom_preprocess")
+        mean = custom_preprocess["mean"]
+        std = custom_preprocess["std"]
+        preprocess = Compose(
+            [Resize(size=(size, size)), ToTensor(), Normalize(mean, std)]
+        )
+    else:
+        preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")
