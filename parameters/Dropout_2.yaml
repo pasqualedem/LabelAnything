@@ -20,7 +20,7 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
-      run_id: [440dce2e] # Insert run_id of first dropout here
+      run_id: [56j2wbow] # Insert run_id of first dropout here
 
   train_params:
     loss:
