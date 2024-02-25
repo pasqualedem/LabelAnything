@@ -19,12 +19,11 @@ datasets = {
     "coco20i": Coco20iDataset,
     "val_coco20i": Coco20iDataset,
     "lvis": CocoLVISDataset,
-    "voc": CocoLVISDataset,
-    "val_voc": CocoLVISDataset,
+    # "voc": PascalVOCDataset,
+    # "val_voc": PascalVOCDataset,
     "voc5i": Coco20iDataset,
     "val_voc5i": Coco20iDataset,
     "val_lvis": CocoLVISDataset,
-    "ade20k": None,
 }
 
 
