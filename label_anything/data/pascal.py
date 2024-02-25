@@ -39,7 +39,7 @@ class PascalVOCTestDataset(LabelAnythingTestDataset):
         return len(self.instances_path["images"])
 
     def _get_image(self, image_info):
-        image_path = os.path.join(self.img_dir, image_info["url"])
+        image_path = os.path.join(self.img_dir, image_info["coco_url"])
         img = Image.open(image_path)
         size = img.size
         if self.preprocess:
