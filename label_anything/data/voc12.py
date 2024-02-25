@@ -123,8 +123,8 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     for enum, id_ in enumerate(ids):
         # print(ids[i])
         image = {
-            "file_name": f"{id_}.jpg",  # This is the only field that is compulsory
-            "url": f"JPEGImages/{id_}.jpg",
+            "file_name": f"JPEGImages/{id_}.jpg",  # This is the only field that is compulsory
+            "coco_url": f"JPEGImages/{id_}.jpg",
             "height": images[enum].shape[0],
             "width": images[enum].shape[1],
             "id": enum,
@@ -135,7 +135,7 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     for enum, (box, rle, label) in enumerate(zip(boxes, rle_masks, labels)):
         for b, (_, rle_value), l in zip(box, rle.items(), label):
             annotation = {
-                "segmentation": rle_value["counts"],
+                "segmentation": rle_value,
                 "area": int(mask_utils.area(rle_value)),
                 "image_id": enum,
                 "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
@@ -198,3 +198,7 @@ def preprocess_voc(input_folder=None, output_folder=None):
         json.dump(annotations, f)
 
     print("Done!")
+
+
+if __name__ == "__main__":
+    preprocess_voc()
