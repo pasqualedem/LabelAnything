@@ -460,7 +460,7 @@ class Run:
             metrics=metric_dict,
             epoch=epoch,
         )
-        
+
     def _add_to_json(self, input_dict, validation_run):
         if self.validation_json is None:
             return
@@ -468,14 +468,16 @@ class Run:
             validation_run = 0
         if validation_run not in self.validation_json["json"]:
             self.validation_json["json"][validation_run] = []
-        self.validation_json["json"][validation_run].append(input_dict[BatchKeys.IMAGE_IDS])
+        self.validation_json["json"][validation_run].append(
+            input_dict[BatchKeys.IMAGE_IDS]
+        )
 
     def validate(self, epoch: int, generate_json=False):
         if generate_json:
-           self.validation_json = {
-               "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
-               "json": {},
-           }
+            self.validation_json = {
+                "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
+                "json": {},
+            }
         if self.train_params.get("validation_reruns", None) is None:
             metrics = self.validate_run(epoch, None)
         else:
@@ -493,7 +495,7 @@ class Run:
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {k}: {v}")
-                
+
         if generate_json:
             with open(self.validation_json["file"], "w") as f:
                 json.dump(self.validation_json["json"], f)
