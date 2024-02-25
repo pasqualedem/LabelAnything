@@ -20,6 +20,7 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      run_id: [440dce2e] # Insert run_id of first dropout here
 
   train_params:
     loss:
@@ -54,7 +55,7 @@ parameters:
     spatial_convs: [3]
     class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
-    dropout: [0.1, 0.3]
+    dropout: [0.1]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
