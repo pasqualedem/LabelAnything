@@ -7,12 +7,15 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from einops import rearrange
 
 from typing import Any, Dict, List, Tuple
 
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder
 from .prompt_encoder import PromptEncoder
+
+from label_anything.data.utils import BatchKeys
 
 
 class Sam(nn.Module):
@@ -43,7 +46,9 @@ class Sam(nn.Module):
         self.image_encoder = image_encoder
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
-        self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
+        self.register_buffer(
+            "pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False
+        )
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
     @property
@@ -94,7 +99,9 @@ class Sam(nn.Module):
                 shape BxCxHxW, where H=W=256. Can be passed as mask input
                 to subsequent iterations of prediction.
         """
-        input_images = torch.stack([self.preprocess(x["image"]) for x in batched_input], dim=0)
+        input_images = torch.stack(
+            [self.preprocess(x["image"]) for x in batched_input], dim=0
+        )
         image_embeddings = self.image_encoder(input_images)
 
         outputs = []
@@ -158,7 +165,9 @@ class Sam(nn.Module):
             align_corners=False,
         )
         masks = masks[..., : input_size[0], : input_size[1]]
-        masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
+        masks = F.interpolate(
+            masks, original_size, mode="bilinear", align_corners=False
+        )
         return masks
 
     def preprocess(self, x: torch.Tensor) -> torch.Tensor:
@@ -172,3 +181,185 @@ class Sam(nn.Module):
         padw = self.image_encoder.img_size - w
         x = F.pad(x, (0, padw, 0, padh))
         return x
+
+
+class AdaptedSam(Sam):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.predict = None
+        self.generate_class_embeddings = None
+        self.mask_size = 256
+
+    def _rearrange_batch(self, x):
+        B, M, C = x[BatchKeys.FLAG_EXAMPLES].shape
+        # Remove background
+        points = x[BatchKeys.PROMPT_POINTS][:, :, 1:]
+        flag_points = x[BatchKeys.FLAG_POINTS][:, :, 1:]
+
+        points = rearrange(points, "b m c n d -> (b m c) n d")
+        flag_points = rearrange(flag_points, "b m c n -> (b m c) n")
+
+        bboxes = x[BatchKeys.PROMPT_BBOXES][:, :, 1:]
+        flag_bboxes = x[BatchKeys.FLAG_BBOXES][:, :, 1:]
+        bboxes = rearrange(bboxes, "b m c n d -> (b m c) n d")
+        flag_bboxes = rearrange(flag_bboxes, "b m c n -> (b m c) n")
+
+        new_batch = {
+            BatchKeys.IMAGES: rearrange(
+                x[BatchKeys.IMAGES], "b m c h w -> (b m) c h w"
+            ),
+            BatchKeys.PROMPT_POINTS: points,
+            BatchKeys.FLAG_POINTS: flag_points,
+            BatchKeys.PROMPT_BBOXES: bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+        }
+        return new_batch
+
+    def _take_single_elem(self, batch, i):
+        single_batch = {}
+        if (
+            BatchKeys.PROMPT_POINTS in batch
+            and batch[BatchKeys.FLAG_POINTS].nelement() > 0
+            and (batch[BatchKeys.FLAG_POINTS][i] == 0).all().logical_not()
+        ):
+            single_batch[BatchKeys.PROMPT_POINTS] = batch[BatchKeys.PROMPT_POINTS][i][
+                batch[BatchKeys.FLAG_POINTS][i] != 0
+            ]
+            single_batch[BatchKeys.FLAG_POINTS] = batch[BatchKeys.FLAG_POINTS][i][
+                batch[BatchKeys.FLAG_POINTS][i] != 0
+            ]
+            single_batch[BatchKeys.PROMPT_POINTS] = single_batch[
+                BatchKeys.PROMPT_POINTS
+            ].unsqueeze(0)
+            single_batch[BatchKeys.FLAG_POINTS] = single_batch[
+                BatchKeys.FLAG_POINTS
+            ].unsqueeze(0)
+        if (
+            BatchKeys.PROMPT_BBOXES in batch
+            and batch[BatchKeys.FLAG_BBOXES].nelement() > 0
+            and (batch[BatchKeys.FLAG_BBOXES][i] == 0).all().logical_not()
+        ):
+            single_batch[BatchKeys.PROMPT_BBOXES] = batch[BatchKeys.PROMPT_BBOXES][i][
+                batch[BatchKeys.FLAG_BBOXES][i] != 0
+            ]
+            single_batch[BatchKeys.FLAG_BBOXES] = batch[BatchKeys.FLAG_BBOXES][i][
+                batch[BatchKeys.FLAG_BBOXES][i] != 0
+            ]
+            single_batch[BatchKeys.PROMPT_BBOXES] = single_batch[
+                BatchKeys.PROMPT_BBOXES
+            ]
+            single_batch[BatchKeys.FLAG_BBOXES] = single_batch[BatchKeys.FLAG_BBOXES]
+        return single_batch
+
+    @torch.no_grad()
+    def forward(
+        self,
+        batch_input: List[Dict[str, Any]],
+        multimask_output: bool = True,
+    ) -> List[Dict[str, torch.Tensor]]:
+        """
+        Predicts masks end-to-end from provided images and prompts.
+        If prompts are not known in advance, using SamPredictor is
+        recommended over calling the model directly.
+
+        Arguments:
+          batched_input (list(dict)): A list over input images, each a
+            dictionary with the following keys. A prompt key can be
+            excluded if it is not present.
+              'image': The image as a torch tensor in 3xHxW format,
+                already transformed for input to the model.
+              'original_size': (tuple(int, int)) The original size of
+                the image before transformation, as (H, W).
+              'point_coords': (torch.Tensor) Batched point prompts for
+                this image, with shape BxNx2. Already transformed to the
+                input frame of the model.
+              'point_labels': (torch.Tensor) Batched labels for point prompts,
+                with shape BxN.
+              'boxes': (torch.Tensor) Batched box inputs, with shape Bx4.
+                Already transformed to the input frame of the model.
+              'mask_inputs': (torch.Tensor) Batched mask inputs to the model,
+                in the form Bx1xHxW.
+          multimask_output (bool): Whether the model should predict multiple
+            disambiguating masks, or return a single mask.
+
+        Returns:
+          (list(dict)): A list over input images, where each element is
+            as dictionary with the following keys.
+              'masks': (torch.Tensor) Batched binary mask predictions,
+                with shape BxCxHxW, where B is the number of input prompts,
+                C is determined by multimask_output, and (H, W) is the
+                original size of the image.
+              'iou_predictions': (torch.Tensor) The model's predictions
+                of mask quality, in shape BxC.
+              'low_res_logits': (torch.Tensor) Low resolution logits with
+                shape BxCxHxW, where H=W=256. Can be passed as mask input
+                to subsequent iterations of prediction.
+        """
+        B, M, C = batch_input[BatchKeys.FLAG_EXAMPLES].shape
+        C -= 1  # remove background
+        rearranged_batch = self._rearrange_batch(batch_input)
+        input_images = rearranged_batch[BatchKeys.IMAGES]
+        image_embeddings = self.image_encoder(input_images)
+
+        outputs = []
+        for i in range(B * M * C):
+            single_batch = self._take_single_elem(rearranged_batch, i)
+            if BatchKeys.PROMPT_POINTS in single_batch:
+                points = (
+                    rearrange(
+                        single_batch[BatchKeys.PROMPT_POINTS], "b n xy -> n b xy"
+                    ),
+                    rearrange(single_batch[BatchKeys.FLAG_POINTS], "b n -> n b"),
+                )
+            else:
+                points = None
+            if points is None and BatchKeys.PROMPT_BBOXES not in single_batch:
+                continue
+            low_res_masks = self.double_pass(
+                image_embeddings[i],
+                points,
+                single_batch.get(BatchKeys.PROMPT_BBOXES, None),
+                multimask_output,
+            )
+            masks = low_res_masks > self.mask_threshold
+            outputs.append(masks.any(dim=0))
+        if len(outputs) == 0:
+            return None
+        return torch.cat(outputs)
+      
+    def double_pass(self, image_embedding, points, boxes, multimask_output):
+        masks = torch.torch.empty(
+            (0, 1, 256, 256), device=image_embedding.device
+        )
+        if points is not None: # Points pass
+            sparse_embeddings, dense_embeddings = self.prompt_encoder(points=points, boxes=None, masks=None)
+            points_masks, iou_pred = self.mask_decoder(
+                image_embeddings=image_embedding.unsqueeze(0),
+                image_pe=self.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                multimask_output=multimask_output,
+            )
+            if multimask_output:
+                B = points_masks.shape[0]
+                index = iou_pred.argmax(dim=1).view(B, 1, 1, 1).expand(B, 1, self.mask_size, self.mask_size)
+                points_masks = points_masks.gather(1, index)
+            masks = torch.cat((masks, points_masks), dim=0)
+        if boxes is not None:
+            sparse_embeddings, dense_embeddings = self.prompt_encoder(boxes=boxes, points=None, masks=None)
+            bbox_masks, iou_pred = self.mask_decoder(
+                image_embeddings=image_embedding.unsqueeze(0),
+                image_pe=self.prompt_encoder.get_dense_pe(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                multimask_output=multimask_output,
+            )
+            if multimask_output:
+                B = bbox_masks.shape[0]
+                index = iou_pred.argmax(dim=1).view(B, 1, 1, 1).expand(B, 1, self.mask_size, self.mask_size)
+                bbox_masks = bbox_masks.gather(1, index)
+            masks = torch.cat((masks, bbox_masks), dim=0)
+        return masks
+
+    def get_learnable_params(self, train_params):
+        return self.parameters()

@@ -8,7 +8,7 @@ import torch
 
 from functools import partial
 
-from . import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer
+from . import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, AdaptedSam, TwoWayTransformer
 
 
 def build_sam_vit_h(checkpoint=None):
@@ -22,6 +22,17 @@ def build_sam_vit_h(checkpoint=None):
 
 
 build_sam = build_sam_vit_h
+
+
+def build_asam_vit_b(checkpoint=None):
+    return _build_sam(
+        encoder_embed_dim=768,
+        encoder_depth=12,
+        encoder_num_heads=12,
+        encoder_global_attn_indexes=[2, 5, 8, 11],
+        checkpoint=checkpoint,
+        adapted_sam=True,
+    )
 
 
 def build_sam_vit_l(checkpoint=None):
@@ -57,13 +68,15 @@ def _build_sam(
     encoder_depth,
     encoder_num_heads,
     encoder_global_attn_indexes,
+    adapted_sam=False,
     checkpoint=None,
 ):
     prompt_embed_dim = 256
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
-    sam = Sam(
+    sam_class = Sam if not adapted_sam else AdaptedSam
+    sam = sam_class(
         image_encoder=ImageEncoderViT(
             depth=encoder_depth,
             embed_dim=encoder_embed_dim,
