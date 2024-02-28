@@ -15,6 +15,7 @@ from . import (
     MaskDecoderLam,
     PromptImageEncoder,
     Lam,
+    BinaryLam,
     OneWayTransformer,
     TwoWayTransformer,
 )
@@ -54,6 +55,7 @@ def _build_lam(
     build_vit,
     checkpoint=None,
     use_sam_checkpoint=False,
+    use_vit_sam_neck=True,
     use_vit=True,
     image_embed_dim=SAM_EMBED_DIM,
     embed_dim=SAM_EMBED_DIM,
@@ -69,11 +71,12 @@ def _build_lam(
     fusion_transformer="TwoWayTransformer",
     segment_example_logits=False,
     dropout: float = 0.0,
+    binary=False,
 ):
 
     image_embedding_size = image_size // vit_patch_size
 
-    vit = build_vit() if use_vit else None
+    vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
     
     fusion_transformer = globals()[fusion_transformer](
                 depth=2,
@@ -100,8 +103,9 @@ def _build_lam(
             ),
             LayerNorm2d(embed_dim),
         )
+    lam_class = BinaryLam if binary else Lam
     
-    lam = Lam(
+    lam = lam_class(
         image_size=image_size,
         image_encoder=vit,
         neck=neck,

@@ -3,7 +3,7 @@ import os
 import random
 import subprocess
 import sys
-import tempfile
+import shutil
 import uuid
 from copy import deepcopy
 
@@ -128,6 +128,20 @@ class Run:
         self.model = WrapperModule(self.model, self.criterion)
         self.input_image_size = self.model_params.get("image_size", SIZE)
 
+        if self.train_params.get("compile", False):
+            logger.info("Compiling model")
+            self.model = torch.compile(self.model)
+        logger.info("Preparing model, optimizer, dataloaders and scheduler")
+
+        self.model = self.accelerator.prepare(self.model)
+
+        if self.val_loader:
+            logger.info("Preparing validation dataloader")
+            self._prep_for_validation()
+
+        self._load_state()
+
+    def _prep_for_training(self):
         logger.info("Creating optimizer")
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
@@ -143,24 +157,63 @@ class Run:
                 * len(self.train_loader),
             )
 
-        if self.train_params.get("compile", False):
-            logger.info("Compiling model")
-            self.model = torch.compile(self.model)
-        logger.info("Preparing model, optimizer, dataloaders and scheduler")
-        (
-            self.model,
-            self.optimizer,
-            self.train_loader,
-            self.scheduler,
-        ) = self.accelerator.prepare(
-            self.model, self.optimizer, self.train_loader, self.scheduler
+        self.train_loader, self.optimizer, self.scheduler = self.accelerator.prepare(
+            self.train_loader, self.optimizer, self.scheduler
         )
-        if self.val_loader:
-            logger.info("Preparing validation dataloader")
-            self.val_loader = self.accelerator.prepare(self.val_loader)
 
+    def _prep_for_validation(self):
+        self.val_loader = self.accelerator.prepare(self.val_loader)
+
+    def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
-            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+            overwritten = False
+            # Merge image_encoder dict with the state dict
+            if (
+                "checkpoint" in self.model_params
+                and self.params["model"]["name"] != "lam_no_vit"
+            ):
+                if hasattr(self.model, "module"):
+                    model = self.model.module.model
+                else:
+                    model = self.model.model
+                shutil.copyfile(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin.bak",
+                )
+                state_dict = torch.load(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin"
+                )
+                state_dict = {
+                    **{
+                        "model.image_encoder." + k: v
+                        for k, v in model.image_encoder.state_dict().items()
+                    },
+                    **state_dict,
+                }
+                torch.save(
+                    state_dict,
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                )
+                overwritten = True
+
+            try:
+                self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+                # Ripristinate old state
+            finally:
+                if (
+                    "checkpoint" in self.model_params
+                    and self.params["model"]["name"] != "lam_no_vit"
+                    and overwritten
+                ):
+                    shutil.copyfile(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak",
+                        self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    )
+                    os.remove(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak"
+                    )
 
     def launch(self):
         logger.info("Start training loop...")

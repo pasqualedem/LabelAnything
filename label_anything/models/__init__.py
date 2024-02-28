@@ -7,7 +7,7 @@
 
 from collections import namedtuple
 from .sam import Sam, AdaptedSam
-from .lam import Lam
+from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder, MaskDecoderLam
 from .prompt_encoder import PromptEncoder, PromptImageEncoder
