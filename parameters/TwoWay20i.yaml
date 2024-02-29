@@ -34,7 +34,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [40]
+    max_epochs: [50]
     compile: [False]
     initial_lr: [0.00005]
     optimizer: [AdamW]
@@ -44,6 +44,7 @@ parameters:
       num_warmup_steps: 1000
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    validation_reruns: [5]
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
@@ -73,6 +74,7 @@ parameters:
         val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
+        n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
     common:

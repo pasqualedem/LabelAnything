@@ -35,6 +35,7 @@ class ImageEncoderViT(nn.Module):
         rel_pos_zero_init: bool = True,
         window_size: int = 0,
         global_attn_indexes: Tuple[int, ...] = (),
+        project_last_hidden: bool = True,
     ) -> None:
         """
         Args:
@@ -56,6 +57,7 @@ class ImageEncoderViT(nn.Module):
         """
         super().__init__()
         self.img_size = img_size
+        self.project_last_hidden = project_last_hidden
 
         self.patch_embed = PatchEmbed(
             kernel_size=(patch_size, patch_size),

@@ -62,6 +62,7 @@ class ExampleGenerator:
 
     def __init__(
         self,
+        images_to_categories,
         categories_to_imgs,
         n_classes_sample_function,
         class_sample_function,
@@ -73,6 +74,7 @@ class ExampleGenerator:
         self.n_classes_sample_function = n_classes_sample_function
         self.min_size = min_size
         self.categories_to_imgs = categories_to_imgs
+        self.images_to_categories = images_to_categories
 
     def sample_classes_from_query(self, class_list, sample_function, frequencies=None):
         """
@@ -210,17 +212,23 @@ class ExampleGenerator:
 
 class NWayExampleGenerator(ExampleGenerator):
     """
-    Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
+    Generate examples with fixed number of classes up to n
     """
 
     def __init__(
-        self, categories_to_imgs, n_ways="max", min_size=1, alpha=-2.0
+        self,
+        images_to_categories,
+        categories_to_imgs,
+        n_ways="max",
+        min_size=1,
+        alpha=-2.0,
     ) -> None:
         if n_ways == "max":
             n_classes_sample_function = partial(sample_power_law, alpha=alpha)
         else:
             n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways))
         super().__init__(
+            images_to_categories,
             categories_to_imgs,
             n_classes_sample_function,
             sample_over_inverse_frequency,
@@ -234,8 +242,9 @@ class MaxWayMinShotsExampleGenerator(ExampleGenerator):
     Generate examples with a power law distribution over the number of classes and selecting an image uniformly among the eligible ones.
     """
 
-    def __init__(self, categories_to_imgs, min_size=1) -> None:
+    def __init__(self, images_to_categories, categories_to_imgs, min_size=1) -> None:
         super().__init__(
+            images_to_categories,
             categories_to_imgs,
             lambda n: torch.tensor(n),
             None,
@@ -290,19 +299,29 @@ class MaxWayMinShotsExampleGenerator(ExampleGenerator):
                         break
                 if found:
                     image_ids.append(example_id)
-                    examples_sampled_classes.append(set(included_classes))
+                    example_classes = set(included_classes).union(
+                        set(self.images_to_categories[example_id])
+                    )
+                    examples_sampled_classes.append(set(example_classes))
                     remaining_classes = remaining_classes - set(included_classes)
                     break
-        examples_sampled_classes.insert(
-            0, (set.union(*examples_sampled_classes))
-        )  # Query image has all classes in examples
+        examples_sampled_classes.insert(0, set(sampled_classes.tolist()))
         return image_ids, examples_sampled_classes
 
 
 def build_example_generator(
-    categories_to_imgs, n_ways="max", n_shots=None, min_size=1, alpha=-2.0
+    images_to_categories,
+    categories_to_imgs,
+    n_ways="max",
+    n_shots=None,
+    min_size=1,
+    alpha=-2.0,
 ):
     if n_shots == "min":
-        return MaxWayMinShotsExampleGenerator(categories_to_imgs, min_size)
+        return MaxWayMinShotsExampleGenerator(
+            images_to_categories, categories_to_imgs, min_size
+        )
     else:
-        return NWayExampleGenerator(categories_to_imgs, n_ways, min_size, alpha)
+        return NWayExampleGenerator(
+            images_to_categories, categories_to_imgs, n_ways, min_size, alpha
+        )

@@ -53,8 +53,8 @@ def resize_anything(image, dims):
     return img
 
 
-def take_image(image, dims):
-    h, w = get_preprocess_shape(int(dims[0]), int(dims[1]), 1024)
+def take_image(image, dims, input_shape):
+    h, w = get_preprocess_shape(int(dims[0]), int(dims[1]), input_shape)
     crop = image[:, :h, :w]
     return resize_anything(crop, dims)
 

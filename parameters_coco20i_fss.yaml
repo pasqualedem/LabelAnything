@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: Coco20iSecond # name of group of experiments for the logger platform
+  group: Rerun # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -20,6 +20,7 @@ parameters:
       offline: [False]
       entity: [cilabuniba]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      tags: [[NewGT, NoMaskFix]]
 
   train_params:
     loss:
@@ -44,6 +45,7 @@ parameters:
       num_warmup_steps: 1000
     substitute: [True]
     accumulate_substitution: [True] # Perform gradient accumulation over the substitution sub-batch
+    validation_reruns: [5]
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
@@ -73,6 +75,7 @@ parameters:
         val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
+        n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
     common:

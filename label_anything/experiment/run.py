@@ -1,8 +1,10 @@
+import copy
+import json
 import os
 import random
 import subprocess
 import sys
-import tempfile
+import shutil
 import uuid
 from copy import deepcopy
 
@@ -47,8 +49,10 @@ from .utils import (
     parse_params,
     set_class_embeddings,
 )
+from label_anything.models.contrastive_pe import ContrastivePromptEncoder
 
 logger = get_logger(__name__)
+SIZE = 1024
 
 
 class Run:
@@ -71,6 +75,7 @@ class Run:
             sys.path.extend(".")
         self.global_train_step = 0
         self.global_val_step = 0
+        self.validation_json = None
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -80,7 +85,18 @@ class Run:
             self.dataset_params,
             self.dataloader_params,
             self.model_params,
+            self.prompt_encoder_params,
         ) = parse_params(self.params)
+
+    def _load_prompt_encoder_parameters(self):
+        if not self.prompt_encoder_params or self.model is None:
+            return
+        pe_params = deepcopy(self.prompt_encoder_params)
+        pe_params['params']['prompt_encoder'] = self.model.prompt_encoder
+        contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params['params'])
+        state_dict = torch.load(self.prompt_encoder_params['checkpoint'])
+        contrastive_prompt_encoder.load_state_dict(state_dict)
+        self.model.prompt_encoder.load_state_dict(contrastive_prompt_encoder.prompt_encoder.state_dict())
 
     def init(self, params: dict):
         set_seed(params["train_params"]["seed"])
@@ -88,12 +104,6 @@ class Run:
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
         self.parse_params(params)
-        (
-            self.train_params,
-            self.dataset_params,
-            self.dataloader_params,
-            self.model_params,
-        ) = parse_params(params)
 
         kwargs = [
             DistributedDataParallelKwargs(find_unused_parameters=True),
@@ -117,13 +127,30 @@ class Run:
         model_name = self.model_params.pop("name")
         logger.info(f"Creating model {model_name}")
         self.model = model_registry[model_name](**self.model_params)
+        # load pretrained prompt encoder parameters
+        self._load_prompt_encoder_parameters()
 
         self.watch_metric = self.train_params["watch_metric"]
 
         logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
+        self.input_image_size = self.model_params.get("image_size", SIZE)
 
+        if self.train_params.get("compile", False):
+            logger.info("Compiling model")
+            self.model = torch.compile(self.model)
+        logger.info("Preparing model, optimizer, dataloaders and scheduler")
+
+        self.model = self.accelerator.prepare(self.model)
+
+        if self.val_loader:
+            logger.info("Preparing validation dataloader")
+            self._prep_for_validation()
+
+        self._load_state()
+
+    def _prep_for_training(self):
         logger.info("Creating optimizer")
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
@@ -139,24 +166,63 @@ class Run:
                 * len(self.train_loader),
             )
 
-        if self.train_params.get("compile", False):
-            logger.info("Compiling model")
-            self.model = torch.compile(self.model)
-        logger.info("Preparing model, optimizer, dataloaders and scheduler")
-        (
-            self.model,
-            self.optimizer,
-            self.train_loader,
-            self.scheduler,
-        ) = self.accelerator.prepare(
-            self.model, self.optimizer, self.train_loader, self.scheduler
+        self.train_loader, self.optimizer, self.scheduler = self.accelerator.prepare(
+            self.train_loader, self.optimizer, self.scheduler
         )
-        if self.val_loader:
-            logger.info("Preparing validation dataloader")
-            self.val_loader = self.accelerator.prepare(self.val_loader)
 
+    def _prep_for_validation(self):
+        self.val_loader = self.accelerator.prepare(self.val_loader)
+
+    def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
-            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+            overwritten = False
+            # Merge image_encoder dict with the state dict
+            if (
+                "checkpoint" in self.model_params
+                and self.params["model"]["name"] != "lam_no_vit"
+            ):
+                if hasattr(self.model, "module"):
+                    model = self.model.module.model
+                else:
+                    model = self.model.model
+                shutil.copyfile(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin.bak",
+                )
+                state_dict = torch.load(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin"
+                )
+                state_dict = {
+                    **{
+                        "model.image_encoder." + k: v
+                        for k, v in model.image_encoder.state_dict().items()
+                    },
+                    **state_dict,
+                }
+                torch.save(
+                    state_dict,
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                )
+                overwritten = True
+
+            try:
+                self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+                # Ripristinate old state
+            finally:
+                if (
+                    "checkpoint" in self.model_params
+                    and self.params["model"]["name"] != "lam_no_vit"
+                    and overwritten
+                ):
+                    shutil.copyfile(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak",
+                        self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    )
+                    os.remove(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak"
+                    )
 
     def launch(self):
         logger.info("Start training loop...")
@@ -349,6 +415,9 @@ class Run:
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
+            long_side_length=self.dataset_params.get("common", {}).get(
+                "image_size", SIZE
+            ),
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
@@ -364,6 +433,11 @@ class Run:
         loss_normalizer = 1
         self.oom = False
         metric_values = None
+
+        # setting prompt encoder parameters
+        if self.prompt_encoder_params:
+            for p in self.model.module.model.prompt_encoder.parameters():
+                p.requires_grad = (epoch >= self.train_params.get('freeze_params_max_epoch', 0))
 
         for batch_idx, batch_tuple in bar:
             batch_tuple, dataset_names = batch_tuple
@@ -415,6 +489,7 @@ class Run:
                         step=tot_steps,
                         substitution_step=i,
                         input_dict=input_dict,
+                        input_shape=self.input_image_size,
                         gt=gt,
                         pred=outputs,
                         dataset=self.train_loader.dataset,
@@ -453,7 +528,23 @@ class Run:
             epoch=epoch,
         )
 
-    def validate(self, epoch: int):
+    def _add_to_json(self, input_dict, validation_run):
+        if self.validation_json is None:
+            return
+        if validation_run is None:
+            validation_run = 0
+        if validation_run not in self.validation_json["json"]:
+            self.validation_json["json"][validation_run] = []
+        self.validation_json["json"][validation_run].append(
+            input_dict[BatchKeys.IMAGE_IDS]
+        )
+
+    def validate(self, epoch: int, generate_json=False):
+        if generate_json:
+            self.validation_json = {
+                "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
+                "json": {},
+            }
         if self.train_params.get("validation_reruns", None) is None:
             metrics = self.validate_run(epoch, None)
         else:
@@ -471,6 +562,11 @@ class Run:
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {k}: {v}")
+
+        if generate_json:
+            with open(self.validation_json["file"], "w") as f:
+                json.dump(self.validation_json["json"], f)
+            self.validation_json = None
 
         logger.info(f"Validation epoch {epoch} finished")
         return metrics
@@ -523,6 +619,7 @@ class Run:
                 batch_dict = next(iter(substitutor))
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
+                self._add_to_json(image_dict, validation_run)
 
                 result_dict = self.model(image_dict, gt)
                 outputs = result_dict[ResultDict.LOGITS]
@@ -551,6 +648,7 @@ class Run:
                     step=tot_steps,
                     substitution_step=0,
                     input_dict=image_dict,
+                    input_shape=self.input_image_size,
                     gt=gt,
                     pred=outputs,
                     dataset=self.val_loader.dataset,

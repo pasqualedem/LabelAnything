@@ -156,7 +156,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         return mask_tensor, flag_tensor
 
     def _get_prompt_masks(self, image_ids, images_fname):
-        cat_ids = list(DramTestDataset.TRAIN_ID2NAME.keys())
+        cat_ids = sorted(list(DramTestDataset.TRAIN_ID2NAME.keys()))
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         for idx, img in enumerate(image_ids):
             mask = self._load_gt(images_fname[idx])

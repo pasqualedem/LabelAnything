@@ -51,10 +51,12 @@ class CocoLVISDataset(Dataset):
         max_points_annotations: int = 50,
         n_ways: int = "max",
         preprocess=ToTensor(),
+        image_size: int = 1024,
         load_embeddings: bool = None,
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
+        remove_small_annotations: bool = False,
         dtype=torch.float32,
     ):
         """Initialize the dataset.
@@ -105,6 +107,8 @@ class CocoLVISDataset(Dataset):
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.n_ways = n_ways
+        self.image_size = image_size
+        self.remove_small_annotations = remove_small_annotations
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -117,6 +121,7 @@ class CocoLVISDataset(Dataset):
 
         # useful dicts
         (
+            self.img_annotations,
             self.img2cat,
             self.img2cat_annotations,
             self.cat2img,
@@ -136,25 +141,28 @@ class CocoLVISDataset(Dataset):
         self.example_generator = build_example_generator(
             n_ways=self.n_ways,
             n_shots=None,
+            images_to_categories=self.img2cat,
             categories_to_imgs=self.cat2img,
         )
 
         # processing
         self.preprocess = preprocess
         self.prompts_processor = PromptsProcessor(
-            long_side_length=1024, masks_side_length=256,
+            long_side_length=self.image_size, masks_side_length=256,
         )
 
-    def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict]:
+    def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict, dict]:
         """Load useful annotation dicts.
 
         Returns:
-            (dict, dict, dict, dict): Returns four dictionaries:
+            (dict, dict, dict, dict, dict): Returns four dictionaries:
+                0. img_annotations: A dictionary mapping image ids to lists of annotations.
                 1. img2cat: A dictionary mapping image ids to sets of category ids.
                 2. img2cat_annotations: A dictionary mapping image ids to dictionaries mapping category ids to annotations.
                 3. cat2img: A dictionary mapping category ids to sets of image ids.
                 4. cat2img_annotations: A dictionary mapping category ids to dictionaries mapping image ids to annotations.
         """
+        img_annotations = {}
         img2cat_annotations = {}
         cat2img_annotations = {}
 
@@ -164,11 +172,18 @@ class CocoLVISDataset(Dataset):
         category_ids = set(self.categories.keys())
 
         for ann in self.annotations.values():
+            if self._remove_small_annotations(ann):
+                continue
+            
             if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
                 continue
 
             if ann[AnnFileKeys.CATEGORY_ID] not in category_ids:
                 continue
+
+            if ann[AnnFileKeys.IMAGE_ID] not in img_annotations:
+                img_annotations[ann[AnnFileKeys.IMAGE_ID]] = []
+            img_annotations[ann[AnnFileKeys.IMAGE_ID]].append(ann)
 
             if ann[AnnFileKeys.IMAGE_ID] not in img2cat_annotations:
                 img2cat_annotations[ann[AnnFileKeys.IMAGE_ID]] = {}
@@ -200,7 +215,7 @@ class CocoLVISDataset(Dataset):
             cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]][
                 ann[AnnFileKeys.IMAGE_ID]
             ].append(ann)
-        return img2cat, img2cat_annotations, cat2img, cat2img_annotations
+        return img_annotations, img2cat, img2cat_annotations, cat2img, cat2img_annotations
 
     def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
         """Open a safetensors file and load the embedding and the ground truth.
@@ -307,6 +322,19 @@ class CocoLVISDataset(Dataset):
         return np.clip(
             np.random.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
         )
+        
+    def _remove_small_annotations(self, ann: dict) -> bool:
+        """Remove annotation smaller than 2*32*32 pixels.
+
+        Args:
+            ann (dict): The annotation.
+
+        Returns:
+            bool: True if the annotation is too small, False otherwise.
+        """
+        if self.remove_small_annotations:
+            return ann["area"] < 2 * 32 * 32
+        return False
 
     def _get_prompts(
         self, image_ids: list, cat_ids: list, possible_prompt_types: list[PromptType]
@@ -350,7 +378,6 @@ class CocoLVISDataset(Dataset):
                     prompt_types = [PromptType.MASK] * n_ann
                 else:
                     prompt_types = random.choices(possible_prompt_types, k=n_ann)
-
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
                 ):
@@ -367,14 +394,14 @@ class CocoLVISDataset(Dataset):
                         # take the mask
                         masks[i][cat_id].append(
                             self.prompts_processor.convert_mask(
-                                ann["segmentation"],
+                                ann[AnnFileKeys.SEGMENTATION],
                                 *img_size,
                             )
                         )
                     elif prompt_type == PromptType.POINT:
                         # take the point
                         mask = self.prompts_processor.convert_mask(
-                            ann["segmentation"],
+                            ann[AnnFileKeys.SEGMENTATION],
                             *img_size,
                         )
                         num_points = self._sample_num_points(img_id, ann)
@@ -431,31 +458,25 @@ class CocoLVISDataset(Dataset):
         Returns:
             list[torch.Tensor]: A list of tensors containing the ground truths (per image).
         """
-        ground_truths = [dict() for _ in range(len(image_ids))]
+        ground_truths = []
+
         # generate masks
         for i, image_id in enumerate(image_ids):
             img_size = (self.images[image_id]["height"], self.images[image_id]["width"])
-            for cat_id in cat_ids:
-                ground_truths[i][cat_id] = np.zeros(img_size, dtype=np.int64)
-                # zero mask for no segmentation
-                if cat_id not in self.img2cat_annotations[image_id]:
-                    continue
-                for ann in self.img2cat_annotations[image_id][cat_id]:
-                    ground_truths[i][cat_id] = np.logical_or(
-                        ground_truths[i][cat_id],
-                        self.prompts_processor.convert_mask(
-                            ann["segmentation"], *img_size
-                        ),
-                    )
-            # make the ground truth tensor for image img_id
-            ground_truth = torch.from_numpy(
-                np.array(
-                    [ground_truths[i][cat_id].astype(np.int64) for cat_id in cat_ids]
-                )
-            )
-            ground_truths[i] = torch.argmax(ground_truth, 0)
+            ground_truths.append(np.zeros(img_size, dtype=np.int64))
 
-        return ground_truths
+            for ann in self.img_annotations[image_id]:
+                ann_cat = ann[AnnFileKeys.CATEGORY_ID]
+                if ann_cat not in cat_ids:
+                    continue
+                cat_idx = cat_ids.index(ann_cat)
+
+                ann_mask = self.prompts_processor.convert_mask(
+                    ann[AnnFileKeys.SEGMENTATION], *img_size
+                )
+                ground_truths[i][ann_mask == 1] = cat_idx
+
+        return [torch.tensor(x) for x in ground_truths]
 
     def annotations_to_tensor(
         self, annotations: list, img_sizes: list, prompt_type: PromptType
@@ -534,7 +555,7 @@ class CocoLVISDataset(Dataset):
 
         base_image_data = self.images[self.image_ids[idx]]
         image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
-        cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+        cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
         cat_ids.insert(0, -1)  # add the background class
 
         # load, stack and preprocess the images
@@ -675,7 +696,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
             prompt_images
         )
 
-        cat_ids = list(self.categories.keys())
+        cat_ids = sorted(list(self.categories.keys()))
         bboxes, masks, points, _, image_sizes = self._get_prompts(
             image_ids, cat_ids, images, img2cat_annotations
         )
@@ -750,14 +771,14 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
                         # take the mask
                         masks[i][cat_id].append(
                             self.prompts_processor.convert_mask(
-                                ann["segmentation"],
+                                ann[AnnFileKeys.SEGMENTATION],
                                 *img_size,
                             )
                         )
                     elif prompt_type == PromptType.POINT:
                         # take the point
                         mask = self.prompts_processor.convert_mask(
-                            ann["segmentation"],
+                            ann[AnnFileKeys.SEGMENTATION],
                             *img_size,
                         )
                         points[i][cat_id].append(
@@ -775,7 +796,7 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
     def __getitem__(self, item):
         image_id = self.image_ids[item]
         data, data_key, gt = self._get_images_or_embeddings([self.images[image_id]])
-        cat_ids = list(self.cat2img.keys())
+        cat_ids = sorted(list(self.cat2img.keys()))
         if gt is None:
             gt = self.compute_ground_truths([image_id], cat_ids)[0]
         else:

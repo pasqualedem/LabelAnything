@@ -160,7 +160,7 @@ class WandBLogger(AbstractLogger):
                 logger.warning(run)
             logger.warning(f"Using {runs[0]}")
         run = runs[0]
-        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", "latest")
+        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", checkpoint_type)
         logger.info(f"Resuming from {self.accelerator_state_dir}")
         
     def _save_code(self):
@@ -443,6 +443,7 @@ class WandBLogger(AbstractLogger):
         step,
         substitution_step,
         input_dict,
+        input_shape,
         gt,
         pred,
         dataset,
@@ -482,6 +483,7 @@ class WandBLogger(AbstractLogger):
                 step=step,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
+                input_shape=input_shape,
                 images=query_images,
                 gt=gt,
                 pred=pred,
@@ -501,6 +503,7 @@ class WandBLogger(AbstractLogger):
         step,
         substitution_step,
         input_dict,
+        input_shape,
         images,
         gt,
         pred,
@@ -513,7 +516,7 @@ class WandBLogger(AbstractLogger):
         classes = self._get_class_ids(input_dict["classes"])
 
         for b in range(gt.shape[0]):
-            image = get_image(take_image(images[b], dims[b, 0]))
+            image = get_image(take_image(images[b], dims[b, 0], input_shape=input_shape))
             cur_dataset_categories = categories[dataset_names[b]]
             cur_sample_categories = {
                 k + 1: cur_dataset_categories[c]["name"]

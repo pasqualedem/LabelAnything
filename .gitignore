@@ -95,6 +95,7 @@ target/
 *.png
 
 # Checkpoints
+*.pt
 *.pth
 *.bin
 *.pkl

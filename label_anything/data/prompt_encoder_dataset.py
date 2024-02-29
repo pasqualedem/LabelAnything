@@ -2,9 +2,10 @@ from label_anything.data.coco import CocoLVISDataset
 from torchvision.transforms import ToTensor
 import torch
 from typing import Optional
-from label_anything.data.utils import PromptType, BatchKeys
+from label_anything.data.utils import PromptType, BatchKeys, flags_merge
 import label_anything.data.utils as data_utils
 from safetensors.torch import load_file
+import random
 
 
 class PromptEncoderDataset(CocoLVISDataset):
@@ -19,15 +20,9 @@ class PromptEncoderDataset(CocoLVISDataset):
             max_points_per_annotation: int = 10,
             max_points_annotations: int = 50,
             preprocess=ToTensor(),
-            seed: int = 42,
             load_gts: bool = False,
             do_subsample: bool = True,
             add_box_noise: bool = True,
-            prompt_types: list[PromptType] = [
-                PromptType.BBOX,
-                PromptType.MASK,
-                PromptType.POINT,
-            ],
             dtype=torch.float32,
     ):
         super().__init__(
@@ -38,11 +33,9 @@ class PromptEncoderDataset(CocoLVISDataset):
             max_points_per_annotation=max_points_per_annotation,
             max_points_annotations=max_points_annotations,
             preprocess=preprocess,
-            seed=seed,
             load_gts=load_gts,
             do_subsample=do_subsample,
             add_box_noise=add_box_noise,
-            prompt_types=prompt_types,
             dtype=dtype,
         )
         self.clip_emb_dir = clip_emb_dir
@@ -52,18 +45,21 @@ class PromptEncoderDataset(CocoLVISDataset):
         f = load_file(f"{self.clip_emb_dir}/{str(img_id).zfill(12)}.safetensors")
         return f['clip_embedding']
 
+    def set_num_examples(self, n_examples):
+        self.n_images = n_examples
+
     def __getitem__(self, class_idx) -> dict:
         # extract randon images for class class_id
         class_idx = list(self.categories.keys())[class_idx]
         cat_id = self.categories[class_idx].get('id')
-        img_ids = self.rng.choices(population=list(self.cat2img[cat_id]), k=self.n_images)
+        img_ids = random.choices(population=list(self.cat2img[cat_id]), k=self.n_images)
 
         # get base image data
         images, image_key, ground_truths = self._get_images_or_embeddings(img_ids)
 
         # load image prompts
         bboxes, masks, points, classes, img_sizes = self._get_prompts(
-            img_ids, [cat_id]
+            img_ids, [cat_id], possible_prompt_types=[PromptType.MASK, PromptType.BBOX, PromptType.POINT]
         )
         # obtain padded tensors
         bboxes, flag_bboxes = self.annotations_to_tensor(
@@ -76,10 +72,13 @@ class PromptEncoderDataset(CocoLVISDataset):
             points, img_sizes, PromptType.POINT
         )
 
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
+
         # load clip embeddings
         clip_embeddings = torch.stack([self._load_clip_embeddings(img_id) for img_id in img_ids])
         return {
             image_key: images,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
             BatchKeys.PROMPT_POINTS: points,
@@ -97,6 +96,10 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
     # collate images or embeddings
     image_key = BatchKeys.IMAGES if BatchKeys.IMAGES in batched_input[0].keys() else BatchKeys.EMBEDDINGS
     images = torch.cat([x[image_key] for x in batched_input], dim=0)
+
+    # collate flag examples
+    flag_examples = [x[BatchKeys.FLAG_EXAMPLES] for x in batched_input]
+    flag_examples = data_utils.collate_flag_examples(flag_examples, len(flag_examples))
 
     # collate masks
     masks = [x[BatchKeys.PROMPT_MASKS] for x in batched_input]
@@ -122,6 +125,7 @@ def collate_fn(batched_input: list[dict[BatchKeys, torch.Tensor]]) -> dict[Batch
 
     return {
         image_key: images.unsqueeze(dim=0),
+        BatchKeys.FLAG_EXAMPLES: flag_examples,
         BatchKeys.PROMPT_MASKS: masks,
         BatchKeys.FLAG_MASKS: flag_masks,
         BatchKeys.PROMPT_BBOXES: bboxes,

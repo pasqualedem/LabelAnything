@@ -20,6 +20,7 @@ class Coco20iDataset(CocoLVISDataset):
         val_fold_idx: int,
         n_folds: int,
         n_shots: int = None,
+        val_num_samples: int = 1000,
         *args,
         **kwargs
     ):
@@ -36,11 +37,15 @@ class Coco20iDataset(CocoLVISDataset):
         assert split in [Coco20iSplit.TRAIN, Coco20iSplit.VAL]
         assert val_fold_idx < n_folds
         assert split == Coco20iSplit.TRAIN or n_shots is not None
+        # If n_shots is min, n_ways should be max
+        assert n_shots != "min" or self.n_ways == "max", "If n_shots is min, n_ways should be max"
+        assert self.n_ways != "max" or (n_shots == "min" or n_shots is None), "If n_ways is max, n_shots should be min"
 
         self.split = split
         self.val_fold_idx = val_fold_idx
         self.n_folds = n_folds
         self.n_shots = n_shots
+        self.val_num_samples = val_num_samples
         self._prepare_benchmark()
 
     def _prepare_benchmark(self):
@@ -66,6 +71,7 @@ class Coco20iDataset(CocoLVISDataset):
 
         # update dicts
         (
+            self.image_annotations,
             self.img2cat,
             self.img2cat_annotations,
             self.cat2img,
@@ -86,7 +92,8 @@ class Coco20iDataset(CocoLVISDataset):
         self.example_generator = build_example_generator(
             n_ways=self.n_ways,
             n_shots=self.n_shots,
-            categories_to_imgs=self.cat2img
+            categories_to_imgs=self.cat2img,
+            images_to_categories=self.img2cat,
         )
 
     def __getitem__(self, idx_batchmetadata: tuple[int, int]) -> dict:
@@ -105,10 +112,24 @@ class Coco20iDataset(CocoLVISDataset):
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
             idx, metadata = idx_batchmetadata
-            # sample a random category
-            cat_ids = [-1, random.choice(list(self.categories.keys()))]
-            # sample random img ids
-            image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
+            if self.n_ways == 1:
+                # sample a random category
+                cat_ids = [-1, random.choice(list(self.categories.keys()))]
+                # sample random img ids
+                image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
+            else:         
+                # sample n_ways categories
+                cat_ids = random.sample(list(self.categories.keys()), self.n_ways)
+                # Choose a random image from the first category
+                query_image_id = random.choice(list(self.cat2img[cat_ids[0]]))
+                
+                # sample n_shots images from each category
+                image_ids = [query_image_id]
+                for cat_id in cat_ids:
+                    cat_image_ids = list(self.cat2img[cat_id])
+                    cat_image_ids = random.sample(cat_image_ids, self.n_shots)
+                    image_ids += cat_image_ids
+                cat_ids = [-1] + sorted(cat_ids)
 
             # load, stack and preprocess the images
             images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
@@ -171,8 +192,7 @@ class Coco20iDataset(CocoLVISDataset):
             return data_dict
 
     def __len__(self):
-        return 10
         if self.split == Coco20iSplit.TRAIN:
             return super().__len__()
         elif self.split == Coco20iSplit.VAL:
-            return 1000
+            return self.val_num_samples
