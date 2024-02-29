@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from typing import Optional, Tuple, Type
 
 from .common import LayerNorm2d, MLPBlock
+from label_anything.utils.utils import ResultDict
 
 
 # This class and its supporting functions below lightly adapted from the ViTDet backbone available at: https://github.com/facebookresearch/detectron2/blob/main/detectron2/modeling/backbone/vit.py # noqa
@@ -106,18 +107,24 @@ class ImageEncoderViT(nn.Module):
             LayerNorm2d(out_chans),
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, return_last_block_state: bool = False) -> torch.Tensor:
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
 
         for blk in self.blocks:
             x = blk(x)
-
         x = x.permute(0, 3, 1, 2)
-        if self.project_last_hidden:
-            x = self.neck(x)
-        return x
+
+        if return_last_block_state:
+            last_block = x.clone()
+
+        x = self.neck(x)
+
+        return x if not return_last_block_state else {
+            ResultDict.LAST_HIDDEN_STATE: x,
+            ResultDict.LAST_BLOCK_STATE: last_block,
+        }
 
 
 class Block(nn.Module):
