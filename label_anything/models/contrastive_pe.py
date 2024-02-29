@@ -31,15 +31,15 @@ class ContrastivePromptEncoder(torch.nn.Module):
 
     def prepare_prompts(self, batched_input):
         if (
-                "prompt_points" in batched_input
-                and (batched_input["flag_points"] == 0).all().logical_not()
+            "prompt_points" in batched_input
+            and (batched_input["flag_points"] == 0).all().logical_not()
         ):
             points = (batched_input["prompt_points"], batched_input["flag_points"])
         else:
             points = None
         if (
-                "prompt_bboxes" in batched_input
-                and (batched_input["flag_bboxes"] == 0).all().logical_not()
+            "prompt_bboxes" in batched_input
+            and (batched_input["flag_bboxes"] == 0).all().logical_not()
         ):
             boxes = batched_input["prompt_bboxes"]
             box_flag = batched_input["flag_bboxes"]
@@ -47,22 +47,23 @@ class ContrastivePromptEncoder(torch.nn.Module):
         else:
             boxes = None
         if (
-                "prompt_masks" in batched_input
-                and (batched_input["flag_masks"] == 0).all().logical_not()
+            "prompt_masks" in batched_input
+            and (batched_input["flag_masks"] == 0).all().logical_not()
         ):
             masks = (batched_input["prompt_masks"], batched_input["flag_masks"])
         else:
             masks = None
 
-        return points, boxes, masks
+        return points, boxes, masks, batched_input['flag_examples']
 
     def forward(self, data_dict):
         clip_embeddings = data_dict.pop(BatchKeys.CLIP_EMBEDDINGS)
-        points, boxes, masks = self.prepare_prompts(data_dict)
+        points, boxes, masks, flag_examples = self.prepare_prompts(data_dict)
         class_embeddings = self.prompt_encoder(image_embeddings=data_dict[BatchKeys.EMBEDDINGS],
                                                points=points,
                                                boxes=boxes,
-                                               masks=masks,).get(ResultDict.CLASS_EMBS).squeeze(dim=0)
+                                               masks=masks,
+                                               flag_examples=flag_examples).get(ResultDict.CLASS_EMBS).squeeze(dim=0)
         class_proj = self.prompt_proj(class_embeddings)
         clip_proj = self.clip_proj(clip_embeddings).mean(dim=1)
         return class_proj, clip_proj

@@ -378,7 +378,6 @@ class CocoLVISDataset(Dataset):
                     prompt_types = [PromptType.MASK] * n_ann
                 else:
                     prompt_types = random.choices(possible_prompt_types, k=n_ann)
-
                 for ann, prompt_type in zip(
                     self.img2cat_annotations[img_id][cat_id], prompt_types
                 ):
