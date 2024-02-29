@@ -17,6 +17,7 @@ from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
 from .samfew import SAMFewShotModel
 from .dcama import build_dcama
+from .fptrans import build_fptrans
 from .dummy import build_dummy
 
 
@@ -34,6 +35,7 @@ model_registry = {
     "sam_b": build_sam_vit_b,
     "asam_b": build_asam_vit_b,
     "dcama": build_dcama,
+    "fptrans": build_fptrans,
     "dummy": build_dummy,
     # Encoders only
     "vit": build_vit_h,
