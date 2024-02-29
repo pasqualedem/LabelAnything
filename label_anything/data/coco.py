@@ -57,6 +57,8 @@ class CocoLVISDataset(Dataset):
         do_subsample: bool = True,
         add_box_noise: bool = True,
         remove_small_annotations: bool = False,
+        all_example_categories: bool = True,
+        sample_function: str = "power_law",
         dtype=torch.float32,
     ):
         """Initialize the dataset.
@@ -75,6 +77,8 @@ class CocoLVISDataset(Dataset):
             do_subsample (bool, optional): Specify if classes should be randomly subsampled. Defaults to True.
             add_box_noise (bool, optional): Add noise to the boxes (useful for training). Defaults to True.
             prompt_types (list[PromptType], optional): List of prompt types to be used. Defaults to [PromptType.BBOX, PromptType.MASK, PromptType.POINT].
+            all_example_categories (bool, optional): Specify if all exaple categories are taken into account.
+            sample_function (str, optional): Specify strategy to sample support images.
         """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -88,7 +92,7 @@ class CocoLVISDataset(Dataset):
         assert (
             not load_embeddings or emb_dir is not None
         ), "If load_embeddings is True, emb_dir must be provided."
-        
+
         if load_embeddings is None:
             load_embeddings = emb_dir is not None
             logger.warning(
@@ -109,6 +113,8 @@ class CocoLVISDataset(Dataset):
         self.n_ways = n_ways
         self.image_size = image_size
         self.remove_small_annotations = remove_small_annotations
+        self.all_example_categories = all_example_categories
+        self.sample_function = sample_function
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -143,12 +149,14 @@ class CocoLVISDataset(Dataset):
             n_shots=None,
             images_to_categories=self.img2cat,
             categories_to_imgs=self.cat2img,
+            sample_function=self.sample_function
         )
 
         # processing
         self.preprocess = preprocess
         self.prompts_processor = PromptsProcessor(
-            long_side_length=self.image_size, masks_side_length=256,
+            long_side_length=self.image_size,
+            masks_side_length=256,
         )
 
     def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict, dict]:
@@ -174,7 +182,7 @@ class CocoLVISDataset(Dataset):
         for ann in self.annotations.values():
             if self._remove_small_annotations(ann):
                 continue
-            
+
             if AnnFileKeys.ISCROWD in ann and ann[AnnFileKeys.ISCROWD] == 1:
                 continue
 
@@ -215,7 +223,13 @@ class CocoLVISDataset(Dataset):
             cat2img_annotations[ann[AnnFileKeys.CATEGORY_ID]][
                 ann[AnnFileKeys.IMAGE_ID]
             ].append(ann)
-        return img_annotations, img2cat, img2cat_annotations, cat2img, cat2img_annotations
+        return (
+            img_annotations,
+            img2cat,
+            img2cat_annotations,
+            cat2img,
+            cat2img_annotations,
+        )
 
     def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
         """Open a safetensors file and load the embedding and the ground truth.
@@ -322,7 +336,7 @@ class CocoLVISDataset(Dataset):
         return np.clip(
             np.random.poisson(poisson_mean) + 1, 1, self.max_points_per_annotation
         )
-        
+
     def _remove_small_annotations(self, ann: dict) -> bool:
         """Remove annotation smaller than 2*32*32 pixels.
 
@@ -555,6 +569,12 @@ class CocoLVISDataset(Dataset):
 
         base_image_data = self.images[self.image_ids[idx]]
         image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
+
+        if self.all_example_categories:
+            aux_cat_ids = [aux_cat_ids[0]] + [
+                set(self.img2cat[img]) for img in image_ids[1:]
+            ]  # check if self.images must be called before
+
         cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
         cat_ids.insert(0, -1)  # add the background class
 
@@ -598,7 +618,7 @@ class CocoLVISDataset(Dataset):
                 if cat_id == -1:
                     continue
                 ground_truths[ground_truths_copy == cat_id] = i
-                
+
         flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         data_dict = {

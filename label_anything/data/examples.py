@@ -9,6 +9,10 @@ class SamplingFailureException(Exception):
     """
 
 
+def sample_uniform(N, num_samples=1):
+    return torch.randint(low=1, high=N, size=(num_samples, ))
+
+
 def sample_power_law(N, alpha, num_samples=1):
     """
     Samples from a power law distribution.
@@ -222,9 +226,15 @@ class NWayExampleGenerator(ExampleGenerator):
         n_ways="max",
         min_size=1,
         alpha=-2.0,
+        sample_function="power_law",
     ) -> None:
         if n_ways == "max":
-            n_classes_sample_function = partial(sample_power_law, alpha=alpha)
+            if sample_function == "power_law":
+                n_classes_sample_function = partial(sample_power_law, alpha=alpha)
+            elif sample_function == "uniform":
+                n_classes_sample_function = sample_uniform
+            else:
+                raise ValueError(f"Unknown sample function {sample_function}.")
         else:
             n_classes_sample_function = lambda n: torch.tensor(min(n, n_ways))
         super().__init__(
@@ -316,6 +326,7 @@ def build_example_generator(
     n_shots=None,
     min_size=1,
     alpha=-2.0,
+    sample_function="power_law",
 ):
     if n_shots == "min":
         return MaxWayMinShotsExampleGenerator(
@@ -323,5 +334,10 @@ def build_example_generator(
         )
     else:
         return NWayExampleGenerator(
-            images_to_categories, categories_to_imgs, n_ways, min_size, alpha
+            images_to_categories,
+            categories_to_imgs,
+            n_ways,
+            min_size,
+            alpha,
+            sample_function=sample_function,
         )
