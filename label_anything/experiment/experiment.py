@@ -485,7 +485,21 @@ def run(param_path: str = "parameters.yaml"):
     logger.info(f"Loaded parameters from {param_path}")
     single_run = Run()
     single_run.init(settings)
+    single_run._prep_for_training()
+    single_run._prep_for_validation()
     single_run.launch()
+    
+    
+def validate(param_path: str = "parameters.yaml", generate_json: bool = False):
+    logger.info("Running run")
+    settings = load_yaml(param_path)
+    logger.info(f"Loaded parameters from {param_path}")
+    single_run = Run()
+    single_run.init(settings)
+    single_run._prep_for_validation()
+    epoch = 0
+    with single_run.plat_logger.validate():
+        single_run.validate(epoch=epoch, generate_json=generate_json)
     
     
 def test(param_path: str = "parameters.yaml"):

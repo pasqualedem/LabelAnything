@@ -1,0 +1,107 @@
+dataloader:
+  num_workers: 0
+  possible_batch_example_nums:
+  - - 1
+    - 4
+  prompt_types:
+  - point
+  - bbox
+  - mask
+  val_possible_batch_example_nums:
+  - - 1
+    - 1
+  val_prompt_types:
+  - bbox
+  - point
+  - mask
+dataset:
+  common:
+    add_box_noise: true
+    do_subsample: true
+    image_size: 1024
+    max_points_annotations: 50
+    max_points_per_annotation: 10
+  datasets:
+    coco20i:
+      img_dir: /ext/stalla/LabelAnything/images/train2017
+      instances_path: data/annotations/instances_train2014.json
+      n_folds: 4
+      name: coco
+      remove_small_annotations: true
+      split: train
+      val_fold_idx: 0
+    val_coco20i:
+      add_box_noise: false
+      do_subsample: false
+      img_dir: /ext/stalla/LabelAnything/images/train2017
+      instances_path: data/annotations/instances_val2014.json
+      n_folds: 4
+      n_shots: 1
+      n_ways: 1
+      name: coco
+      split: val
+      val_fold_idx: 0
+      remove_small_annotations: true
+experiment:
+  continue_with_errors: false
+  direction: null
+  excluded_files: ''
+  group: Test
+  logger: null
+  max_parallel_runs: 1
+  n_trials: null
+  name: LabelAnything
+  resume: false
+  resume_last: false
+  search: grid
+  start_from_grid: 0
+  start_from_run: 0
+  timestamp: '20240224_125600'
+  tracking_dir: ''
+  uuid: null
+logger:
+  experiment_save_delta: null
+  log_frequency: 1
+  tags:
+  - Test
+  tmp_dir: tmp
+  train_image_log_frequency: 5
+  val_image_log_frequency: 5
+  wandb:
+    entity: cilabuniba
+    offline: false
+model:
+  name: samfew
+  sam_model: asam_b
+  sam_params:
+    checkpoint: checkpoints/sam_vit_b_01ec64.pth
+  fewshot_model: dcama
+  fewshot_params:
+    backbone: swin
+    backbone_checkpoint: checkpoints/swin_base_patch4_window12_384.pth
+    model_checkpoint: checkpoints/swin_fold0.pt
+
+train_params:
+  accumulate_substitution: false
+  check_nan: 1
+  compile: false
+  freeze_backbone: true
+  initial_lr: 1.0e-05
+  loss:
+    class_weighting: true
+    components:
+      dice:
+        weight: 0.025
+      focal:
+        weight: 0.5
+  max_epochs: 4
+  num_points: 1
+  optimizer: AdamW
+  scheduler:
+    num_warmup_steps: 1000
+    step_moment: batch
+    type: cosine
+  seed: 42
+  substitute: false
+  validation_reruns: 5
+  watch_metric: loss

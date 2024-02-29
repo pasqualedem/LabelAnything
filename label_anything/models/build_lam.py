@@ -5,14 +5,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+import torch.nn as nn
 
-from functools import partial
+from label_anything.models.common import LayerNorm2d
+from label_anything.models.common import SAM_EMBED_DIM
 
 from . import (
     ImageEncoderViT,
     MaskDecoderLam,
     PromptImageEncoder,
     Lam,
+    BinaryLam,
     OneWayTransformer,
     TwoWayTransformer,
 )
@@ -52,46 +55,85 @@ def _build_lam(
     build_vit,
     checkpoint=None,
     use_sam_checkpoint=False,
+    use_vit_sam_neck=True,
     use_vit=True,
-    prompt_embed_dim=256,
+    image_embed_dim=SAM_EMBED_DIM,
+    embed_dim=SAM_EMBED_DIM,
     image_size=1024,
     vit_patch_size=16,
     class_attention=False,
     spatial_convs=None,
+    encoder_attention_downsample_rate: int = 2,
+    decoder_attention_downsample_rate: int = 2,
+    classification_layer_downsample_rate: int = 8,
+    use_broken_no_mask=False,
+    use_background_embedding=False,
     fusion_transformer="TwoWayTransformer",
+    segment_example_logits=False,
+    dropout: float = 0.0,
+    binary=False,
 ):
 
     image_embedding_size = image_size // vit_patch_size
 
-    vit = build_vit() if use_vit else None
+    vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
     
     fusion_transformer = globals()[fusion_transformer](
                 depth=2,
-                embedding_dim=prompt_embed_dim,
+                embedding_dim=embed_dim,
                 mlp_dim=2048,
                 num_heads=8,
+                attention_downsample_rate=decoder_attention_downsample_rate,
             )
     
-    lam = Lam(
+    neck = None if image_embed_dim == embed_dim else nn.Sequential(
+            nn.Conv2d(
+                image_embed_dim,
+                embed_dim,
+                kernel_size=1,
+                bias=False,
+            ),
+            LayerNorm2d(embed_dim),
+            nn.Conv2d(
+                embed_dim,
+                embed_dim,
+                kernel_size=3,
+                padding=1,
+                bias=False,
+            ),
+            LayerNorm2d(embed_dim),
+        )
+    lam_class = BinaryLam if binary else Lam
+    
+    lam = lam_class(
         image_size=image_size,
         image_encoder=vit,
+        neck=neck,
         prompt_encoder=PromptImageEncoder(
-            embed_dim=prompt_embed_dim,
+            embed_dim=embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
             mask_in_chans=16,
             class_attention=class_attention,
+            dropout=dropout,
+            use_broken_no_mask=use_broken_no_mask,
+            use_background_embedding=use_background_embedding,
             transformer=TwoWayTransformer(
                 depth=2,
-                embedding_dim=prompt_embed_dim,
+                embedding_dim=embed_dim,
                 mlp_dim=2048,
+                attention_downsample_rate=encoder_attention_downsample_rate,
                 num_heads=8,
+                dropout=dropout,
             ),
         ),
         mask_decoder=MaskDecoderLam(
-            transformer_dim=prompt_embed_dim,
+            transformer_dim=embed_dim,
             spatial_convs=spatial_convs,
             transformer=fusion_transformer,
+            segment_example_logits=segment_example_logits,
+            classification_layer_downsample_rate=classification_layer_downsample_rate,
+            dropout=dropout,
         ),
     )
     lam.eval()

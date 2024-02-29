@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 from scipy.ndimage import label, binary_dilation
 from PIL import Image
 import json
+from tqdm import tqdm
 
 url_voc = "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
 download_command = f"wget {url_voc}"
@@ -25,7 +26,7 @@ instances_voc12 = {
     "categories": [],
 }
 
-VOC2012 = pathlib.Path("VOCdevkit/VOC2012/")
+VOC2012 = pathlib.Path("data/raw/VOCdevkit/VOC2012")
 
 
 def get_items(root, ids):
@@ -34,7 +35,7 @@ def get_items(root, ids):
     all_masks = []
     all_labels = []
 
-    for image_id in ids:
+    for image_id in tqdm(ids):
         image = _get_images(root, image_id)
         boxes, labels = _get_annotations(root, image_id)
         masks = _get_masks(root, image_id)
@@ -122,8 +123,8 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     for enum, id_ in enumerate(ids):
         # print(ids[i])
         image = {
-            "file_name": id_,  # This is the only field that is compulsory
-            "url": f"JPEGImages/{id_}.jpg",
+            "file_name": f"JPEGImages/{id_}.jpg",  # This is the only field that is compulsory
+            "coco_url": f"JPEGImages/{id_}.jpg",
             "height": images[enum].shape[0],
             "width": images[enum].shape[1],
             "id": enum,
@@ -134,7 +135,7 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     for enum, (box, rle, label) in enumerate(zip(boxes, rle_masks, labels)):
         for b, (_, rle_value), l in zip(box, rle.items(), label):
             annotation = {
-                "segmentation": rle_value["counts"],
+                "segmentation": rle_value,
                 "area": int(mask_utils.area(rle_value)),
                 "image_id": enum,
                 "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
@@ -162,25 +163,28 @@ def generate_dataset_file(voc_folder):
         f.write(contents)
 
 
-if __name__ == "__main__":
-    if not os.path.exists(VOC2012):
+def preprocess_voc(input_folder=None, output_folder=None):
+    input_folder = input_folder or VOC2012
+    output_folder = output_folder or pathlib.Path("data/annotations")
+        
+    if not os.path.exists(input_folder):
         print("Downloading VOC2012 dataset...")
         os.system(download_command)
         os.system(tar_command)
     else:
         print("VOC2012 dataset already exists!")
 
-    if not os.path.exists(os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")):
+    if not os.path.exists(os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")):
         print("Generating dataset file...")
-        dataset = generate_dataset_file(VOC2012)
+        dataset = generate_dataset_file(input_folder)
     else:
         print("Dataset file already exists!")
 
-    dataset = os.path.join(VOC2012, "ImageSets/Segmentation/dataset.txt")
+    dataset = os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")
 
     ids = _read_image_ids(dataset)
     print(f"len ids: {len(ids)}")
-    images, boxes, polygons, labels = get_items(VOC2012, ids)
+    images, boxes, polygons, labels = get_items(input_folder, ids)
     annotations = create_annotation(
         ids,
         images,
@@ -190,7 +194,11 @@ if __name__ == "__main__":
         instances_voc12,
     )
 
-    with open(f"annotations/instances_voc12.json", "w") as f:
+    with open(f"data/annotations/instances_voc12.json", "w") as f:
         json.dump(annotations, f)
 
     print("Done!")
+
+
+if __name__ == "__main__":
+    preprocess_voc()

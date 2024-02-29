@@ -1,9 +1,10 @@
 import copy
+import json
 import os
 import random
 import subprocess
 import sys
-import tempfile
+import shutil
 import uuid
 from copy import deepcopy
 
@@ -51,6 +52,7 @@ from .utils import (
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder
 
 logger = get_logger(__name__)
+SIZE = 1024
 
 
 class Run:
@@ -73,6 +75,7 @@ class Run:
             sys.path.extend(".")
         self.global_train_step = 0
         self.global_val_step = 0
+        self.validation_json = None
 
     def parse_params(self, params: dict):
         self.params = deepcopy(params)
@@ -132,7 +135,22 @@ class Run:
         logger.info("Creating criterion")
         self.criterion = LabelAnythingLoss(**self.train_params["loss"])
         self.model = WrapperModule(self.model, self.criterion)
+        self.input_image_size = self.model_params.get("image_size", SIZE)
 
+        if self.train_params.get("compile", False):
+            logger.info("Compiling model")
+            self.model = torch.compile(self.model)
+        logger.info("Preparing model, optimizer, dataloaders and scheduler")
+
+        self.model = self.accelerator.prepare(self.model)
+
+        if self.val_loader:
+            logger.info("Preparing validation dataloader")
+            self._prep_for_validation()
+
+        self._load_state()
+
+    def _prep_for_training(self):
         logger.info("Creating optimizer")
         self.optimizer = AdamW(
             self.model.get_learnable_params(self.train_params),
@@ -148,24 +166,63 @@ class Run:
                 * len(self.train_loader),
             )
 
-        if self.train_params.get("compile", False):
-            logger.info("Compiling model")
-            self.model = torch.compile(self.model)
-        logger.info("Preparing model, optimizer, dataloaders and scheduler")
-        (
-            self.model,
-            self.optimizer,
-            self.train_loader,
-            self.scheduler,
-        ) = self.accelerator.prepare(
-            self.model, self.optimizer, self.train_loader, self.scheduler
+        self.train_loader, self.optimizer, self.scheduler = self.accelerator.prepare(
+            self.train_loader, self.optimizer, self.scheduler
         )
-        if self.val_loader:
-            logger.info("Preparing validation dataloader")
-            self.val_loader = self.accelerator.prepare(self.val_loader)
 
+    def _prep_for_validation(self):
+        self.val_loader = self.accelerator.prepare(self.val_loader)
+
+    def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
-            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+            overwritten = False
+            # Merge image_encoder dict with the state dict
+            if (
+                "checkpoint" in self.model_params
+                and self.params["model"]["name"] != "lam_no_vit"
+            ):
+                if hasattr(self.model, "module"):
+                    model = self.model.module.model
+                else:
+                    model = self.model.model
+                shutil.copyfile(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin.bak",
+                )
+                state_dict = torch.load(
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin"
+                )
+                state_dict = {
+                    **{
+                        "model.image_encoder." + k: v
+                        for k, v in model.image_encoder.state_dict().items()
+                    },
+                    **state_dict,
+                }
+                torch.save(
+                    state_dict,
+                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                )
+                overwritten = True
+
+            try:
+                self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+                # Ripristinate old state
+            finally:
+                if (
+                    "checkpoint" in self.model_params
+                    and self.params["model"]["name"] != "lam_no_vit"
+                    and overwritten
+                ):
+                    shutil.copyfile(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak",
+                        self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    )
+                    os.remove(
+                        self.plat_logger.accelerator_state_dir
+                        + "/pytorch_model.bin.bak"
+                    )
 
     def launch(self):
         logger.info("Start training loop...")
@@ -358,6 +415,9 @@ class Run:
             threshold=self.train_params.get("substitution_threshold", None),
             num_points=self.train_params.get("num_points", 1),
             substitute=self.train_params.get("substitute", True),
+            long_side_length=self.dataset_params.get("common", {}).get(
+                "image_size", SIZE
+            ),
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
@@ -429,6 +489,7 @@ class Run:
                         step=tot_steps,
                         substitution_step=i,
                         input_dict=input_dict,
+                        input_shape=self.input_image_size,
                         gt=gt,
                         pred=outputs,
                         dataset=self.train_loader.dataset,
@@ -467,8 +528,58 @@ class Run:
             epoch=epoch,
         )
 
-    def validate(self, epoch):
-        set_seed(self.params["train_params"]["seed"])
+    def _add_to_json(self, input_dict, validation_run):
+        if self.validation_json is None:
+            return
+        if validation_run is None:
+            validation_run = 0
+        if validation_run not in self.validation_json["json"]:
+            self.validation_json["json"][validation_run] = []
+        self.validation_json["json"][validation_run].append(
+            input_dict[BatchKeys.IMAGE_IDS]
+        )
+
+    def validate(self, epoch: int, generate_json=False):
+        if generate_json:
+            self.validation_json = {
+                "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
+                "json": {},
+            }
+        if self.train_params.get("validation_reruns", None) is None:
+            metrics = self.validate_run(epoch, None)
+        else:
+            overall_metrics = []
+            for validation_run in range(self.train_params["validation_reruns"]):
+                metrics = self.validate_run(epoch, validation_run)
+                overall_metrics.append(metrics)
+            metrics = {
+                k: torch.stack([torch.tensor(m[k]) for m in overall_metrics]).mean()
+                for k in overall_metrics[0].keys()
+            }
+            self.plat_logger.log_metrics(
+                {**{"avg_" + k: v for k, v in metrics.items()}},
+                epoch=epoch,
+            )
+            for k, v in metrics.items():
+                logger.info(f"Validation epoch {epoch} - {k}: {v}")
+
+        if generate_json:
+            with open(self.validation_json["file"], "w") as f:
+                json.dump(self.validation_json["json"], f)
+            self.validation_json = None
+
+        logger.info(f"Validation epoch {epoch} finished")
+        return metrics
+
+    def validate_run(self, epoch, validation_run=None):
+        if validation_run is None:
+            seed = self.params["train_params"]["seed"]
+            metrics_suffix = ""
+        else:
+            seed = self.params["train_params"]["seed"] + validation_run
+            metrics_suffix = f"_{validation_run}"
+        set_seed(seed)
+
         self.model.eval()
         avg_loss = RunningAverage()
         dataset_categories = next(
@@ -477,12 +588,12 @@ class Run:
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
-                "mIoU": DistributedMulticlassJaccardIndex(
+                f"mIoU{metrics_suffix}": DistributedMulticlassJaccardIndex(
                     num_classes=num_classes + 1,
                     average="macro",
                     ignore_index=-100,
                 ),
-                "FBIoU": DistributedBinaryJaccardIndex(
+                f"FBIoU{metrics_suffix}": DistributedBinaryJaccardIndex(
                     ignore_index=-100,
                 ),
             },
@@ -508,6 +619,7 @@ class Run:
                 batch_dict = next(iter(substitutor))
                 cur_batch_size = get_batch_size(batch_dict)
                 image_dict, gt = batch_dict
+                self._add_to_json(image_dict, validation_run)
 
                 result_dict = self.model(image_dict, gt)
                 outputs = result_dict[ResultDict.LOGITS]
@@ -536,6 +648,7 @@ class Run:
                     step=tot_steps,
                     substitution_step=0,
                     input_dict=image_dict,
+                    input_shape=self.input_image_size,
                     gt=gt,
                     pred=outputs,
                     dataset=self.val_loader.dataset,
@@ -555,12 +668,17 @@ class Run:
             )
         self.accelerator.wait_for_everyone()
 
-        logger.info(f"Validation epoch {epoch} finished")
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
-            logger.info(f"Validation epoch {epoch} - {k}: {v}")
-        logger.info(f"Validation epoch {epoch} - Loss: {avg_loss.compute()}")
-        return {"miou": metrics_value["batch_mIoU"], "loss": avg_loss.compute()}
+            logger.info(f"Validation {metrics_suffix[1:]} epoch {epoch} - {k}: {v}")
+        logger.info(
+            f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
+        )
+        return {
+            "miou": metrics_value[f"batch_mIoU{metrics_suffix}"],
+            "loss": avg_loss.compute(),
+            "fbiou": metrics_value[f"batch_FBIoU{metrics_suffix}"],
+        }
 
     def test(self):
         with self.plat_logger.test():
@@ -645,7 +763,7 @@ class ParallelRun:
         subfolder = f"{self.exp_timestamp}_{self.params['experiment']['group']}"
         out_folder = os.path.join(self.slurm_outfolder, subfolder)
         os.makedirs(out_folder, exist_ok=True)
-        
+
         run_uuid = str(uuid.uuid4())[:8]
         out_file = f"{run_uuid}.{self.out_extension}"
         out_file = os.path.join(out_folder, out_file)

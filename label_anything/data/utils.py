@@ -39,6 +39,7 @@ class AnnFileKeys(StrEnum):
     CATEGORY_ID = "category_id"
     IMAGE = "image"
     ISCROWD = "iscrowd"
+    SEGMENTATION = "segmentation"
 
 
 class BatchKeys(StrEnum):

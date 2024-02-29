@@ -2,6 +2,7 @@ from label_anything.experiment.experiment import (
     experiment as run_experiment,
     run as run_single,
     test as test_fn,
+    validate as validate_fn,
 )
 
 import click
@@ -42,6 +43,13 @@ def run(parameters):
 @click.option("--parameters", default="test.yaml")
 def test(parameters):
     test_fn(param_path=parameters)
+
+
+@main.command("validate")
+@click.option("--parameters", default="test.yaml")
+@click.option("--generate_json", default=False, is_flag=True)
+def validate(parameters, generate_json):
+    validate_fn(param_path=parameters, generate_json=generate_json)
 
 
 @main.command("preprocess")
@@ -127,6 +135,7 @@ def preprocess(
 )
 def generate_gt(dataset_name, anns_path, outfolder):
     from label_anything.preprocess import generate_ground_truths
+
     generate_ground_truths(dataset_name, anns_path, outfolder)
 
 
@@ -181,6 +190,23 @@ def preprocess_clip(parameters):
     exe_clip_preprocess(params_path=parameters)
 
 
+@main.command("preprocess_voc")
+@click.option(
+    "--input_folder",
+    default=None,
+    help="Path to the VOC dataset",
+)
+@click.option(
+    "--output_folder",
+    default=None,
+    help="Path to the output folder",
+)
+def preprocess_voc(input_folder, output_folder):
+    from label_anything.data.voc12 import preprocess_voc as preprocess_voc_fn
+
+    preprocess_voc_fn(input_folder, output_folder)
+
+
 @main.command("pretrain_pe")
 @click.option(
     "--parameters", default="pretraining_parameters.yaml", help="Path to yaml file"
@@ -197,4 +223,5 @@ def pretrain_pe(parameters):
 )
 def rename_coco20i_json_cli(instances_path):
     from label_anything.preprocess import rename_coco20i_json
+
     rename_coco20i_json(instances_path)

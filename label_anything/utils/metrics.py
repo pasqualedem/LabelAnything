@@ -38,7 +38,7 @@ def to_global_multiclass(
     cats_map = {k: i + 1 for i, k in enumerate(categories.keys())}
     for i in range(batch_size):
         # assign to longest_classes the longest list in classes[i]
-        longest_classes = max(classes[i], key=len)
+        longest_classes = sorted(list(set(sum(classes[i], []))))
         for j, v in enumerate(longest_classes):
             for tensor in out_tensors:
                 tensor[i] = torch.where(tensor[i] == j + 1, cats_map[v], tensor[i])

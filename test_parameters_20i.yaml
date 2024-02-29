@@ -44,7 +44,7 @@ parameters:
     seed: &seed [42] # random seed to set
     # substitution_threshold: [0.1] # threshold
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [2]
+    max_epochs: [4]
     compile: [False]
     initial_lr: [0.00001]
     optimizer: [AdamW]
@@ -55,6 +55,7 @@ parameters:
       # warmup_steps: [2500] 
     substitute: [False]
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+    validation_reruns: [2]
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
     freeze_backbone: [True]
     check_nan: [1] # check for nan every n batches
@@ -65,6 +66,12 @@ parameters:
     use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [True]
+    segment_example_logits: [True]
+    image_embed_dim: [256]
+    embed_dim: [256]
+    image_size: &image_size [1024]
+    use_background_embedding: [True]
+    dropout: [0.1]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -74,6 +81,7 @@ parameters:
         img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
         split: ["train"]
         val_fold_idx: [0]
+        remove_small_annotations: [True]
         n_folds: [4]
       val_coco20i:
         name: [coco]
@@ -82,7 +90,8 @@ parameters:
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
-        n_shots: [1]
+        n_shots: [2]
+        n_ways: [2]
         do_subsample: [False]
         add_box_noise: [False]
     common:
@@ -90,6 +99,7 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
+      image_size: [1024]
   dataloader:
     num_workers: [0]
     possible_batch_example_nums: [[[1, 1]]]

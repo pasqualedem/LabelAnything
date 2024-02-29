@@ -11,8 +11,9 @@ from einops import rearrange
 from torch import nn
 from torch.nn import functional as F
 
-from label_anything.data.utils import get_preprocess_shape
+from label_anything.data.utils import BatchKeys, get_preprocess_shape
 from label_anything.models.transformer import TwoWayTransformer
+from label_anything.models.common import SAM_EMBED_DIM
 from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
@@ -29,6 +30,7 @@ class Lam(nn.Module):
         image_encoder: ImageEncoderViT,
         prompt_encoder: PromptImageEncoder,
         mask_decoder: MaskDecoder,
+        neck: nn.Module,
         image_size: int = 1024,
     ) -> None:
         """
@@ -47,6 +49,7 @@ class Lam(nn.Module):
         self.prompt_encoder = prompt_encoder
         self.mask_decoder = mask_decoder
         self.class_embeddings = None
+        self.neck = neck
 
     def forward(
         self, batched_input: List[Dict[str, Any]]
@@ -81,6 +84,16 @@ class Lam(nn.Module):
                 C is the number of classes, (H, W) is the
                 original size of the image.
         """
+        seg, pe_result = self._forward(batched_input)
+        seg = self.postprocess_masks(seg, batched_input["dims"])
+        if "flag_gts" in batched_input:
+            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
+        return {
+            ResultDict.LOGITS: seg,
+            ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
+        }
+
+    def _forward(self, batched_input: List[Dict[str, Any]]) -> torch.Tensor:
         query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(
             batched_input
         )
@@ -97,33 +110,30 @@ class Lam(nn.Module):
         seg = self.mask_decoder(
             image_embeddings=query_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            class_embeddings=pe_result[ResultDict.CLASS_EMBS],
+            class_embeddings=pe_result,
         )
-
-        seg = self.postprocess_masks(seg, batched_input["dims"])
-        if "flag_gts" in batched_input:
-            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-        return {
-            ResultDict.LOGITS: seg,
-            ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
-        }
+        return seg, pe_result
 
     def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
             B, N, C, H, W = embeddings.shape
-            query_embeddings = embeddings[:, 0]
-            prompt_embeddings = embeddings[:, 1:]
+            if self.neck is not None:
+                embeddings = rearrange(embeddings, "b n c h w -> (b n) c h w", b=B)
+                embeddings = self.neck(embeddings)
+                embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         elif "images" in batched_input:
             B, N, C, H, W = batched_input["images"].shape
             images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
-            embeddings = rearrange(
-                self.image_encoder(images), "(b n) c h w -> b n c h w", b=B
-            )
-            query_embeddings = embeddings[:, 0]
-            prompt_embeddings = embeddings[:, 1:]
+            embeddings = self.image_encoder(images)
+            if self.neck is not None:
+                embeddings = self.neck(embeddings)
+            embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
+
+        query_embeddings = embeddings[:, 0]
+        prompt_embeddings = embeddings[:, 1:]
 
         return query_embeddings, prompt_embeddings
 
@@ -167,7 +177,7 @@ class Lam(nn.Module):
         else:
             masks = None
 
-        return points, boxes, masks, batched_input['flag_examples']
+        return points, boxes, masks, batched_input["flag_examples"]
 
     def init_pretrained_weights(self, weights):
         """
@@ -181,57 +191,73 @@ class Lam(nn.Module):
                 if k.startswith("image_encoder")
             }
             self.image_encoder.load_state_dict(image_encoder_weights)
-        # Load weights for the prompt encoder
-        pe_layer_weights = {
-            k[len("prompt_encoder.pe_layer.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.pe_layer")
-        }
-        self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
-        point_embeddings_weights = {
-            k[len("prompt_encoder.point_embeddings.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.point_embeddings")
-        }
-        self.prompt_encoder.point_embeddings.load_state_dict(point_embeddings_weights)
-        not_a_point_embed_weights = {
-            k[len("prompt_encoder.not_a_point_embed.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.not_a_point_embed")
-        }
-        self.prompt_encoder.not_a_point_embed.load_state_dict(not_a_point_embed_weights)
-        mask_downscaling_weights = {
-            k[len("prompt_encoder.mask_downscaling.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.mask_downscaling")
-        }
-        self.prompt_encoder.mask_downscaling.load_state_dict(mask_downscaling_weights)
-        no_mask_embed_weights = {
-            k[len("prompt_encoder.no_mask_embed.") :]: v
-            for k, v in weights.items()
-            if k.startswith("prompt_encoder.no_mask_embed")
-        }
-        self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
+        if (
+            self.prompt_encoder.pe_layer.positional_encoding_gaussian_matrix.shape[1]
+            == 2 * SAM_EMBED_DIM
+        ):
+            # Load weights for the prompt encoder
+            pe_layer_weights = {
+                k[len("prompt_encoder.pe_layer.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.pe_layer")
+            }
+            self.prompt_encoder.pe_layer.load_state_dict(pe_layer_weights)
+            point_embeddings_weights = {
+                k[len("prompt_encoder.point_embeddings.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.point_embeddings")
+            }
+            self.prompt_encoder.point_embeddings.load_state_dict(
+                point_embeddings_weights
+            )
+            not_a_point_embed_weights = {
+                k[len("prompt_encoder.not_a_point_embed.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.not_a_point_embed")
+            }
+            self.prompt_encoder.not_a_point_embed.load_state_dict(
+                not_a_point_embed_weights
+            )
+            mask_downscaling_weights = {
+                k[len("prompt_encoder.mask_downscaling.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.mask_downscaling")
+            }
+            self.prompt_encoder.mask_downscaling.load_state_dict(
+                mask_downscaling_weights
+            )
+            no_mask_embed_weights = {
+                k[len("prompt_encoder.no_mask_embed.") :]: v
+                for k, v in weights.items()
+                if k.startswith("prompt_encoder.no_mask_embed")
+            }
+            self.prompt_encoder.no_mask_embed.load_state_dict(no_mask_embed_weights)
 
-        # Load tranformer weights
-        transformer_weights = {
-            k[len("mask_decoder.transformer.") :]: v
-            for k, v in weights.items()
-            if k.startswith("mask_decoder.transformer")
-        }
-        self.prompt_encoder.transformer.load_state_dict(transformer_weights)
+            # Load tranformer weights
+            transformer_weights = {
+                k[len("mask_decoder.transformer.") :]: v
+                for k, v in weights.items()
+                if k.startswith("mask_decoder.transformer")
+            }
+            if self.prompt_encoder.transformer.attention_downsample_rate == 2:
+                self.prompt_encoder.transformer.load_state_dict(transformer_weights)
 
-        # Load weights for the mask decoder transformer
-        if isinstance(self.mask_decoder.transformer, TwoWayTransformer):
-            self.mask_decoder.transformer.load_state_dict(transformer_weights.copy())
+            # Load weights for the mask decoder transformer
+            if (
+                isinstance(self.mask_decoder.transformer, TwoWayTransformer)
+                and self.mask_decoder.transformer.attention_downsample_rate == 2
+            ):
+                self.mask_decoder.transformer.load_state_dict(
+                    transformer_weights.copy()
+                )
 
-        # Load weights for the mask decoder output upscaling
-        output_upscaling_weights = {
-            k[len("mask_decoder.output_upscaling.") :]: v
-            for k, v in weights.items()
-            if k.startswith("mask_decoder.output_upscaling")
-        }
-        self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
+            # Load weights for the mask decoder output upscaling
+            output_upscaling_weights = {
+                k[len("mask_decoder.output_upscaling.") :]: v
+                for k, v in weights.items()
+                if k.startswith("mask_decoder.output_upscaling")
+            }
+            self.mask_decoder.output_upscaling.load_state_dict(output_upscaling_weights)
 
     def get_learnable_params(self, training_params: dict) -> list:
         """
@@ -300,20 +326,24 @@ class Lam(nn.Module):
             is given by original_size.
         """
         max_original_size = torch.max(original_sizes.view(-1, 2), 0).values.tolist()
-        original_sizes = original_sizes[:, 0, :]
+        original_sizes = original_sizes[:, 0, :]  # get real sizes of the query images
         input_sizes = [
             get_preprocess_shape(h, w, self.image_size) for (h, w) in original_sizes
-        ]
+        ]  # these are the input sizes without padding
+
+        # interpolate masks to the model size
         masks = F.interpolate(
             masks,
             (self.image_size, self.image_size),
             mode="bilinear",
             align_corners=False,
         )
+        # remove padding from masks
         masks = [
             masks[i, :, : input_size[0], : input_size[1]]
             for i, input_size in enumerate(input_sizes)
         ]
+        # interpolate masks to the original size
         masks = [
             F.interpolate(
                 torch.unsqueeze(masks[i], 0),
@@ -324,6 +354,7 @@ class Lam(nn.Module):
             for i, original_size in enumerate(original_sizes)
         ]
 
+        # pad masks to the same size, use -inf so they don't affect the softmax
         masks = torch.cat(
             [
                 F.pad(
@@ -340,7 +371,82 @@ class Lam(nn.Module):
                 for i, mask in enumerate(masks)
             ]
         )
-        masks[:, 0, :, :][
-            masks[:, 0, :, :] == float("-inf")
-        ] = 0  # background class for padding
+
+        # set padding to background class
+        masks[:, 0, :, :][masks[:, 0, :, :] == float("-inf")] = 0
         return masks
+
+
+class BinaryLam(Lam):
+    def _build_class_dict(self, x, c):
+        class_examples = x[BatchKeys.FLAG_EXAMPLES][:, :, c]
+        prompt_keys = [
+            BatchKeys.PROMPT_MASKS,
+            BatchKeys.PROMPT_BBOXES,
+            BatchKeys.PROMPT_POINTS,
+        ]
+        flag_keys = [
+            BatchKeys.FLAG_MASKS,
+            BatchKeys.FLAG_BBOXES,
+            BatchKeys.FLAG_POINTS,
+            BatchKeys.FLAG_EXAMPLES,
+        ]
+        prompt_input_dict = {
+            key: torch.cat(
+                [
+                    x[key][:, :, 0, ::][class_examples].unsqueeze(1).unsqueeze(0),
+                    x[key][:, :, c, ::][class_examples].unsqueeze(1).unsqueeze(0),
+                ],
+                dim=2,
+            )
+            for key in prompt_keys
+        }
+        flag_input_dict = {
+            key: torch.cat(
+                [
+                    x[key][:, :, 0][class_examples].unsqueeze(1).unsqueeze(0),
+                    x[key][:, :, c][class_examples].unsqueeze(1).unsqueeze(0),
+                ],
+                dim=2,
+            )
+            for key in flag_keys
+        }
+        class_input_dict = {
+            BatchKeys.IMAGES: torch.cat(
+                [x[BatchKeys.IMAGES][:, 0], x[BatchKeys.IMAGES][:, 1:][class_examples]]
+            ).unsqueeze(0),
+            **prompt_input_dict,
+            **flag_input_dict,
+        }
+        return class_input_dict
+
+    def forward(self, x: List[Dict[str, Any]]) -> List[Dict[str, torch.Tensor]]:
+        B, M, C = x[BatchKeys.FLAG_EXAMPLES].shape
+        assert (
+            x[BatchKeys.FLAG_EXAMPLES].shape[0] == 1
+        ), "Only tested with batch size = 1"
+        results = []
+        # get logits for each class
+        for c in range(1, x[BatchKeys.FLAG_EXAMPLES].size(2)):
+            class_input_dict = self._build_class_dict(x, c)
+            results.append(super()._forward(class_input_dict))
+        logits, embeddings = zip(*results)
+        dummy_embeddings = torch.zeros(
+            (B, M, C, embeddings[0][ResultDict.EXAMPLES_CLASS_EMBS].shape[-1]),
+            device=embeddings[0][ResultDict.EXAMPLES_CLASS_EMBS].device,
+        )
+
+        logits = torch.stack(logits, dim=1)
+        fg_logits = logits[:, :, 1, ::]
+        bg_logits = logits[:, :, 0, ::]
+        bg_positions = fg_logits.argmax(dim=1)
+        bg_logits = torch.gather(bg_logits, 1, bg_positions.unsqueeze(1))
+        logits = torch.cat([bg_logits, fg_logits], dim=1)
+
+        logits = self.postprocess_masks(logits, x["dims"])
+        logits[x["flag_gts"].logical_not()] = -1 * torch.inf
+
+        return {
+            ResultDict.LOGITS: logits,
+            ResultDict.EXAMPLES_CLASS_EMBS: dummy_embeddings,
+        }

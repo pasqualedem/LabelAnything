@@ -118,8 +118,9 @@ ANNOTATIONS_DIR = "data/annotations/instances_val2017.json"
 EMBEDDINGS_DIR = "/ext/stalla/LabelAnything/embeddings"
 MAX_EXAMPLES = 30
 
+SIZE = 1024
 
-preprocess = Compose([CustomResize(1024), PILToTensor(), CustomNormalize()])
+preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
 
 
 @st.cache_resource
@@ -154,7 +155,7 @@ def load_model(_accelerator: Accelerator, run_id):
     model_file, config_file = load_from_wandb(run_id, folder)
     if config_file is not None:
         config = load_yaml(config_file)
-        model_params = config["model"]["value"]
+        model_params = config["model"]
         name = model_params.pop("name")
     else:
         model_params = {}
@@ -225,7 +226,7 @@ def generate_examples(
         num_examples=num_examples,
     )
 
-    cat_ids = list(set(itertools.chain(*aux_cat_ids)))
+    cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
     st.session_state["named_classes"] = ["background"] + [
         coco_dataset.categories[cat]["name"] for cat in cat_ids
     ]

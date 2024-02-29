@@ -78,6 +78,7 @@ class WandBLogger(AbstractLogger):
         save_code: bool = False,
         tags=None,
         run_id=None,
+        resume_checkpoint_type: str = "best",
         group=None,
         **kwargs,
     ):
@@ -96,8 +97,13 @@ class WandBLogger(AbstractLogger):
         :param save_logs_remote: Saves log files in s3.
         :param save_code: save current code to wandb
         """
-        self.resume = resume
-        resume = "must" if resume else None
+        tracker_resume = "must" if resume else None
+        self.resume = tracker_resume
+        resume = run_id is not None
+        if not tracker_resume and resume:
+            if tags is None:
+                tags = []
+            tags = tags + ["resume", run_id]
         self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
@@ -107,14 +113,14 @@ class WandBLogger(AbstractLogger):
             os.environ["WANDB_CONFIG_DIR"] = offline_directory
             os.environ["WANDB_DATA_DIR"] = offline_directory
         if resume:
-            self._resume(offline_directory, run_id)
+            self._resume(offline_directory, run_id, checkpoint_type=resume_checkpoint_type)
         experiment = None
         if kwargs["accelerator"].is_local_main_process:
             experiment = wandb.init(
                 project=project_name,
                 entity=entity,
-                resume=resume,
-                id=run_id,
+                resume=tracker_resume,
+                id=run_id if tracker_resume else None,
                 tags=tags,
                 dir=offline_directory,
                 group=group,
@@ -140,7 +146,7 @@ class WandBLogger(AbstractLogger):
         self.context = ""
         self.sequences = {}
                 
-    def _resume(self, offline_directory, run_id):
+    def _resume(self, offline_directory, run_id, checkpoint_type="latest"):
         if not offline_directory:
             offline_directory = "."
         wandb_dir = os.path.join(offline_directory, "wandb")
@@ -154,7 +160,7 @@ class WandBLogger(AbstractLogger):
                 logger.warning(run)
             logger.warning(f"Using {runs[0]}")
         run = runs[0]
-        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", "latest")
+        self.accelerator_state_dir = os.path.join(wandb_dir, run, "files", checkpoint_type)
         logger.info(f"Resuming from {self.accelerator_state_dir}")
         
     def _save_code(self):
@@ -437,6 +443,7 @@ class WandBLogger(AbstractLogger):
         step,
         substitution_step,
         input_dict,
+        input_shape,
         gt,
         pred,
         dataset,
@@ -476,6 +483,7 @@ class WandBLogger(AbstractLogger):
                 step=step,
                 substitution_step=substitution_step,
                 input_dict=input_dict,
+                input_shape=input_shape,
                 images=query_images,
                 gt=gt,
                 pred=pred,
@@ -495,6 +503,7 @@ class WandBLogger(AbstractLogger):
         step,
         substitution_step,
         input_dict,
+        input_shape,
         images,
         gt,
         pred,
@@ -507,7 +516,7 @@ class WandBLogger(AbstractLogger):
         classes = self._get_class_ids(input_dict["classes"])
 
         for b in range(gt.shape[0]):
-            image = get_image(take_image(images[b], dims[b, 0]))
+            image = get_image(take_image(images[b], dims[b, 0], input_shape=input_shape))
             cur_dataset_categories = categories[dataset_names[b]]
             cur_sample_categories = {
                 k + 1: cur_dataset_categories[c]["name"]
