@@ -271,8 +271,9 @@ class PromptImageEncoder(PromptEncoder):
         mask_in_chans: int,
         transformer: nn.Module,
         class_encoder: nn.Module,
-        class_example_attention: bool = True,
+        example_class_attention: bool = True,
         class_attention: bool = False,
+        example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
         use_broken_no_mask: bool = False,
         use_background_embedding: bool = False,
@@ -327,8 +328,20 @@ class PromptImageEncoder(PromptEncoder):
                 dropout=dropout,
             )
 
-        if class_example_attention:
+        self.class_example_attention = None
+        if example_class_attention:
             self.class_example_attention = AttentionMLPBlock(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                downsample_rate=attention_downsample_rate,
+                mlp_dim=mlp_dim,
+                act=activation,
+                dropout=dropout,
+            )
+            
+        self.example_attention = None
+        if example_attention:
+            self.example_attention = AttentionMLPBlock(
                 embed_dim=embed_dim,
                 num_heads=num_heads,
                 downsample_rate=attention_downsample_rate,
@@ -646,15 +659,20 @@ class PromptImageEncoder(PromptEncoder):
         src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
         src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
 
-        if self.class_example_attention is not None:
-            src = rearrange(src, "b m c d -> b (m c) d", c=c)
-            src = self.class_example_attention(src)
-            src = rearrange(src, "b (m c) d -> b m c d", c=c)
-
         if self.class_attention is not None:
             src = rearrange(src, "b m c d -> (b m) c d", c=c)
             src = self.class_attention(src)
             src = rearrange(src, "(b m) c d -> b m c d", m=m)
+        
+        if self.example_attention is not None:
+            src = rearrange(src, "b m c d -> (b c) m d", c=c)
+            src = self.example_attention(src)
+            src = rearrange(src, "(b c) m d -> b m c d", c=c)
+
+        if self.class_example_attention is not None:
+            src = rearrange(src, "b m c d -> b (m c) d", c=c)
+            src = self.class_example_attention(src)
+            src = rearrange(src, "b (m c) d -> b m c d", c=c)
 
         # Average over examples removing padding embeddings
         masked_src = src * flag_examples.unsqueeze(-1)
