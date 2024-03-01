@@ -52,6 +52,63 @@ def validate(parameters, generate_json):
     validate_fn(param_path=parameters, generate_json=generate_json)
 
 
+@main.command("preprocess_huggingface")
+@click.option(
+    "--model_name",
+    default="facebook/vit-mae-base",
+    help="Select model to use",
+)
+@click.option(
+    "--compile",
+    is_flag=True,
+    help="Select if the model should be compiled",
+)
+@click.option(
+    "--directory",
+    default="/leonardo_scratch/large/userexternal/nfanelli/train_val_2017",
+    help="Select the file to use as checkpoint",
+)
+@click.option(
+    "--batch_size",
+    default=16,
+    help="Batch size for the dataloader",
+)
+@click.option(
+    "--num_workers",
+    default=8,
+    help="Number of workers for the dataloader",
+)
+@click.option(
+    "--outfolder",
+    default="/leonardo_scratch/large/userexternal/rscaring/vit_embeddings",
+    help="Folder to save the embeddings",
+)
+@click.option(
+    "--image_resolution",
+    default=480,
+    help='Image resolution for ViT',
+)
+def preprocess_huggingface(
+        model_name,
+        directory,
+        batch_size,
+        num_workers,
+        outfolder,
+        compile,
+        image_resolution,
+):
+    from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
+    preprocess_images_to_embeddings_huggingface(
+        model_name=model_name,
+        directory=directory,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        outfolder=outfolder,
+        compile=compile,
+        image_resolution=image_resolution,
+    )
+
+
 @main.command("preprocess")
 @click.option(
     "--encoder",
@@ -93,6 +150,11 @@ def validate(parameters, generate_json):
     default="data/processed/embeddings",
     help="Folder to save the embeddings",
 )
+@click.option(
+    "--last_block_dir",
+    default=None,
+    help="Folder to save last transformer block",
+)
 def preprocess(
     encoder,
     checkpoint,
@@ -102,6 +164,7 @@ def preprocess(
     batch_size,
     num_workers,
     outfolder,
+    last_block_dir,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings
 
@@ -113,6 +176,7 @@ def preprocess(
         batch_size=batch_size,
         num_workers=num_workers,
         outfolder=outfolder,
+        last_block_dir=last_block_dir,
         compile=compile,
     )
 

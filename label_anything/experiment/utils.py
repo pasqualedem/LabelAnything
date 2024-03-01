@@ -22,9 +22,10 @@ def parse_params(params_dict):
     train_params = params_dict.get("train_params", {})
     dataset_params = params_dict.get("dataset", {})
     model_params = params_dict.get("model", {})
+    prompt_encoder_params = params_dict.get("prompt_encoder", {})
     dataloader_params = params_dict.get("dataloader", {})
 
-    return train_params, dataset_params, dataloader_params, model_params
+    return train_params, dataset_params, dataloader_params, model_params, prompt_encoder_params
 
 
 def cast_model(model: torch.nn.Module, precision=torch.float32):

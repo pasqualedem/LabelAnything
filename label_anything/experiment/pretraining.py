@@ -1,3 +1,5 @@
+import random
+
 import accelerate
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder, PromptImageEncoder
 from torch.utils.data import DataLoader
@@ -14,6 +16,13 @@ from label_anything.preprocess_clip import load_ruamel
 from label_anything.data.prompt_encoder_dataset import collate_fn
 
 
+def change_num_examples(train_loader: DataLoader,
+                        val_loader: DataLoader,
+                        n_examples):
+    train_loader.dataset.set_num_examples(n_examples)
+    val_loader.dataset.set_num_examples(n_examples)
+
+
 def train(
         model: ContrastivePromptEncoder,
         train_loader: DataLoader,
@@ -24,6 +33,8 @@ def train(
         accelerator: Accelerator,
         early_stop: ParallelEarlyStopping,
         num_epochs: int,
+        min_num_examples: int,
+        max_num_examples: int,
 ):
     loaders = {'train': train_loader, 'val': val_loader}
     optimizer.zero_grad()
@@ -54,6 +65,8 @@ def train(
         accelerator.wait_for_everyone()
         if accelerator.check_trigger():
             break
+        n_examples = random.randint(min_num_examples, max_num_examples)
+        change_num_examples(train_loader, val_loader, n_examples)
 
 
 def init_model(model_params: dict) -> dict:

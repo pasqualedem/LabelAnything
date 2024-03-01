@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 import random
@@ -48,6 +49,7 @@ from .utils import (
     parse_params,
     set_class_embeddings,
 )
+from label_anything.models.contrastive_pe import ContrastivePromptEncoder
 
 logger = get_logger(__name__)
 SIZE = 1024
@@ -83,7 +85,18 @@ class Run:
             self.dataset_params,
             self.dataloader_params,
             self.model_params,
+            self.prompt_encoder_params,
         ) = parse_params(self.params)
+
+    def _load_prompt_encoder_parameters(self):
+        if not self.prompt_encoder_params or self.model is None:
+            return
+        pe_params = deepcopy(self.prompt_encoder_params)
+        pe_params['params']['prompt_encoder'] = self.model.prompt_encoder
+        contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params['params'])
+        state_dict = torch.load(self.prompt_encoder_params['checkpoint'])
+        contrastive_prompt_encoder.load_state_dict(state_dict)
+        self.model.prompt_encoder.load_state_dict(contrastive_prompt_encoder.prompt_encoder.state_dict())
 
     def init(self, params: dict):
         set_seed(params["train_params"]["seed"])
@@ -91,12 +104,6 @@ class Run:
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
         self.parse_params(params)
-        (
-            self.train_params,
-            self.dataset_params,
-            self.dataloader_params,
-            self.model_params,
-        ) = parse_params(params)
 
         kwargs = [
             DistributedDataParallelKwargs(find_unused_parameters=True),
@@ -120,6 +127,8 @@ class Run:
         model_name = self.model_params.pop("name")
         logger.info(f"Creating model {model_name}")
         self.model = model_registry[model_name](**self.model_params)
+        # load pretrained prompt encoder parameters
+        self._load_prompt_encoder_parameters()
 
         self.watch_metric = self.train_params["watch_metric"]
 
@@ -424,6 +433,11 @@ class Run:
         loss_normalizer = 1
         self.oom = False
         metric_values = None
+
+        # setting prompt encoder parameters
+        if self.prompt_encoder_params:
+            for p in self.model.module.model.prompt_encoder.parameters():
+                p.requires_grad = (epoch >= self.train_params.get('freeze_params_max_epoch', 0))
 
         for batch_idx, batch_tuple in bar:
             batch_tuple, dataset_names = batch_tuple

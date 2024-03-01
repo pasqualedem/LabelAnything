@@ -325,6 +325,13 @@ def collate_batch_gts(gt, dims, fill_value=-100):
     return out
 
 
+def collate_flag_examples(flags, n_classes):
+    n_ex, *_ = flags[0].size()
+    out_flags = torch.zeros(n_ex * n_classes, n_classes, dtype=flags[0].dtype)
+    for idx, f in enumerate(flags):
+        out_flags[(idx*n_ex): ((idx + 1)*n_ex), idx] = f.squeeze(dim=1)
+    return out_flags.unsqueeze(dim=0)
+
 def collate_class_masks(masks, flags, n_classes):
     n_ex, _, h, w = masks[0].size()
     out_mask = torch.zeros(n_ex * n_classes, n_classes, h, w, dtype=masks[0].dtype)
