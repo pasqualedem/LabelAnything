@@ -25,13 +25,13 @@ parameters:
   train_params:
     loss:
       class_weighting: [True]
-        components:
-          focal:
-            weight: [0.725]
-          dice:
-            weight: [0.025]
-          prompt_contrastive:
-            weight: [0.25]
+      components:
+        focal:
+          weight: [0.725]
+        dice:
+          weight: [0.025]
+        prompt_contrastive:
+          weight: [0.25]
     seed: &seed [42] # random seed to set
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
