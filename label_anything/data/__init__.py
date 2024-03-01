@@ -76,22 +76,30 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         batch_sampler=train_batch_sampler,
     )
     if val_datasets_params:
-        val_dataset = LabelAnythingDataset(
-            datasets_params=val_datasets_params,
-            common_params={**common_params, "preprocess": preprocess},
-        )
-        val_batch_sampler = VariableBatchSampler(
-            val_dataset,
-            possible_batch_example_nums=val_possible_batch_example_nums,
-            num_processes=num_processes,
-            prompt_types=val_prompt_types,
-        )
-        val_dataloader = DataLoader(
-            dataset=val_dataset,
-            **dataloader_args,
-            collate_fn=val_dataset.collate_fn,
-            batch_sampler=val_batch_sampler,
-        )
+        val_dataloaders = {}
+        for dataset, params in val_datasets_params.items():
+            splits = dataset.split("_")
+            if len(splits) > 2:
+                dataset_name = "_".join(splits[:2])
+            else:
+                dataset_name = dataset
+            val_dataset = LabelAnythingDataset(
+                datasets_params={dataset_name: params},
+                common_params={**common_params, "preprocess": preprocess},
+            )
+            val_batch_sampler = VariableBatchSampler(
+                val_dataset,
+                possible_batch_example_nums=val_possible_batch_example_nums,
+                num_processes=num_processes,
+                prompt_types=val_prompt_types,
+            )
+            val_dataloader = DataLoader(
+                dataset=val_dataset,
+                **dataloader_args,
+                collate_fn=val_dataset.collate_fn,
+                batch_sampler=val_batch_sampler,
+            )
+            val_dataloaders[dataset] = val_dataloader
     else:
         val_dataloader = None
     if test_datasets_params:
@@ -111,6 +119,6 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         test_dataloaders = None
     return (
         train_dataloader,
-        val_dataloader,
+        val_dataloaders,
         test_dataloaders,
     )

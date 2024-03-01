@@ -449,8 +449,9 @@ class WandBLogger(AbstractLogger):
         dataset,
         dataset_names,
         phase,
+        run_idx,
     ):
-        if log_every_n(image_idx, self.prefix_frequency_dict[phase]):
+        if log_every_n(image_idx, self.prefix_frequency_dict[phase]) and run_idx == 0:
             query_images = [
                 dataset.load_and_preprocess_images(dataset_name, [ids[0]])[0]
                 for dataset_name, ids in zip(dataset_names, input_dict["image_ids"])

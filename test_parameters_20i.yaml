@@ -90,17 +90,20 @@ parameters:
         val_fold_idx: [0]
         remove_small_annotations: [True]
         n_folds: [4]
-      val_coco20i:
+      val_coco20i_N1K1: &val_coco20i_N1K1
         name: [coco]
         instances_path: [data/annotations/instances_val2014.json]
         img_dir: *img_dir
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
-        n_shots: [2]
-        n_ways: [2]
+        n_shots: [1]
+        n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
+      val_coco20i_N2K1:
+        <<: *val_coco20i_N1K1
+        n_ways: [2]
     common:
       do_subsample: [True]
       add_box_noise: [True]
