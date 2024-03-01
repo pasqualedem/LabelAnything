@@ -92,11 +92,13 @@ class Run:
         if not self.prompt_encoder_params or self.model is None:
             return
         pe_params = deepcopy(self.prompt_encoder_params)
-        pe_params['params']['prompt_encoder'] = self.model.prompt_encoder
-        contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params['params'])
-        state_dict = torch.load(self.prompt_encoder_params['checkpoint'])
+        pe_params["params"]["prompt_encoder"] = self.model.prompt_encoder
+        contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params["params"])
+        state_dict = torch.load(self.prompt_encoder_params["checkpoint"])
         contrastive_prompt_encoder.load_state_dict(state_dict)
-        self.model.prompt_encoder.load_state_dict(contrastive_prompt_encoder.prompt_encoder.state_dict())
+        self.model.prompt_encoder.load_state_dict(
+            contrastive_prompt_encoder.prompt_encoder.state_dict()
+        )
 
     def init(self, params: dict):
         set_seed(params["train_params"]["seed"])
@@ -152,8 +154,12 @@ class Run:
 
     def _prep_for_training(self):
         logger.info("Creating optimizer")
+        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+            params = self.model.module.get_learnable_params(self.train_params)
+        else:
+            params = self.model.get_learnable_params(self.train_params)
         self.optimizer = AdamW(
-            self.model.get_learnable_params(self.train_params),
+            params,
             lr=self.train_params["initial_lr"],
         )
 
@@ -171,7 +177,9 @@ class Run:
         )
 
     def _prep_for_validation(self):
-        self.val_loaders = {k: self.accelerator.prepare(v) for k, v in self.val_loaders.items()}
+        self.val_loaders = {
+            k: self.accelerator.prepare(v) for k, v in self.val_loaders.items()
+        }
 
     def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
@@ -437,7 +445,9 @@ class Run:
         # setting prompt encoder parameters
         if self.prompt_encoder_params:
             for p in self.model.module.model.prompt_encoder.parameters():
-                p.requires_grad = (epoch >= self.train_params.get('freeze_params_max_epoch', 0))
+                p.requires_grad = epoch >= self.train_params.get(
+                    "freeze_params_max_epoch", 0
+                )
 
         for batch_idx, batch_tuple in bar:
             batch_tuple, dataset_names = batch_tuple
@@ -495,7 +505,7 @@ class Run:
                         dataset=self.train_loader.dataset,
                         dataset_names=dataset_names,
                         phase="train",
-                        run_idx=0 # Used for validation
+                        run_idx=0,  # Used for validation
                     )
                     substitutor.generate_new_points(outputs, gt)
                     bar.set_postfix(
@@ -539,7 +549,7 @@ class Run:
         self.validation_json["json"][validation_run].append(
             input_dict[BatchKeys.IMAGE_IDS]
         )
-        
+
     def validate(self, epoch: int, generate_json=False):
         metrics = []
         for name, dataloader in self.val_loaders.items():
@@ -548,7 +558,9 @@ class Run:
                 name = names[-1]
             else:
                 name = ""
-            dataloader_metrics = self.validate_dataloader(name, dataloader, epoch, generate_json=generate_json)
+            dataloader_metrics = self.validate_dataloader(
+                name, dataloader, epoch, generate_json=generate_json
+            )
             metrics.append(dataloader_metrics)
         mean_metrics = {
             k: torch.stack([torch.tensor(m[k]) for m in metrics]).mean()
@@ -556,8 +568,10 @@ class Run:
         }
         logger.info(f"Validation epoch {epoch} finished")
         return mean_metrics
-        
-    def validate_dataloader(self, name, val_dataloader, epoch: int, generate_json=False):
+
+    def validate_dataloader(
+        self, name, val_dataloader, epoch: int, generate_json=False
+    ):
         logger.info(f"Validation of {name} epoch {epoch} started")
         if generate_json:
             self.validation_json = {
@@ -601,9 +615,7 @@ class Run:
 
         self.model.eval()
         avg_loss = RunningAverage()
-        dataset_categories = next(
-            iter(val_loader.dataset.datasets.values())
-        ).categories
+        dataset_categories = next(iter(val_loader.dataset.datasets.values())).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
@@ -690,7 +702,9 @@ class Run:
 
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
-            logger.info(f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}")
+            logger.info(
+                f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}"
+            )
         logger.info(
             f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
         )
