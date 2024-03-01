@@ -250,7 +250,10 @@ class RandomMatrixEncoder(nn.Module):
             dense_embeddings (torch.Tensor): Dense embeddings with shape B x M x C x D x H x W
         """
         B, M, C, N, D = sparse_embeddings.shape
-        selected_rows = torch.randperm(C, device=sparse_embeddings.device)
+        fg_rows = torch.randperm(self.bank_size - 1, device=sparse_embeddings.device)[:C-1] + 1
+        bg_rows = torch.zeros(1, device=sparse_embeddings.device, dtype=torch.long)
+        selected_rows = torch.cat([bg_rows, fg_rows])
+        
         class_encoding = self.pos_embedding[:, :, selected_rows]  # 1 x 1 x C x D
         sparse_class_encoding = repeat(class_encoding, "1 1 c d -> b m c n d", b=B, m=M, n=N)
         sparse_embeddings = sparse_embeddings + sparse_class_encoding
