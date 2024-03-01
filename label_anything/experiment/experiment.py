@@ -320,6 +320,8 @@ class Experimenter:
                     )
                     run = Run()
                     run.init({"experiment": {**self.exp_settings}, **params})
+                    run._prep_for_training()
+                    run._prep_for_validation()
                     yield status_manager.update_run(
                         run.name,
                         run.url,

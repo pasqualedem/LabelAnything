@@ -119,7 +119,7 @@ class Run:
         self.plat_logger = get_experiment_logger(self.accelerator, self.params)
         self.url = self.plat_logger.url
         self.name = self.plat_logger.name
-        self.train_loader, self.val_loader, self.test_loader = get_dataloaders(
+        self.train_loader, self.val_loaders, self.test_loader = get_dataloaders(
             self.dataset_params,
             self.dataloader_params,
             self.accelerator.num_processes,
@@ -144,7 +144,7 @@ class Run:
 
         self.model = self.accelerator.prepare(self.model)
 
-        if self.val_loader:
+        if self.val_loaders:
             logger.info("Preparing validation dataloader")
             self._prep_for_validation()
 
@@ -171,7 +171,7 @@ class Run:
         )
 
     def _prep_for_validation(self):
-        self.val_loader = self.accelerator.prepare(self.val_loader)
+        self.val_loaders = {k: self.accelerator.prepare(v) for k, v in self.val_loaders.items()}
 
     def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
@@ -239,7 +239,7 @@ class Run:
                 self.train_epoch(epoch)
 
                 metrics = None
-                if self.val_loader:
+                if self.val_loaders:
                     with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
                         metrics = self.validate(epoch)
@@ -495,6 +495,7 @@ class Run:
                         dataset=self.train_loader.dataset,
                         dataset_names=dataset_names,
                         phase="train",
+                        run_idx=0 # Used for validation
                     )
                     substitutor.generate_new_points(outputs, gt)
                     bar.set_postfix(
@@ -538,8 +539,26 @@ class Run:
         self.validation_json["json"][validation_run].append(
             input_dict[BatchKeys.IMAGE_IDS]
         )
-
+        
     def validate(self, epoch: int, generate_json=False):
+        metrics = []
+        for name, dataloader in self.val_loaders.items():
+            names = name.split("_")
+            if len(names) > 1:
+                name = names[-1]
+            else:
+                name = ""
+            dataloader_metrics = self.validate_dataloader(name, dataloader, epoch, generate_json=generate_json)
+            metrics.append(dataloader_metrics)
+        mean_metrics = {
+            k: torch.stack([torch.tensor(m[k]) for m in metrics]).mean()
+            for k in metrics[0].keys()
+        }
+        logger.info(f"Validation epoch {epoch} finished")
+        return mean_metrics
+        
+    def validate_dataloader(self, name, val_dataloader, epoch: int, generate_json=False):
+        logger.info(f"Validation of {name} epoch {epoch} started")
         if generate_json:
             self.validation_json = {
                 "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
@@ -550,28 +569,28 @@ class Run:
         else:
             overall_metrics = []
             for validation_run in range(self.train_params["validation_reruns"]):
-                metrics = self.validate_run(epoch, validation_run)
+                metrics = self.validate_run(name, val_dataloader, epoch, validation_run)
                 overall_metrics.append(metrics)
             metrics = {
                 k: torch.stack([torch.tensor(m[k]) for m in overall_metrics]).mean()
                 for k in overall_metrics[0].keys()
             }
             self.plat_logger.log_metrics(
-                {**{"avg_" + k: v for k, v in metrics.items()}},
+                {**{"avg_" + k + name: v for k, v in metrics.items()}},
                 epoch=epoch,
             )
             for k, v in metrics.items():
-                logger.info(f"Validation epoch {epoch} - {k}: {v}")
+                logger.info(f"Validation epoch {epoch} - {name} - {k}: {v}")
 
         if generate_json:
             with open(self.validation_json["file"], "w") as f:
                 json.dump(self.validation_json["json"], f)
             self.validation_json = None
 
-        logger.info(f"Validation epoch {epoch} finished")
+        logger.info(f"Validation of {name} epoch {epoch} finished")
         return metrics
 
-    def validate_run(self, epoch, validation_run=None):
+    def validate_run(self, name, val_loader, epoch, validation_run=None):
         if validation_run is None:
             seed = self.params["train_params"]["seed"]
             metrics_suffix = ""
@@ -583,7 +602,7 @@ class Run:
         self.model.eval()
         avg_loss = RunningAverage()
         dataset_categories = next(
-            iter(self.val_loader.dataset.datasets.values())
+            iter(val_loader.dataset.datasets.values())
         ).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
@@ -604,8 +623,8 @@ class Run:
         tot_steps = 0
         tot_images = 0
         bar = tqdm(
-            enumerate(self.val_loader),
-            total=len(self.val_loader),
+            enumerate(val_loader),
+            total=len(val_loader),
             postfix={"loss": 0},
             desc=f"Validation Epoch {epoch}",
             disable=not self.accelerator.is_local_main_process,
@@ -651,9 +670,10 @@ class Run:
                     input_shape=self.input_image_size,
                     gt=gt,
                     pred=outputs,
-                    dataset=self.val_loader.dataset,
+                    dataset=val_loader.dataset,
                     dataset_names=dataset_names,
                     phase="val",
+                    run_idx=validation_run,
                 )
                 tot_steps += 1
                 self.global_val_step += 1
@@ -661,7 +681,7 @@ class Run:
 
             self.plat_logger.log_metrics(
                 {
-                    **{"avg_" + k: v for k, v in metrics.compute().items()},
+                    **{"avg_" + k + name: v for k, v in metrics.compute().items()},
                     "avg_loss": avg_loss.compute(),
                 },
                 epoch=epoch,
@@ -670,7 +690,7 @@ class Run:
 
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
-            logger.info(f"Validation {metrics_suffix[1:]} epoch {epoch} - {k}: {v}")
+            logger.info(f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}")
         logger.info(
             f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
         )
