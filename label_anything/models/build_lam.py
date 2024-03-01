@@ -18,6 +18,7 @@ from . import (
     BinaryLam,
     OneWayTransformer,
     TwoWayTransformer,
+    RandomMatrixEncoder,
 )
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
 
@@ -69,6 +70,7 @@ def _build_lam(
     use_broken_no_mask=False,
     use_background_embedding=False,
     fusion_transformer="TwoWayTransformer",
+    class_encoder=None,
     segment_example_logits=False,
     dropout: float = 0.0,
     binary=False,
@@ -85,6 +87,12 @@ def _build_lam(
                 num_heads=8,
                 attention_downsample_rate=decoder_attention_downsample_rate,
             )
+    if class_encoder is not None:
+        cls = globals()[class_encoder['name']]
+        params = {k: v for k, v in class_encoder.items() if k != 'name'}
+        class_encoder = cls(**params)
+    else:
+        class_encoder = nn.Identity()
     
     neck = None if image_embed_dim == embed_dim else nn.Sequential(
             nn.Conv2d(
@@ -126,6 +134,7 @@ def _build_lam(
                 num_heads=8,
                 dropout=dropout,
             ),
+            class_encoder=class_encoder,
         ),
         mask_decoder=MaskDecoderLam(
             transformer_dim=embed_dim,

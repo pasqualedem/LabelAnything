@@ -10,7 +10,7 @@ from .sam import Sam, AdaptedSam
 from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder, MaskDecoderLam
-from .prompt_encoder import PromptEncoder, PromptImageEncoder
+from .prompt_encoder import PromptEncoder, PromptImageEncoder, RandomMatrixEncoder
 from .transformer import OneWayTransformer, TwoWayTransformer
 from .build_sam import build_sam_vit_b, build_sam_vit_h, build_sam_vit_l, build_asam_vit_b
 from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_lam, build_lam_no_vit

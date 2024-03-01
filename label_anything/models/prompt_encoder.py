@@ -233,6 +233,35 @@ class PositionEmbeddingRandom(nn.Module):
         return self._pe_encoding(coords)  # B x N x C
 
 
+class RandomMatrixEncoder(nn.Module):
+    def __init__(self, bank_size, embed_dim):
+        super().__init__()
+        seed = 42
+        self.bank_size = bank_size
+        self.embed_dim = embed_dim
+        self.pos_embedding = nn.Parameter(torch.zeros(1, 1, bank_size, embed_dim))
+        nn.init.normal_(self.pos_embedding, std=0.02)
+
+    def forward(self, dense_embeddings, sparse_embeddings):
+        """Adds random class embedding
+
+        Args:
+            sparse_embeddings (torch.Tensor): Sparse embeddings with shape B x M x C x N x D
+            dense_embeddings (torch.Tensor): Dense embeddings with shape B x M x C x D x H x W
+        """
+        B, M, C, N, D = sparse_embeddings.shape
+        selected_rows = torch.randperm(C, device=sparse_embeddings.device)
+        class_encoding = self.pos_embedding[:, :, selected_rows]  # 1 x 1 x C x D
+        sparse_class_encoding = repeat(class_encoding, "1 1 c d -> b m c n d", b=B, m=M, n=N)
+        sparse_embeddings = sparse_embeddings + sparse_class_encoding
+
+        B, M, C, D, H, W = dense_embeddings.shape
+        dense_class_encoding = repeat(class_encoding, "1 1 c d -> b m c d h w", b=B, m=M, h=H, w=W)
+        dense_embeddings = dense_embeddings + dense_class_encoding
+
+        return dense_embeddings, sparse_embeddings
+
+
 class PromptImageEncoder(PromptEncoder):
     def __init__(
         self,
@@ -241,6 +270,7 @@ class PromptImageEncoder(PromptEncoder):
         input_image_size: Tuple[int, int],
         mask_in_chans: int,
         transformer: nn.Module,
+        class_encoder: nn.Module,
         class_example_attention: bool = True,
         class_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
@@ -272,6 +302,7 @@ class PromptImageEncoder(PromptEncoder):
         mlp_dim: int = 2048
 
         self.transformer = transformer
+        self.class_encoder = class_encoder
 
         self.sparse_embedding_attention = AttentionMLPBlock(
             embed_dim=embed_dim,
@@ -531,7 +562,12 @@ class PromptImageEncoder(PromptEncoder):
         """
 
     def sparse_dense_fusion(self, src, pos_src, sparse_embeddings, chunk_size=None):
-        _, _, h, w = src.shape
+        b, m, c, d, h, w = src.shape
+        src, sparse_embeddings = self.class_encoder(
+            src, sparse_embeddings
+        )  # Inject class awareness
+        src = rearrange(src, "b m c d h w -> (b m c) d h w")
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m c) n d")
         if chunk_size is None:
             return rearrange(
                 self.transformer(src, pos_src, sparse_embeddings)[1],
@@ -599,6 +635,10 @@ class PromptImageEncoder(PromptEncoder):
         )
 
         # Run the transformer to fuse the dense embeddings and sparse embeddings
+        src = rearrange(src, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
+        sparse_embeddings = rearrange(
+            sparse_embeddings, "(b m c) n d -> b m c n d", b=b, m=m, c=c
+        )
         src = self.sparse_dense_fusion(
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
