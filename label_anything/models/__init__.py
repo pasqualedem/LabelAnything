@@ -13,7 +13,7 @@ from .mask_decoder import MaskDecoder, MaskDecoderLam
 from .prompt_encoder import PromptEncoder, PromptImageEncoder, RandomMatrixEncoder
 from .transformer import OneWayTransformer, TwoWayTransformer
 from .build_sam import build_sam_vit_b, build_sam_vit_h, build_sam_vit_l, build_asam_vit_b
-from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_lam, build_lam_no_vit
+from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_lam, build_lam_no_vit, build_lam_vit_mae_b
 from .build_vit import build_vit_b, build_vit_h, build_vit_l
 from .samfew import SAMFewShotModel
 from .dcama import build_dcama
@@ -29,6 +29,7 @@ model_registry = {
     "lam_h": build_lam_vit_h,
     "lam_l": build_lam_vit_l,
     "lam_b": build_lam_vit_b,
+    "lam_mae_b": build_lam_vit_mae_b,
     "sam": build_sam_vit_h,
     "sam_h": build_sam_vit_h,
     "sam_l": build_sam_vit_l,

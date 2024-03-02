@@ -249,6 +249,8 @@ class WrapperModule(torch.nn.Module):
     def get_learnable_params(self, train_params):
         model_params = list(self.model.get_learnable_params(train_params))
         loss_params = list(self.loss.parameters())
+        if isinstance(model_params[0], dict):
+            loss_params = [{"params": loss_params}]
         return model_params + loss_params
     
     @property

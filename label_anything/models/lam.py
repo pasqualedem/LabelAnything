@@ -269,10 +269,19 @@ class Lam(nn.Module):
             return not "image_encoder" in x[0]
 
         freeze_pretrained = training_params.get("freeze_backbone", False)
+        if freeze_pretrained and "backbone_lr" in training_params:
+            raise ValueError(
+                "Cannot freeze the backbone and set a learning rate for it at the same time."
+            )
         if freeze_pretrained:
             for param in self.image_encoder.parameters():
                 param.requires_grad = False
             return [x[1] for x in filter(f, list(self.named_parameters()))]
+        if "backbone_lr" in training_params:
+            return [
+                {"params": self.image_encoder.parameters(), "lr": training_params["backbone_lr"]},
+                {"params": [x[1] for x in filter(f, list(self.named_parameters()))]},
+            ]
         return self.parameters()
 
     def generate_class_embeddings(self, example_dict, chunk_size=None):

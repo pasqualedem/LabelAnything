@@ -47,6 +47,7 @@ parameters:
     max_epochs: [4]
     compile: [False]
     initial_lr: [0.00001]
+    backbone_lr: [0.00001]
     optimizer: [AdamW]
     scheduler:
       type: [cosine]
@@ -57,23 +58,17 @@ parameters:
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
     validation_reruns: [2]
     watch_metric: [loss] # metric to watch for early stopping and scheduler (loss or miou)
-    freeze_backbone: [True]
+    freeze_backbone: [False]
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
-    checkpoint: [checkpoints/sam_vit_b_01ec64.pth] # model parameters
-    use_sam_checkpoint: [True]
+    name: [lam_mae_b] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [True]
-    example_class_attention: [True]
     example_attention: [True]
-    segment_example_logits: [True]
-    image_embed_dim: [256]
+    image_embed_dim: [768]
     embed_dim: &embed_dim [256]
-    image_size: &image_size [1024]
-    use_background_embedding: [True]
-    dropout: [0.1]
+    image_size: &image_size [480]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]
@@ -109,7 +104,7 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      image_size: [1024]
+      image_size: *image_size
   dataloader:
     num_workers: [0]
     possible_batch_example_nums: [[[1, 1]]]

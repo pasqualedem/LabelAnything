@@ -1,5 +1,8 @@
+from einops import rearrange
 import torch
 from functools import partial
+
+from transformers import ViTModel
 
 from .image_encoder import ImageEncoderViT
 
@@ -76,3 +79,17 @@ def _build_vit(
             }
         vit.load_state_dict(weights)
     return vit
+
+
+class ViTModelWrapper(ViTModel):
+    def forward(self, x):
+        h, w = x.shape[-2:]
+        output = super().forward(x, interpolate_pos_encoding=True)
+        hs = output.last_hidden_state[:, 1:, :]
+        out = rearrange(hs, "b (h w) c -> b c h w", h=h//16).contiguous()
+        return out
+
+
+def build_vit_b_mae(project_last_hidden=False):
+    vit_mae = ViTModelWrapper.from_pretrained("facebook/vit-mae-base")
+    return vit_mae

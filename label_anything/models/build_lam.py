@@ -20,7 +20,7 @@ from . import (
     TwoWayTransformer,
     RandomMatrixEncoder,
 )
-from .build_vit import build_vit_b, build_vit_h, build_vit_l
+from .build_vit import build_vit_b, build_vit_h, build_vit_l, build_vit_b_mae
 
 
 def build_lam_vit_h(**kwargs):
@@ -40,6 +40,13 @@ def build_lam_vit_l(**kwargs):
 def build_lam_vit_b(**kwargs):
     return _build_lam(
         build_vit_b,
+        **kwargs,
+    )
+    
+    
+def build_lam_vit_mae_b(**kwargs):
+    return _build_lam(
+        build_vit_b_mae,
         **kwargs,
     )
 
