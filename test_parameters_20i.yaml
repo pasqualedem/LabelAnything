@@ -80,7 +80,7 @@ parameters:
       coco20i:
         name: [coco]
         instances_path: [data/annotations/instances_train2014.json]
-        img_dir: &img_dir [/ext/stalla/LabelAnything/images/train2017]
+        img_dir: &img_dir [data/images/train2017]
         split: ["train"]
         val_fold_idx: [0]
         remove_small_annotations: [True]
@@ -107,7 +107,7 @@ parameters:
       image_size: *image_size
   dataloader:
     num_workers: [0]
-    possible_batch_example_nums: [[[1, 1]]]
+    possible_batch_example_nums: [[[1, 2, 2]]]
     val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     val_prompt_types: [["mask"]]
