@@ -209,9 +209,7 @@ class MaskDecoderLam(nn.Module):
                 transformer_dim // classification_layer_downsample_rate,
                 kernel_size=2,
                 stride=2,
-            ),
-            activation(),
-            nn.Dropout2d(dropout) if dropout > 0 else nn.Identity(),
+            )
         )
         self.transformer = transformer
         self.spatial_convs = None
@@ -232,7 +230,7 @@ class MaskDecoderLam(nn.Module):
                             transformer_dim // classification_layer_downsample_rate
                         )
                     )
-                module_list.append(activation())
+                    module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
         self.class_mlp = MLP(
             transformer_dim,
