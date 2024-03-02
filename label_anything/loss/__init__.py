@@ -2,6 +2,7 @@ import torch.nn as nn
 import torch
 
 from label_anything.data.utils import BatchKeys
+from label_anything.loss.fp import FalsePositiveLoss
 
 from .dice import DiceLoss
 from .focal import FocalLoss
@@ -15,6 +16,7 @@ LOGITS_LOSSES = {
     "focal": FocalLoss,
     "dice": DiceLoss,
     "rmi": RMILoss,
+    "fp": FalsePositiveLoss
 }
 
 PROMPT_LOSSES = {

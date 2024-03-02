@@ -37,7 +37,7 @@ parameters:
         #     weight: 0.485
         - focal:
             weight: 0.5
-          dice:
+          fp:
             weight: 0.025
           prompt_contrastive:
             weight: 0.475
