@@ -49,7 +49,7 @@ parameters:
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
-    name: [lam_vit_mae_b] # path to model class or model name contained in EzDL or super-gradients
+    name: [lam_mae_b] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [True]
     example_attention: [True]
