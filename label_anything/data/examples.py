@@ -10,7 +10,7 @@ class SamplingFailureException(Exception):
 
 
 def sample_uniform(N, num_samples=1):
-    return torch.randint(low=1, high=N, size=(num_samples, ))
+    return torch.randint(low=1, high=N, size=(num_samples,))
 
 
 def sample_power_law(N, alpha, num_samples=1):
@@ -136,8 +136,65 @@ class ExampleGenerator:
                     frequencies[cls] = 0
                 return images_containing, [cls], frequencies
 
+    def _generate_examples_fixed_classes(
+        self,
+        query_image_id,
+        image_classes,
+        sampled_classes,
+        num_examples,
+        num_classes,
+    ):
+        categories = list(self.categories_to_imgs.keys())
+        classes = [categories[i] for i in torch.randperm(len(categories))[:num_classes]]
+        query_classes = classes.copy()
+        random_class = torch.rand(1) > 0.5
+        if random_class:
+            query_classes = [classes[torch.randint(len(classes), size=(1,)).item()]]
+            query_image_id = self.image_sample_function(
+                self.categories_to_imgs[query_classes[0]], []
+            )
+        else:
+            while True:
+                images_containing = self.get_image_ids_intersection(query_classes, [])
+                if len(images_containing) > 0:
+                    query_image_id = self.image_sample_function(
+                        images_containing,
+                        [],
+                    )
+                    break
+                query_classes.pop()
+                if len(query_classes) == 0:
+                    raise SamplingFailureException(
+                        "Cannot find an image containing the classes in the query image."
+                    )
+        image_ids = [query_image_id]
+        total_query_classes = self.images_to_categories[query_image_id]
+        total_query_classes = {cls for cls in total_query_classes if cls in classes}
+        example_sampled_classes = [total_query_classes]
+        for i in range(num_examples):
+            for cls in classes:
+                example_image_ids = self.categories_to_imgs[cls]
+                example_id = self.image_sample_function(
+                    example_image_ids,
+                    image_ids,
+                )
+                image_ids.append(example_id)
+                example_sampled_classes.append(
+                    {
+                        cat
+                        for cat in self.images_to_categories[example_id]
+                        if cat in classes
+                    }
+                )
+        return image_ids, example_sampled_classes
+
     def generate_examples(
-        self, query_image_id, image_classes, sampled_classes, num_examples
+        self,
+        query_image_id,
+        image_classes,
+        sampled_classes,
+        num_examples,
+        num_classes,
     ):
         """
         Generates examples for a given query image and a set of classes.
@@ -151,11 +208,20 @@ class ExampleGenerator:
             sampled_classes (torch.Tensor): list of sampled classes, to use to select the examples
             categories_to_imgs (dict): dictionary mapping category ids to image ids
             num_examples (int): number of examples to generate
+            num_classes (int): number of classes to sample for each example (can be None)
 
         Returns:
             image_ids (list): list of image ids of the sampled examples
             examples_sampled_classes (list): list of sets of classes sampled for each example
         """
+        if num_classes is not None:
+            return self._generate_examples_fixed_classes(
+                query_image_id,
+                image_classes,
+                sampled_classes,
+                num_examples,
+                num_classes,
+            )
         examples_sampled_classes = []
         image_ids = [query_image_id]
         frequencies = {k: 0 for k in sampled_classes.tolist()}

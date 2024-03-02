@@ -387,6 +387,7 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["train_params"]["seed"] + epoch)
+            logger.info(f"Setting seed to {self.params['train_params']['seed'] + epoch}")
         self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(

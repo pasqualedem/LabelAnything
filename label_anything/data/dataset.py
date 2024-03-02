@@ -233,6 +233,7 @@ def get_batch_metadata(
     examples_nums = []
     batch_sizes = []
     prompt_types = []
+    num_classes = []
     combs = [
         list(itertools.combinations(possible_prompts, i))
         for i in range(1, len(possible_prompts) + 1)
@@ -240,13 +241,22 @@ def get_batch_metadata(
     multi_combs = [x for comb in combs for x in comb]
     remaining_images = dataset_len // num_processes
     while remaining_images > 0:
-        cur_batch_size, examples_num = random.choice(possible_batch_example_nums)
+        res = random.choice(possible_batch_example_nums)
+        num_class = None
+        if len(res) == 2:
+            cur_batch_size, examples_num = res
+        elif len(res) == 3:
+            cur_batch_size, num_class, examples_num = res
+        else:
+            raise ValueError("Invalid number of elements in the batch metadata.")
         if cur_batch_size > remaining_images:
             cur_batch_size = remaining_images
         prompt_type = random.choice(multi_combs)
         prompt_types.append(prompt_type)
         examples_nums.append(examples_num)
         batch_sizes.append(cur_batch_size)
+        if num_class is not None:
+            num_classes.append(num_class)
         remaining_images -= cur_batch_size
 
     batch_sizes = [
@@ -264,6 +274,11 @@ def get_batch_metadata(
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
         utils.BatchMetadataKeys.PROMPT_TYPES: prompt_types,
     }
+    if len(num_classes) > 0:
+        num_classes = [
+            val for tup in zip(*[num_classes for i in range(num_processes)]) for val in tup
+        ]
+        batch_metadata[utils.BatchMetadataKeys.NUM_CLASSES] = num_classes
 
     return batch_sizes, batch_metadata
 
@@ -363,7 +378,9 @@ class VariableBatchSampler(BatchSampler):
     def __iter__(self):
         if self.do_shuffle:
             self.shuffle()
-        indices = self.sampler.__iter__()
+            indices = iter(list(torch.randperm(len(self.sampler.data_source)).tolist()))
+        else:
+            indices = self.sampler.__iter__()
 
         for i, batch_size in enumerate(self.batch_sizes):
             metadata = {k: v[i] for k, v in self.batch_metadata.items()}

@@ -291,7 +291,7 @@ class CocoLVISDataset(Dataset):
         ]
 
     def _extract_examples(
-        self, img_data: dict, num_examples: int
+        self, img_data: dict, num_examples: int, num_classes: int
     ) -> (list[int], list[int]):
         """Chooses examples (and categories) for the query image.
 
@@ -315,6 +315,7 @@ class CocoLVISDataset(Dataset):
             image_classes=img_cats,
             sampled_classes=torch.tensor(sampled_classes),
             num_examples=num_examples,
+            num_classes=num_classes,
         )
 
     def _sample_num_points(self, image_id: int, ann: dict) -> int:
@@ -566,9 +567,10 @@ class CocoLVISDataset(Dataset):
 
         num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
         possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
+        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
 
         base_image_data = self.images[self.image_ids[idx]]
-        image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples)
+        image_ids, aux_cat_ids = self._extract_examples(base_image_data, num_examples, num_classes)
 
         if self.all_example_categories:
             aux_cat_ids = [aux_cat_ids[0]] + [
