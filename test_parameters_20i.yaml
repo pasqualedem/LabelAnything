@@ -107,7 +107,7 @@ parameters:
       image_size: *image_size
   dataloader:
     num_workers: [0]
-    possible_batch_example_nums: [[[1, 2, 2]]]
+    possible_batch_example_nums: [[[2, 2, 1]]]
     val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     val_prompt_types: [["mask"]]
