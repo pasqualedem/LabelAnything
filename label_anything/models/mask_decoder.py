@@ -396,7 +396,7 @@ class AffinityDecoder(nn.Module):
         c = support_masks.shape[2]
         class_examples_embeddings = class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS] # b n c d
         class_examples_embeddings = rearrange(class_examples_embeddings, "b n c d -> b n c d () ()")
-        support_masks = support_masks + class_examples_embeddings
+        support_masks = support_masks * class_examples_embeddings
     
         query_embeddings = repeat(query_embeddings, 'b d h w -> (b c) (h w) d', c=c)
         support_embeddings = repeat(support_embeddings, "b n d h w -> (b c) (n h w) d", c=c)

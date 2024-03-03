@@ -19,7 +19,7 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
-      tags: [[Affinity, Sum]]
+      tags: [[Affinity, Mul]]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
