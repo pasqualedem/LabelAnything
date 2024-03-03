@@ -336,7 +336,7 @@ class AffinityBlock(nn.Module):
             dropout=dropout,
         )
         
-    def forward(self, image_features, support_features, support_masks, image_pe):
+    def forward(self, image_features, support_features, support_masks, image_pe, attn_mask):
         bc = image_features.shape[0]
         query_image_pe = repeat(image_pe, '1 d h w -> bc (h w) d', bc=bc)
         shots = support_features.shape[1] // image_features.shape[1]
@@ -344,7 +344,7 @@ class AffinityBlock(nn.Module):
         queries = image_features + query_image_pe
         keys = support_features + support_image_pe
         values = support_masks
-        return self.attention(queries, keys, values)
+        return self.attention(queries, keys, values, attn_mask)
         
 
 class AffinityTransformer(nn.Module):
@@ -360,6 +360,7 @@ class AffinityTransformer(nn.Module):
     ) -> None:
         super().__init__()
         self.layers = nn.ModuleList()
+        self.num_heads = num_heads
         for i in range(depth):
             self.layers.append(
                 AffinityBlock(
@@ -378,7 +379,14 @@ class AffinityTransformer(nn.Module):
         support_features: Tensor,
         support_masks: Tensor,
         image_pe: Tensor,
+        flag_examples: Tensor,
+        batch_mask: Tensor,
     ) -> Tuple[Tensor, Tensor]:
+        hw = image_embedding.shape[1]
+        attn_mask = repeat(flag_examples, "b n c -> (b c) (n hw)", hw=hw)
+        attn_mask = repeat(attn_mask, "b shots -> b hw shots", hw=hw)
+        attn_mask = repeat(attn_mask, "b hw shots -> b c hw shots ", c=self.num_heads)
+        attn_mask = attn_mask[batch_mask]
         for layer in self.layers:
-            image_embedding = layer(image_embedding, support_features, support_masks, image_pe)
+            image_embedding = layer(image_embedding, support_features, support_masks, image_pe, attn_mask)
         return image_embedding

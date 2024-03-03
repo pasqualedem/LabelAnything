@@ -91,7 +91,7 @@ class Attention(nn.Module):
         x = x.transpose(1, 2)
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask=None) -> torch.Tensor:
         # Input projections
         q = self.q_proj(q)
         k = self.k_proj(k)
@@ -106,6 +106,12 @@ class Attention(nn.Module):
         _, _, _, c_per_head = q.shape
         attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
+        if attn_mask is not None:
+            # Put 0 in attn_mask where is 1 and -inf where is 0
+            mask = torch.zeros_like(attn_mask, device=attn_mask.device, dtype=attn.dtype)
+            mask[attn_mask == 0] = float("-inf")
+            mask[attn_mask == 1] = 0
+            attn = attn + mask
         attn = torch.softmax(attn, dim=-1)
         attn = self.drop(attn)
 
@@ -132,11 +138,11 @@ class AttentionMLPBlock(nn.Module):
         self.mlp = MLPBlock(embed_dim, mlp_dim, act, dropout=dropout)
         self.attn = Attention(embed_dim, num_heads=num_heads, downsample_rate=downsample_rate, dropout=dropout)
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor = None, v: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, q: torch.Tensor, k: torch.Tensor = None, v: torch.Tensor = None, attn_mask=None) -> torch.Tensor:
         if k is None:
             k = q
         if v is None:
             v = q
-        attn_out = self.norm(self.attn(q, k, v) + q)
+        attn_out = self.norm(self.attn(q, k, v, attn_mask) + q)
         return self.norm(self.mlp(attn_out) + attn_out)
         

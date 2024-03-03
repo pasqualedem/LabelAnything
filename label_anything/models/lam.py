@@ -125,6 +125,7 @@ class Lam(nn.Module):
             support_embeddings=prompt_embeddings,
             image_pe=self.get_dense_pe(),
             class_embeddings=pe_result,
+            flag_examples=flag_examples,
         )
         return seg, pe_result
 

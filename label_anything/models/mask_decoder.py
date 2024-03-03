@@ -210,7 +210,7 @@ class MaskDecoderLam(nn.Module):
                 transformer_dim // classification_layer_downsample_rate,
                 kernel_size=2,
                 stride=2,
-            )
+            ),
         )
         self.transformer = transformer
         self.spatial_convs = None
@@ -247,6 +247,7 @@ class MaskDecoderLam(nn.Module):
         support_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
         class_embeddings: torch.Tensor,
+        flag_examples: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -285,8 +286,8 @@ class MaskDecoderLam(nn.Module):
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
             seg = seg.max(dim=1).values
         return seg
-    
-    
+
+
 class AffinityDecoder(nn.Module):
     def __init__(
         self,
@@ -314,12 +315,19 @@ class AffinityDecoder(nn.Module):
         self.transformer_feature_size = None
         self.class_fusion = class_fusion
         if transformer_feature_size is not None:
-            self.transformer_feature_size = (transformer_feature_size, transformer_feature_size)
+            self.transformer_feature_size = (
+                transformer_feature_size,
+                transformer_feature_size,
+            )
 
-        first_layer_depth = transformer_dim // (classification_layer_downsample_rate * 4)
-        second_layer_depth = transformer_dim // (classification_layer_downsample_rate * 2)
+        first_layer_depth = transformer_dim // (
+            classification_layer_downsample_rate * 4
+        )
+        second_layer_depth = transformer_dim // (
+            classification_layer_downsample_rate * 2
+        )
         third_layer_depth = transformer_dim // classification_layer_downsample_rate
-        
+
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(
                 transformer_dim,
@@ -366,14 +374,10 @@ class AffinityDecoder(nn.Module):
                     )
                 )
                 if i < spatial_convs - 1:
-                    module_list.append(
-                        LayerNorm2d(
-                            transformer_dim
-                        )
-                    )
+                    module_list.append(LayerNorm2d(transformer_dim))
                     module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
-            
+
     def rescale_for_transformer(self, query, support=None, mask=None, size=None):
         if self.transformer_feature_size is not None:
             size = size if size is not None else self.transformer_feature_size
@@ -389,7 +393,7 @@ class AffinityDecoder(nn.Module):
                 mask = F.interpolate(mask, size=size, mode="bilinear")
                 mask = rearrange(mask, "(b n c) d h w -> b n c d h w", b=b, n=n)
         return query, support, mask
-    
+
     def _apply_classes_to_features(self, features, classes):
         if self.class_fusion == "sum":
             classes = rearrange(classes, "b n c d -> b n c d () ()")
@@ -414,6 +418,7 @@ class AffinityDecoder(nn.Module):
         support_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
         class_embeddings: torch.Tensor,
+        flag_examples: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict masks given image and prompt embeddings.
@@ -427,32 +432,64 @@ class AffinityDecoder(nn.Module):
           torch.Tensor: batched predicted segmentations
         """
         b, n, d, h, w = support_embeddings.shape
-        
-        support_masks = class_embeddings[ResultDict.EXAMPLES_CLASS_SRC] # (b n c) h w
-        support_masks = rearrange(support_masks, "(b n c) d (h w) -> b n c d h w", b=b, n=n, h=h)
+
+        support_masks = class_embeddings[ResultDict.EXAMPLES_CLASS_SRC]  # (b n c) h w
+        support_masks = rearrange(
+            support_masks, "(b n c) d (h w) -> b n c d h w", b=b, n=n, h=h
+        )
         c = support_masks.shape[2]
-        class_examples_embeddings = class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS] # b n c d
-        support_masks = self._apply_classes_to_features(support_masks, class_examples_embeddings)
-    
+        class_examples_embeddings = class_embeddings[
+            ResultDict.EXAMPLES_CLASS_EMBS
+        ]  # b n c d
+        support_masks = self._apply_classes_to_features(
+            support_masks, class_examples_embeddings
+        )
+
         cur_feature_size = query_embeddings.shape[-2:]
-        query_embeddings, support_embeddings, support_masks = self.rescale_for_transformer(query_embeddings, support_embeddings, support_masks)
-        query_embeddings = repeat(query_embeddings, 'b d h w -> (b c) (h w) d', c=c)
-        support_embeddings = repeat(support_embeddings, "b n d h w -> (b c) (n h w) d", c=c)
+        query_embeddings, support_embeddings, support_masks = (
+            self.rescale_for_transformer(
+                query_embeddings, support_embeddings, support_masks
+            )
+        )
+        query_embeddings = repeat(query_embeddings, "b d h w -> (b c) (h w) d", c=c)
+        support_embeddings = repeat(
+            support_embeddings, "b n d h w -> (b c) (n h w) d", c=c
+        )
         support_masks = rearrange(support_masks, "b n c d h w -> (b c) (n h w) d")
-        
-        query_embeddings = self.transformer(query_embeddings, support_embeddings, support_masks, image_pe)
-        query_embeddings = rearrange(query_embeddings, "(b c) (h w) d -> (b c) d h w", h=h, c=c)
-        query_embeddings = self.rescale_for_transformer(query_embeddings, None, None, size=cur_feature_size)[0]
+
+        # Remove padding classes
+        batch_mask = rearrange(flag_examples, "b n c -> (b c) n").any(dim=-1)
+        query_embeddings = query_embeddings[batch_mask]
+        support_embeddings = support_embeddings[batch_mask]
+        support_masks = support_masks[batch_mask]
+
+        query_embeddings = self.transformer(
+            query_embeddings,
+            support_embeddings,
+            support_masks,
+            image_pe,
+            flag_examples,
+            batch_mask,
+        )
+        query_embeddings = rearrange(query_embeddings, "bc (h w) d -> bc d h w", h=h)
+        query_embeddings = self.rescale_for_transformer(
+            query_embeddings, None, None, size=cur_feature_size
+        )[0]
 
         if self.spatial_convs is not None:
             query_embeddings = self.spatial_convs(query_embeddings)
-        
+
         # collapse the depth dimension
         upscaled_embeddings = self.output_upscaling(query_embeddings)
-        logits = rearrange(upscaled_embeddings, "(b c) 1 h w -> b c h w", c=c)
+        # Put padding again in the class dimension
+        _, _, h8, w8 = upscaled_embeddings.shape
+        padded_logits = torch.full((b*c, 1, h8, w8), float('-inf'), device=upscaled_embeddings.device)
+        padded_logits[batch_mask] = upscaled_embeddings
+
+        logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
         return logits
-        
-        
+
+
 # Lightly adapted from
 # https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py # noqa
 class MLP(nn.Module):
