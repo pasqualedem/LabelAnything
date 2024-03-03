@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from einops import repeat
 from torch import Tensor, nn
 
 from typing import Tuple, Type
@@ -315,4 +316,69 @@ class TwoWayAttentionBlock(nn.Module):
 
         return queries, keys
 
+class AffinityBlock(nn.Module):
+    def __init__(
+        self,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.attention = AttentionMLPBlock(
+            embed_dim=embedding_dim,
+            num_heads=num_heads,
+            mlp_dim=mlp_dim,
+            act=activation,
+            downsample_rate=attention_downsample_rate,
+            dropout=dropout,
+        )
+        
+    def forward(self, image_features, support_features, support_masks, image_pe):
+        bc = image_features.shape[0]
+        query_image_pe = repeat(image_pe, '1 d h w -> bc (h w) d', bc=bc)
+        shots = support_features.shape[1] // image_features.shape[1]
+        support_image_pe = repeat(image_pe, '1 d h w -> bc (h w n) d', bc=bc, n=shots)
+        queries = image_features + query_image_pe
+        keys = support_features + support_image_pe
+        values = support_masks
+        return self.attention(queries, keys, values)
+        
 
+class AffinityTransformer(nn.Module):
+    def __init__(
+        self,
+        depth: int,
+        embedding_dim: int,
+        num_heads: int,
+        mlp_dim: int,
+        activation: Type[nn.Module] = nn.ReLU,
+        attention_downsample_rate: int = 2,
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.layers = nn.ModuleList()
+        for i in range(depth):
+            self.layers.append(
+                AffinityBlock(
+                    embedding_dim=embedding_dim,
+                    num_heads=num_heads,
+                    mlp_dim=mlp_dim,
+                    activation=activation,
+                    attention_downsample_rate=attention_downsample_rate,
+                    dropout=dropout,
+                )
+            )
+
+    def forward(
+        self,
+        image_embedding: Tensor,
+        support_features: Tensor,
+        support_masks: Tensor,
+        image_pe: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
+        for layer in self.layers:
+            image_embedding = layer(image_embedding, support_features, support_masks, image_pe)
+        return image_embedding

@@ -11,10 +11,11 @@ from torch import nn
 from torch.nn import functional as F
 
 from typing import List, Tuple, Type
+from einops import rearrange, repeat
 
 from label_anything.utils.utils import ResultDict
 
-from .common import LayerNorm2d
+from .common import LayerNorm2d, MLPBlock
 
 
 class MaskDecoder(nn.Module):
@@ -242,7 +243,8 @@ class MaskDecoderLam(nn.Module):
 
     def forward(
         self,
-        image_embeddings: torch.Tensor,
+        query_embeddings: torch.Tensor,
+        support_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
         class_embeddings: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -257,7 +259,7 @@ class MaskDecoderLam(nn.Module):
         Returns:
           torch.Tensor: batched predicted segmentations
         """
-        b, d, h, w = image_embeddings.shape
+        b, d, h, w = query_embeddings.shape
         _, c, _ = class_embeddings[ResultDict.CLASS_EMBS].shape
         if self.segment_example_logits:
             class_embeddings = rearrange(
@@ -265,12 +267,12 @@ class MaskDecoderLam(nn.Module):
             )
         else:
             class_embeddings = class_embeddings[ResultDict.CLASS_EMBS]
-        class_embeddings, image_embeddings = self.transformer(
-            image_embeddings, image_pe, class_embeddings
+        class_embeddings, query_embeddings = self.transformer(
+            query_embeddings, image_pe, class_embeddings
         )
-        image_embeddings = rearrange(image_embeddings, "b (h w) c -> b c h w", h=h)
+        query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
 
-        upscaled_embeddings = self.output_upscaling(image_embeddings)
+        upscaled_embeddings = self.output_upscaling(query_embeddings)
         if self.spatial_convs is not None:
             upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
         b, d, h, w = upscaled_embeddings.shape
@@ -283,8 +285,135 @@ class MaskDecoderLam(nn.Module):
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
             seg = seg.max(dim=1).values
         return seg
+    
+    
+class AffinityDecoder(nn.Module):
+    def __init__(
+        self,
+        *,
+        transformer_dim: int,
+        transformer: nn.Module,
+        spatial_convs=None,
+        activation: Type[nn.Module] = nn.GELU,
+        segment_example_logits: bool = False,
+        classification_layer_downsample_rate: int = 8,
+        dropout: float = 0.0,
+    ) -> None:
+        """
+        Predicts masks given an image and prompt embeddings, using a
+        transformer architecture.
 
+        Arguments:
+          trasnformer_dim (int): the channel dimension of the transformer
+          transformer (nn.Module): the transformer used to predict masks
+          activation (nn.Module): the type of activation to use when
+            upscaling masks
+        """
+        super().__init__()
+        self.attention_dim = transformer_dim
+        self.segment_example_logits = segment_example_logits
 
+        first_layer_depth = transformer_dim // (classification_layer_downsample_rate * 4)
+        second_layer_depth = transformer_dim // (classification_layer_downsample_rate * 2)
+        third_layer_depth = transformer_dim // classification_layer_downsample_rate
+        
+
+        self.output_upscaling = nn.Sequential(
+            nn.ConvTranspose2d(
+                transformer_dim,
+                first_layer_depth,
+                kernel_size=2,
+                stride=2,
+            ),
+            LayerNorm2d(first_layer_depth),
+            activation(),
+            nn.ConvTranspose2d(
+                first_layer_depth,
+                second_layer_depth,
+                kernel_size=2,
+                stride=2,
+            ),
+            LayerNorm2d(second_layer_depth),
+            activation(),
+            nn.ConvTranspose2d(
+                second_layer_depth,
+                third_layer_depth,
+                kernel_size=2,
+                stride=2,
+            ),
+            LayerNorm2d(third_layer_depth),
+            activation(),
+            nn.Conv2d(
+                third_layer_depth,
+                1,
+                kernel_size=1,
+            ),
+        )
+        self.transformer = transformer
+        self.spatial_convs = None
+        if spatial_convs is not None:
+            module_list = []
+            for i in range(spatial_convs):
+                module_list.append(
+                    nn.Conv2d(
+                        transformer_dim,
+                        transformer_dim,
+                        kernel_size=3,
+                        padding=1,
+                    )
+                )
+                if i < spatial_convs - 1:
+                    module_list.append(
+                        LayerNorm2d(
+                            transformer_dim
+                        )
+                    )
+                    module_list.append(activation())
+            self.spatial_convs = nn.Sequential(*module_list)
+
+    def forward(
+        self,
+        query_embeddings: torch.Tensor,
+        support_embeddings: torch.Tensor,
+        image_pe: torch.Tensor,
+        class_embeddings: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict masks given image and prompt embeddings.
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
+          class_embeddings ResultDict: the embeddings of each example and class
+
+        Returns:
+          torch.Tensor: batched predicted segmentations
+        """
+        b, n, d, h, w = support_embeddings.shape
+        
+        support_masks = class_embeddings[ResultDict.EXAMPLES_CLASS_SRC] # (b n c) h w
+        support_masks = rearrange(support_masks, "(b n c) d (h w) -> b n c d h w", b=b, n=n, h=h)
+        c = support_masks.shape[2]
+        class_examples_embeddings = class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS] # b n c d
+        class_examples_embeddings = rearrange(class_examples_embeddings, "b n c d -> b n c d () ()")
+        support_masks = support_masks * class_examples_embeddings
+    
+        query_embeddings = repeat(query_embeddings, 'b d h w -> (b c) (h w) d', c=c)
+        support_embeddings = repeat(support_embeddings, "b n d h w -> (b c) (n h w) d", c=c)
+        support_masks = rearrange(support_masks, "b n c d h w -> (b c) (n h w) d")
+        
+        query_embeddings = self.transformer(query_embeddings, support_embeddings, support_masks, image_pe)
+        query_embeddings = rearrange(query_embeddings, "(b c) (h w) d -> (b c) d h w", h=h, c=c)
+
+        if self.spatial_convs is not None:
+            query_embeddings = self.spatial_convs(query_embeddings)
+        
+        # collapse the depth dimension
+        upscaled_embeddings = self.output_upscaling(query_embeddings)
+        logits = rearrange(upscaled_embeddings, "(b c) 1 h w -> b c h w", c=c)
+        return logits
+        
+        
 # Lightly adapted from
 # https://github.com/facebookresearch/MaskFormer/blob/main/mask_former/modeling/transformer/transformer_predictor.py # noqa
 class MLP(nn.Module):

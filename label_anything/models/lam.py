@@ -108,7 +108,8 @@ class Lam(nn.Module):
         )
 
         seg = self.mask_decoder(
-            image_embeddings=query_embeddings,
+            query_embeddings=query_embeddings,
+            support_embeddings=prompt_embeddings,
             image_pe=self.prompt_encoder.get_dense_pe(),
             class_embeddings=pe_result,
         )

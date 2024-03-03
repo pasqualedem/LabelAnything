@@ -659,33 +659,34 @@ class PromptImageEncoder(PromptEncoder):
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
         src = rearrange(src, "b d h w -> b d (h w)")
-        src = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
-        src = rearrange(src, "(b m c) d -> b m c d", b=b, m=m, c=c)
+        embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
+        embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
 
         if self.class_attention is not None:
-            src = rearrange(src, "b m c d -> (b m) c d", c=c)
-            src = self.class_attention(src)
-            src = rearrange(src, "(b m) c d -> b m c d", m=m)
+            embeddings = rearrange(embeddings, "b m c d -> (b m) c d", c=c)
+            embeddings = self.class_attention(embeddings)
+            embeddings = rearrange(embeddings, "(b m) c d -> b m c d", m=m)
         
         if self.example_attention is not None:
-            src = rearrange(src, "b m c d -> (b c) m d", c=c)
-            src = self.example_attention(src)
-            src = rearrange(src, "(b c) m d -> b m c d", c=c)
+            embeddings = rearrange(embeddings, "b m c d -> (b c) m d", c=c)
+            embeddings = self.example_attention(embeddings)
+            embeddings = rearrange(embeddings, "(b c) m d -> b m c d", c=c)
 
         if self.class_example_attention is not None:
-            src = rearrange(src, "b m c d -> b (m c) d", c=c)
-            src = self.class_example_attention(src)
-            src = rearrange(src, "b (m c) d -> b m c d", c=c)
+            embeddings = rearrange(embeddings, "b m c d -> b (m c) d", c=c)
+            embeddings = self.class_example_attention(embeddings)
+            embeddings = rearrange(embeddings, "b (m c) d -> b m c d", c=c)
 
         # Average over examples removing padding embeddings
-        masked_src = src * flag_examples.unsqueeze(-1)
+        masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
         normalizer = flag_examples.clone().unsqueeze(-1).sum(dim=1).float()
         normalizer[normalizer == 0] = (
             1  # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
         )
 
-        class_embeddings = masked_src.sum(dim=1) / normalizer
+        class_embeddings = masked_embeddings.sum(dim=1) / normalizer
         return {
             ResultDict.CLASS_EMBS: class_embeddings,
-            ResultDict.EXAMPLES_CLASS_EMBS: src,
+            ResultDict.EXAMPLES_CLASS_SRC: src,
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
         }

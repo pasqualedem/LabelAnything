@@ -9,6 +9,8 @@ import torch.nn as nn
 
 from label_anything.models.common import LayerNorm2d
 from label_anything.models.common import SAM_EMBED_DIM
+from label_anything.models.mask_decoder import AffinityDecoder
+from label_anything.models.transformer import AffinityTransformer
 
 from . import (
     ImageEncoderViT,
@@ -78,7 +80,7 @@ def _build_lam(
     classification_layer_downsample_rate: int = 8,
     use_broken_no_mask=False,
     use_background_embedding=False,
-    fusion_transformer="TwoWayTransformer",
+    few_type = "Prototype", # "Prototype" or "Affinity"
     class_encoder=None,
     segment_example_logits=False,
     dropout: float = 0.0,
@@ -88,14 +90,6 @@ def _build_lam(
     image_embedding_size = image_size // vit_patch_size
 
     vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
-    
-    fusion_transformer = globals()[fusion_transformer](
-                depth=2,
-                embedding_dim=embed_dim,
-                mlp_dim=2048,
-                num_heads=8,
-                attention_downsample_rate=decoder_attention_downsample_rate,
-            )
     if class_encoder is not None:
         cls = globals()[class_encoder['name']]
         params = {k: v for k, v in class_encoder.items() if k != 'name'}
@@ -147,13 +141,14 @@ def _build_lam(
             ),
             class_encoder=class_encoder,
         ),
-        mask_decoder=MaskDecoderLam(
-            transformer_dim=embed_dim,
+        mask_decoder=build_mask_decoder(
+            embed_dim=embed_dim,
             spatial_convs=spatial_convs,
-            transformer=fusion_transformer,
             segment_example_logits=segment_example_logits,
+            decoder_attention_downsample_rate=decoder_attention_downsample_rate,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             dropout=dropout,
+            few_type=few_type,
         ),
     )
     lam.eval()
@@ -166,6 +161,45 @@ def _build_lam(
         else:
             lam.load_state_dict(state_dict)
     return lam
+
+def build_mask_decoder(
+    embed_dim,
+    decoder_attention_downsample_rate,
+    few_type = "Prototype", # "Prototype" or "Affinity"
+    segment_example_logits=False,
+    spatial_convs=None,
+    classification_layer_downsample_rate=8,
+    dropout=0.0,
+):
+    if few_type == "Prototype":
+        fusion_transformer = TwoWayTransformer(
+                depth=2,
+                embedding_dim=embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+                attention_downsample_rate=decoder_attention_downsample_rate,
+                dropout=dropout,
+            )
+    elif few_type == "Affinity":
+        fusion_transformer = AffinityTransformer(
+                depth=2,
+                embedding_dim=embed_dim,
+                mlp_dim=2048,
+                num_heads=8,
+                attention_downsample_rate=decoder_attention_downsample_rate,
+                dropout=dropout,
+            )
+    else:
+        raise NotImplementedError(f"few_type {few_type} not implemented")
+    decoder_class = MaskDecoderLam if few_type == "Prototype" else AffinityDecoder
+    return decoder_class(
+            transformer_dim=embed_dim,
+            spatial_convs=spatial_convs,
+            transformer=fusion_transformer,
+            segment_example_logits=segment_example_logits,
+            classification_layer_downsample_rate=classification_layer_downsample_rate,
+            dropout=dropout,
+        )
 
 
 build_lam = _build_lam

@@ -69,6 +69,7 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
+    few_type: [Affinity]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]
