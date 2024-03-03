@@ -83,6 +83,7 @@ def _build_lam(
     fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
     few_type = "Prototype", # "Prototype" or "Affinity"
     class_fusion="sum",
+    transformer_keys_are_images=True,
     transformer_feature_size=None,
     class_encoder=None,
     segment_example_logits=False,
@@ -155,6 +156,7 @@ def _build_lam(
             dropout=dropout,
             few_type=few_type,
             class_fusion=class_fusion,
+            transformer_keys_are_images=transformer_keys_are_images,
         ),
     )
     lam.eval()
@@ -179,6 +181,7 @@ def build_mask_decoder(
     transformer_feature_size=None,
     dropout=0.0,
     class_fusion="sum",
+    transformer_keys_are_images=True
 ):
     if few_type == "Prototype":
         fusion_transformer = globals()[fusion_transformer](
@@ -214,6 +217,7 @@ def build_mask_decoder(
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             transformer_feature_size=transformer_feature_size,
             class_fusion=class_fusion,
+            transformer_keys_are_images=transformer_keys_are_images,
         )
     else:
         raise NotImplementedError(f"few_type {few_type} not implemented")

@@ -72,6 +72,7 @@ parameters:
     few_type: [Affinity]
     transformer_feature_size: [30]
     class_fusion: [sigmoid]
+    transformer_keys_are_images: [True]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]

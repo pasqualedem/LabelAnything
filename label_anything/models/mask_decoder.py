@@ -299,6 +299,7 @@ class AffinityDecoder(nn.Module):
         classification_layer_downsample_rate: int = 8,
         transformer_feature_size: int = None,
         class_fusion: str = "sum",
+        transformer_keys_are_images: bool = True,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -314,6 +315,7 @@ class AffinityDecoder(nn.Module):
         self.attention_dim = transformer_dim
         self.transformer_feature_size = None
         self.class_fusion = class_fusion
+        self.transformer_keys_are_images = transformer_keys_are_images
         if transformer_feature_size is not None:
             self.transformer_feature_size = (
                 transformer_feature_size,
@@ -444,6 +446,8 @@ class AffinityDecoder(nn.Module):
         support_masks = self._apply_classes_to_features(
             support_masks, class_examples_embeddings
         )
+        if not self.transformer_keys_are_images:
+            support_embeddings = None
 
         cur_feature_size = query_embeddings.shape[-2:]
         query_embeddings, support_embeddings, support_masks = (
@@ -452,10 +456,13 @@ class AffinityDecoder(nn.Module):
             )
         )
         query_embeddings = repeat(query_embeddings, "b d h w -> (b c) (h w) d", c=c)
-        support_embeddings = repeat(
-            support_embeddings, "b n d h w -> (b c) (n h w) d", c=c
-        )
         support_masks = rearrange(support_masks, "b n c d h w -> (b c) (n h w) d")
+        if support_embeddings is not None:
+            support_embeddings = repeat(
+                support_embeddings, "b n d h w -> (b c) (n h w) d", c=c
+            )
+        else:
+            support_embeddings = support_masks
 
         # Remove padding classes
         batch_mask = rearrange(flag_examples, "b n c -> (b c) n").any(dim=-1)
@@ -483,7 +490,9 @@ class AffinityDecoder(nn.Module):
         upscaled_embeddings = self.output_upscaling(query_embeddings)
         # Put padding again in the class dimension
         _, _, h8, w8 = upscaled_embeddings.shape
-        padded_logits = torch.full((b*c, 1, h8, w8), float('-inf'), device=upscaled_embeddings.device)
+        padded_logits = torch.full(
+            (b * c, 1, h8, w8), float("-inf"), device=upscaled_embeddings.device
+        )
         padded_logits[batch_mask] = upscaled_embeddings
 
         logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
