@@ -53,6 +53,7 @@ parameters:
     image_size: &image_size [1024]
     transformer_feature_size: [24]
     few_type: [Affinity]
+    class_fusion: [mul, sum, softmax, sigmoid]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]

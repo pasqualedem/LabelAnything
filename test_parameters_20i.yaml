@@ -71,6 +71,7 @@ parameters:
     image_size: &image_size [480]
     few_type: [Affinity]
     transformer_feature_size: [30]
+    class_fusion: [sigmoid]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]

@@ -297,6 +297,7 @@ class AffinityDecoder(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         classification_layer_downsample_rate: int = 8,
         transformer_feature_size: int = None,
+        class_fusion: str = "sum",
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -311,6 +312,7 @@ class AffinityDecoder(nn.Module):
         super().__init__()
         self.attention_dim = transformer_dim
         self.transformer_feature_size = None
+        self.class_fusion = class_fusion
         if transformer_feature_size is not None:
             self.transformer_feature_size = (transformer_feature_size, transformer_feature_size)
 
@@ -387,6 +389,24 @@ class AffinityDecoder(nn.Module):
                 mask = F.interpolate(mask, size=size, mode="bilinear")
                 mask = rearrange(mask, "(b n c) d h w -> b n c d h w", b=b, n=n)
         return query, support, mask
+    
+    def _apply_classes_to_features(self, features, classes):
+        if self.class_fusion == "sum":
+            classes = rearrange(classes, "b n c d -> b n c d () ()")
+            return features + classes
+        elif self.class_fusion == "mul":
+            classes = rearrange(classes, "b n c d -> b n c d () ()")
+            return features * classes
+        elif self.class_fusion == "softmax":
+            m = classes.shape[1]
+            classes = rearrange(classes, "b m c d -> b (m c) d")
+            classes = F.softmax(classes, dim=1)
+            classes = rearrange(classes, "b (m c) d -> b m c d () ()", m=m)
+            return features * classes
+        elif self.class_fusion == "sigmoid":
+            classes = F.sigmoid(classes)
+            classes = rearrange(classes, "b n c d -> b n c d () ()")
+            return features * classes
 
     def forward(
         self,
@@ -412,8 +432,7 @@ class AffinityDecoder(nn.Module):
         support_masks = rearrange(support_masks, "(b n c) d (h w) -> b n c d h w", b=b, n=n, h=h)
         c = support_masks.shape[2]
         class_examples_embeddings = class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS] # b n c d
-        class_examples_embeddings = rearrange(class_examples_embeddings, "b n c d -> b n c d () ()")
-        support_masks = support_masks * class_examples_embeddings
+        support_masks = self._apply_classes_to_features(support_masks, class_examples_embeddings)
     
         cur_feature_size = query_embeddings.shape[-2:]
         query_embeddings, support_embeddings, support_masks = self.rescale_for_transformer(query_embeddings, support_embeddings, support_masks)
