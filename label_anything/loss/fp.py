@@ -32,5 +32,4 @@ class FalsePositiveLoss(Module):
             not_included_classes.sum(dim=1) + self.eps
         )
         false_positive_loss = false_positive_loss.sum() / valid_elements
-        print(f"False positive loss: {false_positive_loss}")
         return false_positive_loss
