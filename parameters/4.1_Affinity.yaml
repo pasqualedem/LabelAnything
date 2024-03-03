@@ -51,7 +51,7 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [512]
     image_size: &image_size [1024]
-    transformer_feature_size: [30, 48]
+    transformer_feature_size: [24]
     few_type: [Affinity]
     class_encoder:
       name: [RandomMatrixEncoder]
