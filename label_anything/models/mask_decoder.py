@@ -295,9 +295,8 @@ class AffinityDecoder(nn.Module):
         transformer: nn.Module,
         spatial_convs=None,
         activation: Type[nn.Module] = nn.GELU,
-        segment_example_logits: bool = False,
         classification_layer_downsample_rate: int = 8,
-        dropout: float = 0.0,
+        transformer_feature_size: int = None,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -311,13 +310,14 @@ class AffinityDecoder(nn.Module):
         """
         super().__init__()
         self.attention_dim = transformer_dim
-        self.segment_example_logits = segment_example_logits
+        self.transformer_feature_size = None
+        if transformer_feature_size is not None:
+            self.transformer_feature_size = (transformer_feature_size, transformer_feature_size)
 
         first_layer_depth = transformer_dim // (classification_layer_downsample_rate * 4)
         second_layer_depth = transformer_dim // (classification_layer_downsample_rate * 2)
         third_layer_depth = transformer_dim // classification_layer_downsample_rate
         
-
         self.output_upscaling = nn.Sequential(
             nn.ConvTranspose2d(
                 transformer_dim,
@@ -350,6 +350,7 @@ class AffinityDecoder(nn.Module):
             ),
         )
         self.transformer = transformer
+        self.transformer_feature_size = transformer_feature_size
         self.spatial_convs = None
         if spatial_convs is not None:
             module_list = []
@@ -370,6 +371,22 @@ class AffinityDecoder(nn.Module):
                     )
                     module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
+            
+    def rescale_for_transformer(self, query, support=None, mask=None, size=None):
+        if self.transformer_feature_size is not None:
+            size = size if size is not None else self.transformer_feature_size
+            query = F.interpolate(query, size=size, mode="bilinear")
+            if support is not None:
+                b, n, d, h, w = support.shape
+                support = rearrange(support, "b n d h w -> (b n) d h w")
+                support = F.interpolate(support, size=size, mode="bilinear")
+                support = rearrange(support, "(b n) d h w -> b n d h w", b=b)
+            if mask is not None:
+                b, n, c, d, h, w = mask.shape
+                mask = rearrange(mask, "b n c d h w -> (b n c) d h w")
+                mask = F.interpolate(mask, size=size, mode="bilinear")
+                mask = rearrange(mask, "(b n c) d h w -> b n c d h w", b=b, n=n)
+        return query, support, mask
 
     def forward(
         self,
@@ -398,12 +415,15 @@ class AffinityDecoder(nn.Module):
         class_examples_embeddings = rearrange(class_examples_embeddings, "b n c d -> b n c d () ()")
         support_masks = support_masks * class_examples_embeddings
     
+        cur_feature_size = query_embeddings.shape[-2:]
+        query_embeddings, support_embeddings, support_masks = self.rescale_for_transformer(query_embeddings, support_embeddings, support_masks)
         query_embeddings = repeat(query_embeddings, 'b d h w -> (b c) (h w) d', c=c)
         support_embeddings = repeat(support_embeddings, "b n d h w -> (b c) (n h w) d", c=c)
         support_masks = rearrange(support_masks, "b n c d h w -> (b c) (n h w) d")
         
         query_embeddings = self.transformer(query_embeddings, support_embeddings, support_masks, image_pe)
         query_embeddings = rearrange(query_embeddings, "(b c) (h w) d -> (b c) d h w", h=h, c=c)
+        query_embeddings = self.rescale_for_transformer(query_embeddings, None, None, size=cur_feature_size)[0]
 
         if self.spatial_convs is not None:
             query_embeddings = self.spatial_convs(query_embeddings)

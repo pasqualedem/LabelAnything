@@ -93,6 +93,19 @@ class Lam(nn.Module):
             ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
         }
 
+    def get_dense_pe(self):
+        if (
+            hasattr(self.mask_decoder, "transformer_feature_size")
+            and self.mask_decoder.transformer_feature_size is not None
+        ):
+            return self.prompt_encoder.pe_layer(
+                (
+                    self.mask_decoder.transformer_feature_size,
+                    self.mask_decoder.transformer_feature_size,
+                )
+            ).unsqueeze(0)
+        return self.prompt_encoder.get_dense_pe()
+
     def _forward(self, batched_input: List[Dict[str, Any]]) -> torch.Tensor:
         query_embeddings, prompt_embeddings = self.prepare_query_example_embeddings(
             batched_input
@@ -110,7 +123,7 @@ class Lam(nn.Module):
         seg = self.mask_decoder(
             query_embeddings=query_embeddings,
             support_embeddings=prompt_embeddings,
-            image_pe=self.prompt_encoder.get_dense_pe(),
+            image_pe=self.get_dense_pe(),
             class_embeddings=pe_result,
         )
         return seg, pe_result
@@ -280,7 +293,10 @@ class Lam(nn.Module):
             return [x[1] for x in filter(f, list(self.named_parameters()))]
         if "backbone_lr" in training_params:
             return [
-                {"params": self.image_encoder.parameters(), "lr": training_params["backbone_lr"]},
+                {
+                    "params": self.image_encoder.parameters(),
+                    "lr": training_params["backbone_lr"],
+                },
                 {"params": [x[1] for x in filter(f, list(self.named_parameters()))]},
             ]
         return self.parameters()

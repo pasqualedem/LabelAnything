@@ -82,6 +82,7 @@ def _build_lam(
     use_background_embedding=False,
     fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
     few_type = "Prototype", # "Prototype" or "Affinity"
+    transformer_feature_size=None,
     class_encoder=None,
     segment_example_logits=False,
     dropout: float = 0.0,
@@ -149,6 +150,7 @@ def _build_lam(
             fusion_transformer=fusion_transformer,
             decoder_attention_downsample_rate=decoder_attention_downsample_rate,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
+            transformer_feature_size=transformer_feature_size,
             dropout=dropout,
             few_type=few_type,
         ),
@@ -172,6 +174,7 @@ def build_mask_decoder(
     segment_example_logits=False,
     spatial_convs=None,
     classification_layer_downsample_rate=8,
+    transformer_feature_size=None,
     dropout=0.0,
 ):
     if few_type == "Prototype":
@@ -183,6 +186,15 @@ def build_mask_decoder(
                 attention_downsample_rate=decoder_attention_downsample_rate,
                 dropout=dropout,
             )
+        
+        decoder = MaskDecoderLam(
+            transformer_dim=embed_dim,
+            spatial_convs=spatial_convs,
+            transformer=fusion_transformer,
+            segment_example_logits=segment_example_logits,
+            classification_layer_downsample_rate=classification_layer_downsample_rate,
+            dropout=dropout,
+        )
     elif few_type == "Affinity":
         fusion_transformer = AffinityTransformer(
                 depth=2,
@@ -192,17 +204,16 @@ def build_mask_decoder(
                 attention_downsample_rate=decoder_attention_downsample_rate,
                 dropout=dropout,
             )
-    else:
-        raise NotImplementedError(f"few_type {few_type} not implemented")
-    decoder_class = MaskDecoderLam if few_type == "Prototype" else AffinityDecoder
-    return decoder_class(
+        decoder = AffinityDecoder(
             transformer_dim=embed_dim,
             spatial_convs=spatial_convs,
             transformer=fusion_transformer,
-            segment_example_logits=segment_example_logits,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
-            dropout=dropout,
+            transformer_feature_size=transformer_feature_size,
         )
+    else:
+        raise NotImplementedError(f"few_type {few_type} not implemented")
+    return decoder
 
 
 build_lam = _build_lam
