@@ -37,8 +37,8 @@ def get_items(root, ids):
 
     for image_id in tqdm(ids):
         image = _get_images(root, image_id)
-        boxes, labels = _get_annotations(root, image_id)
-        masks = _get_masks(root, image_id)
+        masks, boxes = _get_boxes_and_masks(root, image_id)
+        labels = _get_label(root, image_id)
 
         images.append(image)
         all_boxes.append(boxes)
@@ -63,8 +63,8 @@ def _get_images(root, image_id):
     return image
 
 
-def _get_masks(root, image_id):
-    mask_file = os.path.join(root, "SegmentationClass", image_id + ".png")
+def _get_boxes_and_masks(root, image_id):
+    mask_file = os.path.join(root, "SegmentationObject", image_id + ".png")
     mask_array = np.array(Image.open(mask_file))
     unique_values = np.unique(mask_array)
     masks = {}
@@ -81,31 +81,29 @@ def _get_masks(root, image_id):
                 masks[f"{value}_{i}"] = np.where(labeled_array == i, 1, 0)
 
     rle_masks = {}
+    boxes = []
+
     for key, value in masks.items():
         rle = mask_utils.encode(np.asfortranarray(value.astype(np.uint8)))
         rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
         rle_masks[key] = rle
 
-    return rle_masks
+        bbox = mask_utils.toBbox(rle)
+        boxes.append(bbox.tolist())
+
+    return rle_masks, np.array(boxes, dtype=np.float32)
 
 
-def _get_annotations(root, image_id):
+def _get_label(root, image_id):
     annotation_file = os.path.join(root, "Annotations", image_id + ".xml")
     objects = ET.parse(annotation_file).findall("object")
-    boxes = []
     labels = []
+
     for object in objects:
         class_name = object.find("name").text.lower().strip()
-        bbox = object.find("bndbox")
-        x1 = float(bbox.find("xmin").text) - 1
-        y1 = float(bbox.find("ymin").text) - 1
-        x2 = float(bbox.find("xmax").text) - 1
-        y2 = float(bbox.find("ymax").text) - 1
-        boxes.append([x1, y1, x2, y2])
         labels.append(class_name)
 
-    # return bbox y labels
-    return (np.array(boxes, dtype=np.float32), np.array(labels))
+    return np.array(labels)
 
 
 def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
@@ -166,7 +164,7 @@ def generate_dataset_file(voc_folder):
 def preprocess_voc(input_folder=None, output_folder=None):
     input_folder = input_folder or VOC2012
     output_folder = output_folder or pathlib.Path("data/annotations")
-        
+
     if not os.path.exists(input_folder):
         print("Downloading VOC2012 dataset...")
         os.system(download_command)
@@ -174,7 +172,9 @@ def preprocess_voc(input_folder=None, output_folder=None):
     else:
         print("VOC2012 dataset already exists!")
 
-    if not os.path.exists(os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")):
+    if not os.path.exists(
+        os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")
+    ):
         print("Generating dataset file...")
         dataset = generate_dataset_file(input_folder)
     else:
