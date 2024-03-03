@@ -50,7 +50,7 @@ parameters:
     example_attention: [True]
     image_embed_dim: [768]
     embed_dim: &embed_dim [512]
-    image_size: &image_size [1024]
+    image_size: &image_size [480]
     few_type: [Affinity]
     class_encoder:
       name: [RandomMatrixEncoder]
@@ -62,7 +62,7 @@ parameters:
       coco20i:
         name: [coco]
         instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state]
+        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/embeddings_vit_mae]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
         split: ["train"]
         val_fold_idx: [0]

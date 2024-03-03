@@ -105,3 +105,6 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+  -   train_params:
+        substitute: [True]
+        accumulate_substitution: [True]

@@ -25,7 +25,7 @@ dataset:
       std: [0.229, 0.224, 0.225]
   datasets:
     coco20i:
-      img_dir: /ext/stalla/LabelAnything/images/train2017
+      img_dir: data/images/train2017
       instances_path: data/annotations/instances_train2014.json
       n_folds: 4
       name: coco
@@ -36,7 +36,7 @@ dataset:
       remove_small_annotations: true
       add_box_noise: false
       do_subsample: false
-      img_dir: /ext/stalla/LabelAnything/images/train2017
+      img_dir: data/images/train2017
       instances_path: data/annotations/instances_val2014.json
       n_folds: 4
       n_shots: 1
