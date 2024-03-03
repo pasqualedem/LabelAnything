@@ -80,6 +80,7 @@ def _build_lam(
     classification_layer_downsample_rate: int = 8,
     use_broken_no_mask=False,
     use_background_embedding=False,
+    fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
     few_type = "Prototype", # "Prototype" or "Affinity"
     class_encoder=None,
     segment_example_logits=False,
@@ -145,6 +146,7 @@ def _build_lam(
             embed_dim=embed_dim,
             spatial_convs=spatial_convs,
             segment_example_logits=segment_example_logits,
+            fusion_transformer=fusion_transformer,
             decoder_attention_downsample_rate=decoder_attention_downsample_rate,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             dropout=dropout,
@@ -166,13 +168,14 @@ def build_mask_decoder(
     embed_dim,
     decoder_attention_downsample_rate,
     few_type = "Prototype", # "Prototype" or "Affinity"
+    fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
     segment_example_logits=False,
     spatial_convs=None,
     classification_layer_downsample_rate=8,
     dropout=0.0,
 ):
     if few_type == "Prototype":
-        fusion_transformer = TwoWayTransformer(
+        fusion_transformer = globals()[fusion_transformer](
                 depth=2,
                 embedding_dim=embed_dim,
                 mlp_dim=2048,

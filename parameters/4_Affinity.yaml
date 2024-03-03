@@ -19,7 +19,7 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
-      tags: [[Affinity, Mul]]
+      tags: [[Affinity, Sum]]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
@@ -48,7 +48,6 @@ parameters:
     spatial_convs: [3]
     class_attention: [True]
     example_attention: [True]
-    fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
     embed_dim: &embed_dim [512]
     image_size: &image_size [1024]
