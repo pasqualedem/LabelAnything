@@ -52,7 +52,7 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [512]
     image_size: &image_size [1024]
-    transformer_feature_size: [48]
+    transformer_feature_size: [40]
     few_type: [Affinity]
     class_fusion: [sigmoid]
     class_encoder:

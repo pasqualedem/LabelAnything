@@ -281,6 +281,7 @@ class PromptImageEncoder(PromptEncoder):
         activation: Type[nn.Module] = nn.GELU,
         use_broken_no_mask: bool = False,
         use_background_embedding: bool = False,
+        use_support_features: bool = True,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -308,6 +309,7 @@ class PromptImageEncoder(PromptEncoder):
 
         self.transformer = transformer
         self.class_encoder = class_encoder
+        self.use_support_features = use_support_features
         
         
 
@@ -672,19 +674,23 @@ class PromptImageEncoder(PromptEncoder):
 
         b, m, c, d, h, w = dense_embeddings.shape
         dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
-
-        src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(
-            1, 1, c, 1, 1, 1
-        )
-        src = rearrange(src, "b m c d h w -> (b m c) d h w")
-        if src.shape[-2:] != dense_embeddings.shape[-2:]:
+        
+        if image_embeddings.shape[-2:] != dense_embeddings.shape[-2:]:
             dense_embeddings = nn.functional.interpolate(
                 dense_embeddings,
-                size=src.shape[-2:],
+                size=image_embeddings.shape[-2:],
                 mode="bilinear",
                 align_corners=False,
             )
-        src = src + dense_embeddings
+
+        if self.use_support_features:
+            src = rearrange(image_embeddings, "b m d h w -> b m 1 d h w").repeat(
+                1, 1, c, 1, 1, 1
+            )
+            src = rearrange(src, "b m c d h w -> (b m c) d h w")
+            src = src + dense_embeddings
+        else:
+            src = dense_embeddings
         pos_src = torch.repeat_interleave(
             self.get_dense_pe(), sparse_embeddings.shape[0], dim=0
         )

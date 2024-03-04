@@ -81,6 +81,7 @@ def _build_lam(
     classification_layer_downsample_rate: int = 8,
     use_broken_no_mask=False,
     use_background_embedding=False,
+    use_support_features_in_prompt_encoder: bool = True,
     fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
     few_type = "Prototype", # "Prototype" or "Affinity"
     class_fusion="sum",
@@ -137,6 +138,7 @@ def _build_lam(
             dropout=dropout,
             use_broken_no_mask=use_broken_no_mask,
             use_background_embedding=use_background_embedding,
+            use_support_features=use_support_features_in_prompt_encoder,
             transformer=TwoWayTransformer(
                 depth=2,
                 embedding_dim=embed_dim,

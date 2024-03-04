@@ -74,6 +74,7 @@ parameters:
     class_fusion: [sigmoid]
     class_embedding_dim: [1024]
     transformer_keys_are_images: [True]
+    use_support_features_in_prompt_encoder: [True]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]
