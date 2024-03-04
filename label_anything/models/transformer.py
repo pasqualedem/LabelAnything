@@ -344,7 +344,7 @@ class AffinityBlock(nn.Module):
         queries = image_features + query_image_pe
         keys = support_features + support_image_pe
         values = support_masks
-        return self.attention(queries, keys, values, attn_mask)
+        return self.attention(queries, keys, values, attn_mask=attn_mask)
         
 
 class AffinityTransformer(nn.Module):

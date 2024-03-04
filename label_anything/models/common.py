@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import math
+from einops import repeat
 import torch
 import torch.nn as nn
 
@@ -51,7 +52,7 @@ class LayerNorm2d(nn.Module):
         x = (x - u) / torch.sqrt(s + self.eps)
         x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
-    
+
 
 class Attention(nn.Module):
     """
@@ -74,7 +75,9 @@ class Attention(nn.Module):
             self.drop = nn.Dropout(dropout)
         else:
             self.drop = nn.Identity()
-        assert self.internal_dim % num_heads == 0, "num_heads must divide embedding_dim."
+        assert (
+            self.internal_dim % num_heads == 0
+        ), "num_heads must divide embedding_dim."
 
         self.q_proj = nn.Linear(embedding_dim, self.internal_dim)
         self.k_proj = nn.Linear(embedding_dim, self.internal_dim)
@@ -91,7 +94,16 @@ class Attention(nn.Module):
         x = x.transpose(1, 2)
         return x.reshape(b, n_tokens, n_heads * c_per_head)  # B x N_tokens x C
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, attn_mask=None) -> torch.Tensor:
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        key_mask=None,
+        attn_mask=None,
+    ) -> torch.Tensor:
+        bsz, src_len, _ = q.shape
+        
         # Input projections
         q = self.q_proj(q)
         k = self.k_proj(k)
@@ -102,16 +114,33 @@ class Attention(nn.Module):
         k = self._separate_heads(k, self.num_heads)
         v = self._separate_heads(v, self.num_heads)
 
-        # Attention
+        # Masks
         _, _, _, c_per_head = q.shape
-        attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
-        attn = attn / math.sqrt(c_per_head)
+        score_mask = None
+        if key_mask is not None:
+            key_mask = repeat(key_mask, 'b n -> b h s n', h=self.num_heads, s=src_len)
+            score_mask = torch.zeros_like(
+                key_mask, device=key_mask.device, dtype=key_mask.dtype
+            )
+            score_mask[key_mask == 0] = float("-inf")
+            score_mask[key_mask == 1] = 0
         if attn_mask is not None:
             # Put 0 in attn_mask where is 1 and -inf where is 0
-            mask = torch.zeros_like(attn_mask, device=attn_mask.device, dtype=attn.dtype)
+            mask = torch.zeros_like(
+                attn_mask, device=attn_mask.device, dtype=attn_mask.dtype
+            )
             mask[attn_mask == 0] = float("-inf")
             mask[attn_mask == 1] = 0
-            attn = attn + mask
+            if score_mask is None:
+                score_mask = mask
+            else:
+                score_mask = score_mask + mask
+            
+        # Attention
+        attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
+        attn = attn / math.sqrt(c_per_head)
+        if score_mask is not None:
+            attn = attn + score_mask
         attn = torch.softmax(attn, dim=-1)
         attn = self.drop(attn)
 
@@ -121,7 +150,7 @@ class Attention(nn.Module):
         out = self.out_proj(out)
 
         return out
-    
+
 
 class AttentionMLPBlock(nn.Module):
     def __init__(
@@ -136,13 +165,24 @@ class AttentionMLPBlock(nn.Module):
         super().__init__()
         self.norm = nn.LayerNorm(embed_dim)
         self.mlp = MLPBlock(embed_dim, mlp_dim, act, dropout=dropout)
-        self.attn = Attention(embed_dim, num_heads=num_heads, downsample_rate=downsample_rate, dropout=dropout)
+        self.attn = Attention(
+            embed_dim,
+            num_heads=num_heads,
+            downsample_rate=downsample_rate,
+            dropout=dropout,
+        )
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor = None, v: torch.Tensor = None, attn_mask=None) -> torch.Tensor:
+    def forward(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor = None,
+        v: torch.Tensor = None,
+        key_mask=None,
+        attn_mask=None,
+    ) -> torch.Tensor:
         if k is None:
             k = q
         if v is None:
             v = q
-        attn_out = self.norm(self.attn(q, k, v, attn_mask) + q)
+        attn_out = self.norm(self.attn(q, k, v, key_mask, attn_mask) + q)
         return self.norm(self.mlp(attn_out) + attn_out)
-        

@@ -276,6 +276,7 @@ class PromptImageEncoder(PromptEncoder):
         class_encoder: nn.Module,
         example_class_attention: bool = True,
         class_attention: bool = False,
+        class_embedding_dim: int = None,
         example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
         use_broken_no_mask: bool = False,
@@ -307,11 +308,13 @@ class PromptImageEncoder(PromptEncoder):
 
         self.transformer = transformer
         self.class_encoder = class_encoder
+        
+        
 
         self.sparse_embedding_attention = AttentionMLPBlock(
             embed_dim=embed_dim,
             num_heads=num_heads,
-            downsample_rate=attention_downsample_rate,
+            downsample_rate=1,
             mlp_dim=mlp_dim,
             act=activation,
             dropout=dropout,
@@ -320,12 +323,22 @@ class PromptImageEncoder(PromptEncoder):
             1, embed_dim
         )  # For when no sparse embeddings in input
 
+        if class_embedding_dim is not None:
+            class_attention_downsample_rate = 1
+            self.class_projector_in = nn.Linear(embed_dim, class_embedding_dim)
+            self.class_projector_out = nn.Linear(class_embedding_dim, embed_dim)
+        else:
+            class_embedding_dim = embed_dim
+            self.class_projector_in = nn.Identity()
+            self.class_projector_out = nn.Identity()
+            class_attention_downsample_rate = attention_downsample_rate
+
         self.class_attention = None
         if class_attention:
             self.class_attention = AttentionMLPBlock(
-                embed_dim=embed_dim,
+                embed_dim=class_embedding_dim,
                 num_heads=num_heads,
-                downsample_rate=attention_downsample_rate,
+                downsample_rate=class_attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
                 dropout=dropout,
@@ -334,9 +347,9 @@ class PromptImageEncoder(PromptEncoder):
         self.class_example_attention = None
         if example_class_attention:
             self.class_example_attention = AttentionMLPBlock(
-                embed_dim=embed_dim,
+                embed_dim=class_embedding_dim,
                 num_heads=num_heads,
-                downsample_rate=attention_downsample_rate,
+                downsample_rate=class_attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
                 dropout=dropout,
@@ -345,13 +358,14 @@ class PromptImageEncoder(PromptEncoder):
         self.example_attention = None
         if example_attention:
             self.example_attention = AttentionMLPBlock(
-                embed_dim=embed_dim,
+                embed_dim=class_embedding_dim,
                 num_heads=num_heads,
-                downsample_rate=attention_downsample_rate,
+                downsample_rate=class_attention_downsample_rate,
                 mlp_dim=mlp_dim,
                 act=activation,
                 dropout=dropout,
             )
+            
         self.use_broken_no_mask = use_broken_no_mask
         if use_broken_no_mask:
             self.not_a_mask_embed = nn.Embedding(1, embed_dim // 8)
@@ -598,6 +612,31 @@ class PromptImageEncoder(PromptEncoder):
             )
             src[i : i + chunk_size] = rearrange(attn_out, "b (h w) d  -> b d h w", h=h)
         return src
+    
+    nn.MultiheadAttention
+    
+    def prompt_class_information_merge(self, embeddings, flag_examples):
+        b, m, c, _ = embeddings.shape
+        embeddings = self.class_projector_in(embeddings)
+        if self.class_attention is not None:
+            embeddings = rearrange(embeddings, "b m c d -> (b m) c d", c=c)
+            key_mask = rearrange(flag_examples, "b m c -> (b m) c")
+            embeddings = self.class_attention(embeddings, key_mask=key_mask)
+            embeddings = rearrange(embeddings, "(b m) c d -> b m c d", m=m)
+        
+        if self.example_attention is not None:
+            embeddings = rearrange(embeddings, "b m c d -> (b c) m d", c=c)
+            key_mask = rearrange(flag_examples, "b m c -> (b c) m")
+            embeddings = self.example_attention(embeddings, key_mask=key_mask)
+            embeddings = rearrange(embeddings, "(b c) m d -> b m c d", c=c)
+
+        if self.class_example_attention is not None:
+            embeddings = rearrange(embeddings, "b m c d -> b (m c) d", c=c)
+            key_mask = rearrange(flag_examples, "b m c -> b (m c)")
+            embeddings = self.class_example_attention(embeddings, key_mask=key_mask)
+            embeddings = rearrange(embeddings, "b (m c) d -> b m c d", c=c)
+        embeddings = self.class_projector_out(embeddings)
+        return embeddings
 
     def forward(
         self,
@@ -661,21 +700,8 @@ class PromptImageEncoder(PromptEncoder):
         src = rearrange(src, "b d h w -> b d (h w)")
         embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
         embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
-
-        if self.class_attention is not None:
-            embeddings = rearrange(embeddings, "b m c d -> (b m) c d", c=c)
-            embeddings = self.class_attention(embeddings)
-            embeddings = rearrange(embeddings, "(b m) c d -> b m c d", m=m)
         
-        if self.example_attention is not None:
-            embeddings = rearrange(embeddings, "b m c d -> (b c) m d", c=c)
-            embeddings = self.example_attention(embeddings)
-            embeddings = rearrange(embeddings, "(b c) m d -> b m c d", c=c)
-
-        if self.class_example_attention is not None:
-            embeddings = rearrange(embeddings, "b m c d -> b (m c) d", c=c)
-            embeddings = self.class_example_attention(embeddings)
-            embeddings = rearrange(embeddings, "b (m c) d -> b m c d", c=c)
+        embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
 
         # Average over examples removing padding embeddings
         masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
