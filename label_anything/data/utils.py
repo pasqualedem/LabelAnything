@@ -63,6 +63,7 @@ class BatchMetadataKeys(StrEnum):
     PROMPT_TYPES = "prompt_types"
     NUM_EXAMPLES = "num_examples"
     NUM_CLASSES = "num_classes"
+    PROMPT_CHOICE_LEVEL = "prompt_choice_level"
     
     
 def flags_merge(flag_masks: torch.Tensor, flag_points: torch.Tensor, flag_bboxes: torch.Tensor) -> torch.Tensor:

@@ -567,6 +567,8 @@ class CocoLVISDataset(Dataset):
 
         num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
         possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
+        if batch_metadata[BatchMetadataKeys.PROMPT_CHOICE_LEVEL] == "episode":
+            possible_prompt_types = random.choice(possible_prompt_types)
         num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
 
         base_image_data = self.images[self.image_ids[idx]]
