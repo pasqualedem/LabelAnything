@@ -122,25 +122,21 @@ class Attention(nn.Module):
             score_mask = torch.zeros_like(
                 key_mask, device=key_mask.device, dtype=key_mask.dtype
             )
-            score_mask[key_mask == 0] = float("-inf")
-            score_mask[key_mask == 1] = 0
         if attn_mask is not None:
             # Put 0 in attn_mask where is 1 and -inf where is 0
             mask = torch.zeros_like(
                 attn_mask, device=attn_mask.device, dtype=attn_mask.dtype
             )
-            mask[attn_mask == 0] = float("-inf")
-            mask[attn_mask == 1] = 0
             if score_mask is None:
                 score_mask = mask
             else:
-                score_mask = score_mask + mask
+                score_mask = score_mask.bitwise_or(mask).logical_not()
             
         # Attention
         attn = q @ k.permute(0, 1, 3, 2)  # B x N_heads x N_tokens x N_tokens
         attn = attn / math.sqrt(c_per_head)
         if score_mask is not None:
-            attn = attn + score_mask
+            attn[score_mask] = float("-inf")
         attn = torch.softmax(attn, dim=-1)
         attn = self.drop(attn)
 
