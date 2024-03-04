@@ -271,12 +271,10 @@ def get_batch_metadata(
         val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
     ]
     if prompt_choice_level == "episode":
-            prompt_types = [multi_combs] * len(batch_sizes)
-    prompt_choice_levels = [prompt_choice_level] * len(batch_sizes)
+            prompt_types = multi_combs
     batch_metadata = {
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
         utils.BatchMetadataKeys.PROMPT_TYPES: prompt_types,
-        utils.BatchMetadataKeys.PROMPT_CHOICE_LEVEL: prompt_choice_levels,
     }
     if len(num_classes) > 0:
         num_classes = [
@@ -327,6 +325,7 @@ class VariableBatchSampler(BatchSampler):
                 utils.PromptType.MASK,
                 utils.PromptType.POINT,
             ]
+        self.prompt_choice_level = prompt_choice_level
 
         self.batch_sizes, self.batch_metadata = get_batch_metadata(
             len(data_source),
@@ -390,7 +389,13 @@ class VariableBatchSampler(BatchSampler):
             indices = self.sampler.__iter__()
 
         for i, batch_size in enumerate(self.batch_sizes):
-            metadata = {k: v[i] for k, v in self.batch_metadata.items()}
+            if self.prompt_choice_level == "episode":
+                metadata = {k: v[i] for k, v in self.batch_metadata.items() if k != utils.BatchMetadataKeys.PROMPT_TYPES}
+                metadata[utils.BatchMetadataKeys.PROMPT_TYPES] = self.batch_metadata[utils.BatchMetadataKeys.PROMPT_TYPES]
+                metadata[utils.BatchMetadataKeys.PROMPT_CHOICE_LEVEL] = "episode"
+            else:
+                metadata = {k: v[i] for k, v in self.batch_metadata.items()}
+                metadata[utils.BatchMetadataKeys.PROMPT_CHOICE_LEVEL] = "batch"
             batch = []
             while len(batch) < batch_size and indices:
                 batch.append((next(indices), metadata))
