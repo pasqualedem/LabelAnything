@@ -19,7 +19,7 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
-      tags: [[Masked, MAE]]
+      tags: [[Masked, ClassEmbs, Res]]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
@@ -53,7 +53,7 @@ parameters:
     embed_dim: &embed_dim [512]
     image_size: &image_size [480]
     few_type: [Affinity]
-    class_fusion: [softmax]
+    class_fusion: [sigmoid]
     class_encoder:
       name: [RandomMatrixEncoder]
       bank_size: [100]
