@@ -41,7 +41,10 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     val_possible_batch_example_nums = dataloader_args.pop(
         "val_possible_batch_example_nums", possible_batch_example_nums
     )
+
     prompt_types = dataloader_args.pop("prompt_types", None)
+    prompt_choice_level = dataloader_args.pop("prompt_choice_level", "batch")
+
     val_prompt_types = dataloader_args.pop("val_prompt_types", prompt_types)
     num_steps = dataloader_args.pop("num_steps", None)
 
@@ -66,6 +69,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         possible_batch_example_nums=possible_batch_example_nums,
         num_processes=num_processes,
         prompt_types=prompt_types,
+        prompt_choice_level=prompt_choice_level,
         shuffle=True,
         num_steps=num_steps,
     )

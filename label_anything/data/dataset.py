@@ -224,7 +224,7 @@ class LabelAnythingDataset(Dataset):
 
 
 def get_batch_metadata(
-    dataset_len, possible_batch_example_nums, possible_prompts, num_processes=1
+    dataset_len, possible_batch_example_nums, possible_prompts, prompt_choice_level, num_processes=1
 ):
     """
     Returns a list of number of examples per batch and a list of batch sizes
@@ -270,9 +270,13 @@ def get_batch_metadata(
     prompt_types = [
         val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
     ]
+    if prompt_choice_level == "episode":
+            prompt_types = [multi_combs] * len(batch_sizes)
+    prompt_choice_levels = [prompt_choice_level] * len(batch_sizes)
     batch_metadata = {
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
         utils.BatchMetadataKeys.PROMPT_TYPES: prompt_types,
+        utils.BatchMetadataKeys.PROMPT_CHOICE_LEVEL: prompt_choice_levels,
     }
     if len(num_classes) > 0:
         num_classes = [
@@ -292,6 +296,7 @@ class VariableBatchSampler(BatchSampler):
         max_batch_size (int): The maximum size of each batch.
         max_num_examples (int): The maximum number of examples to include in each batch.
         prompt_types (List[str]): The types of prompts to use.
+        prompt_choice_level (str, optional): The level at which to choose the prompt. Defaults to "batch" (can be "episode" or "batch").
         drop_last (bool, optional): Whether to drop the last batch if it is smaller than `max_batch_size`. Defaults to False.
         shuffle (bool, optional): Whether to shuffle the data before sampling. Defaults to False.
         num_processes (int, optional): The number of processes to use for parallel processing. Defaults to 1.
@@ -309,6 +314,7 @@ class VariableBatchSampler(BatchSampler):
         data_source,
         possible_batch_example_nums,
         prompt_types=None,
+        prompt_choice_level="batch",
         drop_last=False,
         shuffle=False,
         num_processes=1,
@@ -327,6 +333,7 @@ class VariableBatchSampler(BatchSampler):
             possible_batch_example_nums,
             num_processes=num_processes,
             possible_prompts=prompt_types,
+            prompt_choice_level=prompt_choice_level,
         )
         self.num_processes = num_processes
         if num_steps is not None:
