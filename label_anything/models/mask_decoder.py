@@ -299,6 +299,7 @@ class AffinityDecoder(nn.Module):
         classification_layer_downsample_rate: int = 8,
         transformer_feature_size: int = None,
         class_fusion: str = "sum",
+        prototype_merge: bool = False,
         transformer_keys_are_images: bool = True,
     ) -> None:
         """
@@ -361,6 +362,15 @@ class AffinityDecoder(nn.Module):
                 kernel_size=1,
             ),
         )
+        self.class_embedding_mlp = None
+        if prototype_merge:
+            self.class_embedding_mlp = MLP(
+                transformer_dim,
+                transformer_dim,
+                third_layer_depth,
+                3,
+                dropout=0.0,
+            )
         self.transformer = transformer
         self.transformer_feature_size = transformer_feature_size
         self.spatial_convs = None
@@ -450,6 +460,7 @@ class AffinityDecoder(nn.Module):
             support_embeddings = None
 
         cur_feature_size = query_embeddings.shape[-2:]
+        original_query_embeddings = query_embeddings.clone()
         query_embeddings, support_embeddings, support_masks = (
             self.rescale_for_transformer(
                 query_embeddings, support_embeddings, support_masks
@@ -487,7 +498,20 @@ class AffinityDecoder(nn.Module):
             query_embeddings = self.spatial_convs(query_embeddings)
 
         # collapse the depth dimension
-        upscaled_embeddings = self.output_upscaling(query_embeddings)
+        if self.class_embedding_mlp is not None:
+            prototypes = class_embeddings[ResultDict.CLASS_EMBS]
+            prototypes = self.class_embedding_mlp(prototypes)
+            for i in range(len(self.output_upscaling) - 1):
+                original_query_embeddings = self.output_upscaling[i](original_query_embeddings)
+                query_embeddings = self.output_upscaling[i](query_embeddings)
+            d4 = prototypes.shape[2]
+            _, _, h8, w8 = query_embeddings.shape
+            proto_logits = (
+                prototypes @ original_query_embeddings.view(b, d4, h8 * w8)
+            ).view(b, -1, h8, w8)
+            upscaled_embeddings = self.output_upscaling[-1](query_embeddings)
+        else:
+            upscaled_embeddings = self.output_upscaling(query_embeddings)
         # Put padding again in the class dimension
         _, _, h8, w8 = upscaled_embeddings.shape
         padded_logits = torch.full(
@@ -496,6 +520,8 @@ class AffinityDecoder(nn.Module):
         padded_logits[batch_mask] = upscaled_embeddings
 
         logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
+        if self.class_embedding_mlp is not None:
+            logits = logits + proto_logits
         return logits
 
 

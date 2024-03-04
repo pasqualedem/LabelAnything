@@ -19,7 +19,7 @@ parameters:
     wandb:
       offline: [False]
       entity: [cilabuniba]
-      tags: [[Masked, ClassEmbs, Res]]
+      tags: [[Masked, ClassEmbs, Res, AffinityPrototype]]
       offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
 
   train_params:
@@ -53,6 +53,7 @@ parameters:
     embed_dim: &embed_dim [512]
     image_size: &image_size [480]
     use_support_features_in_prompt_encoder: [False]
+    prototype_merge: [True]
     few_type: [Affinity]
     class_fusion: [sigmoid]
     class_encoder:

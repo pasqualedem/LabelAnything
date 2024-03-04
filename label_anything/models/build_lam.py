@@ -88,6 +88,7 @@ def _build_lam(
     transformer_keys_are_images=True,
     transformer_feature_size=None,
     class_encoder=None,
+    prototype_merge=False,
     segment_example_logits=False,
     dropout: float = 0.0,
     binary=False,
@@ -160,6 +161,7 @@ def _build_lam(
             dropout=dropout,
             few_type=few_type,
             class_fusion=class_fusion,
+            prototype_merge=prototype_merge,
             transformer_keys_are_images=transformer_keys_are_images,
         ),
     )
@@ -185,6 +187,7 @@ def build_mask_decoder(
     transformer_feature_size=None,
     dropout=0.0,
     class_fusion="sum",
+    prototype_merge=False,
     transformer_keys_are_images=True
 ):
     if few_type == "Prototype":
@@ -221,6 +224,7 @@ def build_mask_decoder(
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             transformer_feature_size=transformer_feature_size,
             class_fusion=class_fusion,
+            prototype_merge=prototype_merge,
             transformer_keys_are_images=transformer_keys_are_images,
         )
     else:
