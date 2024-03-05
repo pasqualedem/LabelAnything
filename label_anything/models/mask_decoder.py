@@ -15,7 +15,7 @@ from einops import rearrange, repeat
 
 from label_anything.utils.utils import ResultDict
 
-from .common import LayerNorm2d, MLPBlock
+from .common import AttentionMLPBlock, LayerNorm2d, MLPBlock
 
 
 class MaskDecoder(nn.Module):
@@ -363,12 +363,20 @@ class AffinityDecoder(nn.Module):
             ),
         )
         self.class_embedding_mlp = None
-        if prototype_merge:
+        if prototype_merge is not None:
             self.class_embedding_mlp = MLP(
                 transformer_dim,
                 transformer_dim,
                 third_layer_depth,
                 3,
+                dropout=0.0,
+            )
+            self.attn_token_to_image = AttentionMLPBlock(
+                embed_dim=transformer_dim,
+                downsample_rate=classification_layer_downsample_rate,
+                mlp_dim=2048,
+                num_heads=8,
+                act=activation,
                 dropout=0.0,
             )
         self.transformer = transformer
@@ -423,6 +431,29 @@ class AffinityDecoder(nn.Module):
             classes = F.sigmoid(classes)
             classes = rearrange(classes, "b n c d -> b n c d () ()")
             return features * classes
+
+    def prototype_transformer(
+        self,
+        original_query_embeddings,
+        query_embeddings,
+        prototypes,
+        image_pe,
+        batch_mask,
+    ):
+        keys = query_embeddings + image_pe
+        prototypes = self.attn_token_to_image(prototypes, keys, keys)
+        prototypes = self.class_embedding_mlp(prototypes)
+        for i in range(len(self.output_upscaling) - 1):
+            original_query_embeddings = self.output_upscaling[i](
+                original_query_embeddings
+            )
+            query_embeddings = self.output_upscaling[i](query_embeddings)
+        d4 = prototypes.shape[2]
+        _, _, h8, w8 = query_embeddings.shape
+        proto_logits = (prototypes @ query_embeddings.view(b, d4, h8 * w8)).view(
+            b, -1, h8, w8
+        )
+        upscaled_embeddings = self.output_upscaling[-1](query_embeddings)
 
     def forward(
         self,
@@ -500,16 +531,13 @@ class AffinityDecoder(nn.Module):
         # collapse the depth dimension
         if self.class_embedding_mlp is not None:
             prototypes = class_embeddings[ResultDict.CLASS_EMBS]
-            prototypes = self.class_embedding_mlp(prototypes)
-            for i in range(len(self.output_upscaling) - 1):
-                original_query_embeddings = self.output_upscaling[i](original_query_embeddings)
-                query_embeddings = self.output_upscaling[i](query_embeddings)
-            d4 = prototypes.shape[2]
-            _, _, h8, w8 = query_embeddings.shape
-            proto_logits = (
-                prototypes @ original_query_embeddings.view(b, d4, h8 * w8)
-            ).view(b, -1, h8, w8)
-            upscaled_embeddings = self.output_upscaling[-1](query_embeddings)
+            proto_logits = self.prototype_transformer(
+                original_query_embeddings,
+                query_embeddings,
+                prototypes,
+                image_pe,
+                batch_mask,
+            )
         else:
             upscaled_embeddings = self.output_upscaling(query_embeddings)
         # Put padding again in the class dimension
