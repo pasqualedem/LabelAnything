@@ -101,7 +101,7 @@ def _build_lam(
         params = {k: v for k, v in class_encoder.items() if k != 'name'}
         class_encoder = cls(**params)
     else:
-        class_encoder = nn.Identity()
+        class_encoder = lambda x, y: (x, y)
     
     neck = None if image_embed_dim == embed_dim else nn.Sequential(
             nn.Conv2d(
