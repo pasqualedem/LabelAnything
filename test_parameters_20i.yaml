@@ -69,7 +69,7 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
-    few_type: [PrototypeAffinity]
+    few_type: [Affinity]
     transformer_feature_size: [30]
     class_fusion: [sigmoid]
     class_embedding_dim: [1024]

@@ -5,7 +5,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from einops import rearrange
+from einops import rearrange, reduce
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -324,10 +324,10 @@ class AffinityDecoder(nn.Module):
             )
 
         first_layer_depth = transformer_dim // (
-            classification_layer_downsample_rate * 4
+            classification_layer_downsample_rate // 4
         )
         second_layer_depth = transformer_dim // (
-            classification_layer_downsample_rate * 2
+            classification_layer_downsample_rate // 2
         )
         third_layer_depth = transformer_dim // classification_layer_downsample_rate
 
@@ -363,17 +363,17 @@ class AffinityDecoder(nn.Module):
             ),
         )
         self.class_embedding_mlp = None
-        if prototype_merge is not None:
+        if prototype_merge:
             self.class_embedding_mlp = MLP(
                 transformer_dim,
                 transformer_dim,
-                third_layer_depth,
+                second_layer_depth,
                 3,
                 dropout=0.0,
             )
             self.attn_token_to_image = AttentionMLPBlock(
                 embed_dim=transformer_dim,
-                downsample_rate=classification_layer_downsample_rate,
+                downsample_rate=1,
                 mlp_dim=2048,
                 num_heads=8,
                 act=activation,
@@ -434,26 +434,43 @@ class AffinityDecoder(nn.Module):
 
     def prototype_transformer(
         self,
-        original_query_embeddings,
         query_embeddings,
         prototypes,
         image_pe,
         batch_mask,
     ):
-        keys = query_embeddings + image_pe
+        bc, d, h, w = query_embeddings.shape
+        b, c = prototypes.shape[:2]
+        affinity_embeddings = torch.full(
+            (b * c, d, h, w), float("-inf"), device=query_embeddings.device
+        )
+        affinity_embeddings[batch_mask] = query_embeddings
+        reduce_embeddings = reduce(
+            affinity_embeddings, "(b c) d h w -> b d h w", "max", b=b, c=c
+        )
+
+        keys = reduce_embeddings + image_pe
+        keys = rearrange(keys, "b d h w -> b (h w) d")
         prototypes = self.attn_token_to_image(prototypes, keys, keys)
         prototypes = self.class_embedding_mlp(prototypes)
-        for i in range(len(self.output_upscaling) - 1):
-            original_query_embeddings = self.output_upscaling[i](
-                original_query_embeddings
-            )
-            query_embeddings = self.output_upscaling[i](query_embeddings)
+        for i in range(len(self.output_upscaling) - 3):
+            affinity_embeddings = self.output_upscaling[i](affinity_embeddings)
+            reduce_embeddings = self.output_upscaling[i](reduce_embeddings)
         d4 = prototypes.shape[2]
-        _, _, h8, w8 = query_embeddings.shape
-        proto_logits = (prototypes @ query_embeddings.view(b, d4, h8 * w8)).view(
-            b, -1, h8, w8
+        _, _, h8, w8 = reduce_embeddings.shape 
+        heads = 32
+        proto_logits = rearrange(
+            prototypes, "b d (c heads) -> (b heads) d c", heads=8
+        ) @ rearrange(
+            affinity_embeddings, "b (d heads) h w -> (b heads) d (h w)", heads=heads
         )
-        upscaled_embeddings = self.output_upscaling[-1](query_embeddings)
+        proto_logits = rearrange(proto_logits, "(b heads) c (h w) -> (b c) heads h w", heads=heads, h=h8, w=w8)
+        for i in range(len(self.output_upscaling) - 3, len(self.output_upscaling) - 1):
+            proto_logits = self.output_upscaling[i](proto_logits)
+            affinity_embeddings = self.output_upscaling[i](affinity_embeddings)
+        class_features = torch.cat([affinity_embeddings, proto_logits], dim=1)
+        logits = self.output_upscaling[-1](class_features)
+        return logits
 
     def forward(
         self,
@@ -491,7 +508,6 @@ class AffinityDecoder(nn.Module):
             support_embeddings = None
 
         cur_feature_size = query_embeddings.shape[-2:]
-        original_query_embeddings = query_embeddings.clone()
         query_embeddings, support_embeddings, support_masks = (
             self.rescale_for_transformer(
                 query_embeddings, support_embeddings, support_masks
@@ -532,7 +548,6 @@ class AffinityDecoder(nn.Module):
         if self.class_embedding_mlp is not None:
             prototypes = class_embeddings[ResultDict.CLASS_EMBS]
             proto_logits = self.prototype_transformer(
-                original_query_embeddings,
                 query_embeddings,
                 prototypes,
                 image_pe,
@@ -540,16 +555,14 @@ class AffinityDecoder(nn.Module):
             )
         else:
             upscaled_embeddings = self.output_upscaling(query_embeddings)
-        # Put padding again in the class dimension
-        _, _, h8, w8 = upscaled_embeddings.shape
-        padded_logits = torch.full(
-            (b * c, 1, h8, w8), float("-inf"), device=upscaled_embeddings.device
-        )
-        padded_logits[batch_mask] = upscaled_embeddings
+            # Put padding again in the class dimension
+            _, _, h8, w8 = upscaled_embeddings.shape
+            padded_logits = torch.full(
+                (b * c, 1, h8, w8), float("-inf"), device=upscaled_embeddings.device
+            )
+            padded_logits[batch_mask] = upscaled_embeddings
 
-        logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
-        if self.class_embedding_mlp is not None:
-            logits = logits + proto_logits
+            logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
         return logits
 
 
