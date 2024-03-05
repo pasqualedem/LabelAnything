@@ -26,7 +26,7 @@ instances_voc12 = {
     "categories": [],
 }
 
-VOC2012 = pathlib.Path("data/raw/VOCdevkit/VOC2012")
+VOC2012 = pathlib.Path("raw/VOCdevkit/VOC2012")
 
 
 def get_items(root, ids):
