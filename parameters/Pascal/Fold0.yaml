@@ -61,16 +61,18 @@ parameters:
     datasets:
       voc5i:
         name: [coco]
-        instances_path: [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
+        instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
+        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
         sample_function: [uniform]
         all_example_categories: [False]
-      val_voc5i_N1K1: &val_coco20i_N1K1
+      val_voc5i_N1K1: &val_voc5i_N1K1
         name: [coco]
-        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
+        instances_path: *instances_path
+        emb_dir: *emb_dir
         img_dir: *img_dir
         split: ["val"]
         val_fold_idx: [0]
@@ -79,8 +81,8 @@ parameters:
         n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
-      val_coco20i_N2K1:
-        <<: *val_coco20i_N1K1
+      val_voc5i_N2K1:
+        <<: *val_voc5i_N1K1
         n_ways: [2]
     common:
       remove_small_annotations: [True]
