@@ -154,6 +154,7 @@ def generate_dataset_file(voc_folder):
     contents = ""
     for file in files:
         with open(os.path.join(voc_folder, "ImageSets/Segmentation/", file), "r") as f:
+            print(f"Reading {file}")
             file_content = f.read()
         contents += file_content
 
