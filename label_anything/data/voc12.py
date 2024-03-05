@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 url_voc = "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
 download_command = f"wget {url_voc}"
-tar_command = f"tar -xvf VOCtrainval_11-May-2012.tar"
+tar_command = f"tar -xf VOCtrainval_11-May-2012.tar"
 instances_voc12 = {
     "info": {
         "description": "VOC 2012 Dataset Annotations files",
