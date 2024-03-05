@@ -164,10 +164,7 @@ def generate_dataset_file(input_folder):
         f.write(contents)
 
 
-def preprocess_voc(input_folder=None, output_folder=None):
-    input_folder = input_folder or VOC2012
-    output_folder = output_folder or pathlib.Path("data/annotations")
-
+def preprocess_voc(input_folder):
     if not os.path.exists(input_folder):
         print("Downloading VOC2012 dataset...")
         os.system(download_command)
@@ -204,4 +201,4 @@ def preprocess_voc(input_folder=None, output_folder=None):
 
 
 if __name__ == "__main__":
-    preprocess_voc()
+    preprocess_voc(VOC2012)
