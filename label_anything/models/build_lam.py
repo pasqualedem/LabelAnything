@@ -83,12 +83,11 @@ def _build_lam(
     use_background_embedding=False,
     use_support_features_in_prompt_encoder: bool = True,
     fusion_transformer="TwoWayTransformer", # "TwoWayTransformer" or "OneWayTransformer"
-    few_type = "Prototype", # "Prototype" or "Affinity"
+    few_type = "Prototype", # "Prototype" or "Affinity" or "PrototypeAffinity"
     class_fusion="sum",
     transformer_keys_are_images=True,
     transformer_feature_size=None,
     class_encoder=None,
-    prototype_merge=False,
     segment_example_logits=False,
     dropout: float = 0.0,
     binary=False,
@@ -161,7 +160,6 @@ def _build_lam(
             dropout=dropout,
             few_type=few_type,
             class_fusion=class_fusion,
-            prototype_merge=prototype_merge,
             transformer_keys_are_images=transformer_keys_are_images,
         ),
     )
@@ -208,7 +206,7 @@ def build_mask_decoder(
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             dropout=dropout,
         )
-    elif few_type == "Affinity":
+    elif few_type == "Affinity" or few_type == "PrototypeAffinity":
         fusion_transformer = AffinityTransformer(
                 depth=2,
                 embedding_dim=embed_dim,
@@ -224,7 +222,7 @@ def build_mask_decoder(
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             transformer_feature_size=transformer_feature_size,
             class_fusion=class_fusion,
-            prototype_merge=prototype_merge,
+            prototype_merge=few_type=="PrototypeAffinity",
             transformer_keys_are_images=transformer_keys_are_images,
         )
     else:

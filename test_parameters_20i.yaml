@@ -73,7 +73,6 @@ parameters:
     transformer_feature_size: [30]
     class_fusion: [sigmoid]
     class_embedding_dim: [1024]
-    prototype_merge: [True]
     transformer_keys_are_images: [True]
     use_support_features_in_prompt_encoder: [True]
     class_encoder:
