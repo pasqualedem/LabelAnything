@@ -44,7 +44,7 @@ parameters:
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
-    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [True]
     example_attention: [True]
@@ -62,7 +62,6 @@ parameters:
       voc5i:
         name: [coco]
         instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
-        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         split: ["train"]
         val_fold_idx: [0]
@@ -72,7 +71,6 @@ parameters:
       val_voc5i_N1K1: &val_voc5i_N1K1
         name: [coco]
         instances_path: *instances_path
-        emb_dir: *emb_dir
         img_dir: *img_dir
         split: ["val"]
         val_fold_idx: [0]
