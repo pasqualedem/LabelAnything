@@ -149,7 +149,9 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     return annotations
 
 
-def generate_dataset_file(voc_folder):
+def generate_dataset_file(input_folder):
+    project_dir = os.path.dirname(os.path.abspath(__file__))
+    voc_folder = os.path.join(project_dir, input_folder)
     files = os.listdir(os.path.join(voc_folder, "ImageSets/Segmentation/"))
     contents = ""
     for file in files:
