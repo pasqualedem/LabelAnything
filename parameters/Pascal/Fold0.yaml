@@ -62,7 +62,7 @@ parameters:
       voc5i:
         name: [coco]
         instances_path: [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
-        img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
+        img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/JPEGImages]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
