@@ -81,7 +81,7 @@ parameters:
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
-      val_coco20i:
+      val_voc5i:
         name: [coco]
         instances_path: [data/annotations/instances_voc12.json]
         img_dir: *img_dir
