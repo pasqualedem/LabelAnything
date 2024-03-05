@@ -71,7 +71,6 @@ parameters:
       val_voc5i_N1K1: &val_coco20i_N1K1
         name: [coco]
         instances_path: &instance_dir [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
-        emb_dir: *emb_dir
         img_dir: *img_dir
         split: ["val"]
         val_fold_idx: [0]
