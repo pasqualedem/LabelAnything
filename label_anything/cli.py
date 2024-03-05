@@ -260,15 +260,9 @@ def preprocess_clip(parameters):
     default=None,
     help="Path to the VOC dataset",
 )
-@click.option(
-    "--output_folder",
-    default=None,
-    help="Path to the output folder",
-)
-def preprocess_voc(input_folder, output_folder):
+def preprocess_voc(input_folder):
     from label_anything.data.voc12 import preprocess_voc as preprocess_voc_fn
-
-    preprocess_voc_fn(input_folder, output_folder)
+    preprocess_voc_fn(input_folder)
 
 
 @main.command("pretrain_pe")
