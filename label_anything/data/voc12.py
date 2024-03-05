@@ -26,7 +26,7 @@ instances_voc12 = {
     "categories": [],
 }
 
-VOC2012 = pathlib.Path("raw/VOCdevkit/VOC2012")
+VOC2012 = pathlib.Path("data/raw/VOCdevkit/VOC2012")
 
 
 def get_items(root, ids):
@@ -149,9 +149,7 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
     return annotations
 
 
-def generate_dataset_file(input_folder):
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-    voc_folder = os.path.join(project_dir, input_folder)
+def generate_dataset_file(voc_folder):
     files = os.listdir(os.path.join(voc_folder, "ImageSets/Segmentation/"))
     contents = ""
     for file in files:
