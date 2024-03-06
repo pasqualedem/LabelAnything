@@ -196,6 +196,10 @@ class DramTestDataset(LabelAnythingTestDataset):
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
+    
+    @property
+    def num_classes(self):
+        return len(self.TRAIN_ID2NAME.keys())
 
 
 if __name__ == "__main__":
