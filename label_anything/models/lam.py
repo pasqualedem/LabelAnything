@@ -160,6 +160,8 @@ class Lam(nn.Module):
             B, N = images.shape[0:2]
             images = rearrange(images, "b n c h w -> (b n) c h w")
             embeddings = self.image_encoder(images)
+            if self.neck is not None:
+                embeddings = self.neck(embeddings)
             # embeddings = torch.rand((B*N, 256, 64, 64))
             embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
