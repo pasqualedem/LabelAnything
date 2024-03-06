@@ -779,17 +779,17 @@ class Run:
                 #     phase="val",
                 #     run_idx=validation_run,
                 # )
-                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
+                # total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
 
-            total_loss /= len(dataloader)
+            # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
             self.plat_logger.log_metrics(metrics=metrics_values)
             for k, v in metrics_values.items():
                 logger.info(f"Test - {k}: {v}")
-            logger.info(f"Test - Loss: {total_loss}")
+            # logger.info(f"Test - Loss: {total_loss}")
 
     def end(self):
         logger.info("Ending run")

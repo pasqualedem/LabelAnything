@@ -20,7 +20,7 @@ def collate_fn(batched_input):
     return {
         BatchKeys.IMAGES: images.unsqueeze(dim=1),
         BatchKeys.DIMS: dims,
-    }, gts.unsqueeze(dim=1)
+    }, gts
 
 
 def _get_data(image_dir, split):
