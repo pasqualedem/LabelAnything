@@ -327,9 +327,11 @@ class Lam(nn.Module):
         ]  # There is only query image
 
         seg = self.mask_decoder(
-            image_embeddings=query_embeddings,
+            query_embeddings=query_embeddings,
+            support_embeddings=None,
             image_pe=self.prompt_encoder.get_dense_pe(),
             class_embeddings=class_embeddings,
+            flag_examples=None,
         )
 
         return self.postprocess_masks(
