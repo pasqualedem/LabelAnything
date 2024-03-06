@@ -183,7 +183,9 @@ model:
     fusion_transformer: TwoWayTransformer
     image_embed_dim: 768
     image_size: 1024
-    name: lam_no_vit
+    name: lam_b
+    use_sam_checkpoint: True
+    checkpoint: ./checkpoints/sam_vit_b_01ec64.pth
     spatial_convs: 3
 train_params:
   desc: null
