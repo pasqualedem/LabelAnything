@@ -168,7 +168,7 @@ logger:
       entity: cilabuniba
       offline: false
       offline_directory: /leonardo_work/IscrC_PENELOPE/offline
-      tags: NewTraining
+      tags: [NewTraining]
       run_id: nbtyz8sh 
 model:
   desc: null
