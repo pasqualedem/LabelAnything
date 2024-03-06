@@ -119,6 +119,9 @@ class ImageEncoderViT(nn.Module):
         if return_last_block_state:
             last_block = x.clone()
 
+        if not self.project_last_hidden:
+            return last_block
+        
         x = self.neck(x)
 
         return x if not return_last_block_state else {
