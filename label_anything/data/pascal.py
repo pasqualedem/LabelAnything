@@ -5,9 +5,33 @@ from pycocotools import mask as mask_utils
 from PIL import Image
 from torch.nn.functional import one_hot
 import torch
+from label_anything.data.coco20i import Coco20iDataset
+from safetensors.torch import load_file
 
-from label_anything.data.utils import BatchKeys, PromptType
+from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
 from label_anything.data.test import LabelAnythingTestDataset
+
+
+class VOC5i(Coco20iDataset):
+    def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
+        """Open a safetensors file and load the embedding and the ground truth.
+
+        Args:
+            img_data (dict): A dictionary containing the image data, as in the coco dataset.
+
+        Returns:
+            (torch.Tensor, Optional[torch.Tensor]): Returns a tuple containing the embedding and the ground truth.
+        """
+        assert self.emb_dir is not None, "emb_dir must be provided."
+        gt = None
+
+        f = load_file(
+            f"{self.emb_dir}/{str(img_data[AnnFileKeys.ID])}.safetensors"
+        )
+        embedding = f["embedding"]
+        if self.load_gts:
+            gt = f[f"{self.name}_gt"]
+        return embedding, gt
 
 
 class PascalVOCTestDataset(LabelAnythingTestDataset):
