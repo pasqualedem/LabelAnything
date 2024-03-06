@@ -13,9 +13,8 @@ def collate_fn(batched_input):
     images = torch.stack([x[BatchKeys.IMAGES] for x in batched_input])
     dims = torch.stack([x[BatchKeys.DIMS] for x in batched_input])
 
-    max_dims = torch.max(dims, 0).values.tolist()
     gts = torch.stack(
-        [collate_gts(x[BatchKeys.GROUND_TRUTHS], max_dims) for x in batched_input]
+        [collate_gts(x[BatchKeys.GROUND_TRUTHS], [500, 500]) for x in batched_input]
     )
 
     return {

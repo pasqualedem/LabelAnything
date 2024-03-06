@@ -763,6 +763,22 @@ class Run:
                 image_dict, gt = batch_dict
 
                 outputs = self.model.predict(image_dict)
+                # self.plat_logger.log_batch(
+                #     batch_idx=batch_idx,
+                #     image_idx=tot_images,
+                #     batch_size=cur_batch_size,
+                #     epoch=epoch,
+                #     step=tot_steps,
+                #     substitution_step=0,
+                #     input_dict=image_dict,
+                #     input_shape=self.input_image_size,
+                #     gt=gt,
+                #     pred=outputs,
+                #     dataset=val_loader.dataset,
+                #     dataset_names=dataset_names,
+                #     phase="val",
+                #     run_idx=validation_run,
+                # )
                 total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
