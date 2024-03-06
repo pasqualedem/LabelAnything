@@ -190,7 +190,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         masks, flag_masks = self._get_prompt_masks(image_ids, masks_fnames)
 
         # getting flag examples
-        flag_examples = flag_masks.clone()
+        flag_examples = flag_masks.clone().bool()
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
