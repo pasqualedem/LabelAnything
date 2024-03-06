@@ -314,7 +314,7 @@ class Lam(nn.Module):
             masks=masks,
             chunk_size=chunk_size,
             flag_examples=flag_examples,
-        )[ResultDict.CLASS_EMBS]
+        )
         return class_embeddings
 
     def predict(self, batched_input, class_embeddings=None):
