@@ -19,7 +19,7 @@ def collate_fn(batched_input):
 
     return {
         BatchKeys.IMAGES: images.unsqueeze(dim=1),
-        BatchKeys.DIMS: dims.unsqueeze(dim=1),
+        BatchKeys.DIMS: dims,
     }, gts.unsqueeze(dim=1)
 
 
@@ -244,3 +244,4 @@ if __name__ == "__main__":
         for k, v in data_point.items():
             print(f"{k}: {v.size()}")
         print(f"gt: {gt.size()}")
+        exit()
