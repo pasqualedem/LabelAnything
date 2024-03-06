@@ -247,7 +247,7 @@ class Run:
                 self.train_epoch(epoch)
 
                 metrics = None
-                if self.val_loaders:
+                if self.val_loaders and epoch % self.train_params.get("val_frequency", 1) == 0:
                     with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
                         metrics = self.validate(epoch)
