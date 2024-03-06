@@ -18,9 +18,9 @@ def collate_fn(batched_input):
     )
 
     return {
-        BatchKeys.IMAGES: images.unsqueeze(dim=0),
-        BatchKeys.DIMS: dims.unsqueeze(dim=0),
-    }, gts
+        BatchKeys.IMAGES: images.unsqueeze(dim=1),
+        BatchKeys.DIMS: dims.unsqueeze(dim=1),
+    }, gts.unsqueeze(dim=1)
 
 
 def _get_data(image_dir, split):
