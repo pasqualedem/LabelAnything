@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from torchvision.transforms import ToTensor, Compose, PILToTensor
 from typing import Union
-from label_anything.data.utils import BatchKeys, collate_gts
+from label_anything.data.utils import BatchKeys, collate_gts, flags_merge
 from PIL import Image
 import random
 from label_anything.data.transforms import PromptsProcessor
@@ -189,14 +189,25 @@ class DramTestDataset(LabelAnythingTestDataset):
         masks_fnames = [f"{self.example_gt_dir}/{x}.png" for x in prompt_images_fnames]
         masks, flag_masks = self._get_prompt_masks(image_ids, masks_fnames)
 
+        # getting flag examples
+        fake_bbox_flags = torch.zeros(size=(*images.shape[:2], 0))
+        fake_points_flags = torch.zeros(size=(*images.shape[:2], 0))
+
+        flag_examples = flags_merge(
+            flag_masks=flag_masks,
+            flag_points=fake_points_flags,
+            flag_bboxes=fake_bbox_flags,
+        )
+
         prompt_dict = {
             BatchKeys.IMAGES: images,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
-    
+
     @property
     def num_classes(self):
         return len(self.TRAIN_ID2NAME.keys())
