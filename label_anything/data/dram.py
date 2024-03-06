@@ -190,14 +190,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         masks, flag_masks = self._get_prompt_masks(image_ids, masks_fnames)
 
         # getting flag examples
-        fake_bbox_flags = torch.zeros(size=(*images.shape[:2], 0))
-        fake_points_flags = torch.zeros(size=(*images.shape[:2], 0))
-
-        flag_examples = flags_merge(
-            flag_masks=flag_masks,
-            flag_points=fake_points_flags,
-            flag_bboxes=fake_bbox_flags,
-        )
+        flag_examples = flag_masks.clone()
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
