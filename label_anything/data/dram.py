@@ -240,7 +240,7 @@ if __name__ == "__main__":
 
     print("Loader fetching test")
     loader = DataLoader(dram, collate_fn=collate_fn, batch_size=8)
-    data_point, gt = next(iter(loader))
-    for k, v in data_point.items():
-        print(f"{k}: {v.size()}")
-    print(f"gt: {gt.size()}")
+    for data_point, gt in loader:
+        for k, v in data_point.items():
+            print(f"{k}: {v.size()}")
+        print(f"gt: {gt.size()}")
