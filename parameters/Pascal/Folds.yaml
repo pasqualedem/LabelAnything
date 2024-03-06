@@ -120,3 +120,11 @@ other_grids:
           val_fold_idx: [3]
         val_voc5i_N2K1:
           val_fold_idx: [3]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        voc5i:
+          val_fold_idx: [0]
+        val_voc5i_N1K1:
+          val_fold_idx: [0]
+        val_voc5i_N2K1:
+          val_fold_idx: [0]
