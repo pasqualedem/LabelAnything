@@ -1,0 +1,104 @@
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: LabelAnything # name of the logger platform experiment
+  group: SOTA # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+
+  logger:
+    log_frequency: [10]
+    train_image_log_frequency: [100000]
+    val_image_log_frequency: [100]
+    experiment_save_delta: [null] # save experiment every n seconds
+    tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
+    wandb:
+      offline: [False]
+      entity: [cilabuniba]
+      tags: [[SOTA]]
+      offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+
+  train_params:
+    loss:
+      class_weighting: [True]
+      components:
+        focal:
+          weight: [1.0]
+    seed: &seed [42] # random seed to set
+    num_points: [1] # number of points for class after the substitution
+    max_epochs: [50]
+    compile: [False]
+    initial_lr: [0.00005]
+    optimizer: [AdamW]
+    scheduler:
+    - type: cosine
+      step_moment: batch
+      num_warmup_steps: 1000
+    substitute: [False]
+    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+    validation_reruns: [5]
+    watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
+    check_nan: [1] # check for nan every n batches
+  model:
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    spatial_convs: [3]
+    class_attention: [True]
+    example_attention: [True]
+    fusion_transformer: [TwoWayTransformer]
+    image_embed_dim: [768]
+    embed_dim: &embed_dim [512]
+    image_size: &image_size [1024]
+    class_encoder:
+      name: [RandomMatrixEncoder]
+      bank_size: [100]
+      embed_dim: *embed_dim
+
+  dataset: # parameters depending on the class you defined for the dataset
+    datasets:
+      coco20i:
+        name: [coco]
+        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2014.json]
+        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state]
+        img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
+        split: ["train"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        sample_function: [uniform]
+        all_example_categories: [False]
+      val_coco20i_N1K1: &val_coco20i_N1K1
+        name: [coco]
+        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json]
+        emb_dir: *emb_dir
+        img_dir: *img_dir
+        split: ["val"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        n_shots: [1]
+        n_ways: [1]
+        do_subsample: [False]
+        add_box_noise: [False]
+      val_coco20i_N2K1:
+        <<: *val_coco20i_N1K1
+        n_ways: [2]
+    common:
+      remove_small_annotations: [True]
+      do_subsample: [False]
+      add_box_noise: [True]
+      max_points_annotations: [70]
+      max_points_per_annotation: [10]
+      load_gts: [False]
+      image_size: *image_size
+  dataloader:
+    num_workers: [32]
+    prefetch_factor: [2]
+    possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]]
+    val_possible_batch_example_nums: [[[2, 1]]] 
+    prompt_types: [["point", "bbox", "mask"]]
+    prompt_choice_level: [["episode"]]
+    val_prompt_types: [["mask"]]
+
+other_grids:
