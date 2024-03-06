@@ -47,8 +47,8 @@ parameters:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [False, True]
-    example_attention: [False, True]
-    example_class_attention: [False, True]
+    example_attention: [False]
+    example_class_attention: [False]
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
     embed_dim: &embed_dim [512]
