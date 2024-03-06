@@ -187,7 +187,7 @@ model:
     use_sam_checkpoint: True
     checkpoint: ./checkpoints/sam_vit_b_01ec64.pth
     spatial_convs: 3
-    project_last_hidden: False
+    use_vit_sam_neck: False
 train_params:
   desc: null
   value:
