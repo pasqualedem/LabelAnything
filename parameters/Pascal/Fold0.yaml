@@ -35,7 +35,7 @@ parameters:
     initial_lr: [0.00005]
     optimizer: [AdamW]
     scheduler:
-    - type: constant_with_warmup
+    - type: cosine
       step_moment: batch
       num_warmup_steps: 1000
     substitute: [False]
@@ -88,7 +88,7 @@ parameters:
       remove_small_annotations: [True]
       do_subsample: [False]
       add_box_noise: [True]
-      max_points_annotations: [50]
+      max_points_annotations: [70]
       max_points_per_annotation: [10]
       load_gts: [False]
       image_size: *image_size
