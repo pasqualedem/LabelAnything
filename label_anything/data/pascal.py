@@ -2,6 +2,7 @@ import json
 import os
 import random
 from pycocotools import mask as mask_utils
+from typing import Optional
 from PIL import Image
 from torch.nn.functional import one_hot
 import torch
