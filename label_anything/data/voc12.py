@@ -125,17 +125,17 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
             "coco_url": f"JPEGImages/{id_}.jpg",
             "height": images[enum].shape[0],
             "width": images[enum].shape[1],
-            "id": enum,
+            "id": id_,
         }
         annotations_images.append(image)
 
     i = 0
-    for enum, (box, rle, label) in enumerate(zip(boxes, rle_masks, labels)):
+    for enum, (id_, box, rle, label) in enumerate(zip(ids, boxes, rle_masks, labels)):
         for b, (_, rle_value), l in zip(box, rle.items(), label):
             annotation = {
                 "segmentation": rle_value,
                 "area": int(mask_utils.area(rle_value)),
-                "image_id": enum,
+                "image_id": id_,
                 "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
                 "category_id": category_to_id[l],
                 "id": i,
