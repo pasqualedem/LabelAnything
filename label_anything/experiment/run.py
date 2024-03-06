@@ -184,6 +184,9 @@ class Run:
     def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
             overwritten = False
+            print(self.params["model"])
+            print(self.model_params)
+            exit()
             # Merge image_encoder dict with the state dict
             if (
                 "checkpoint" in self.model_params
