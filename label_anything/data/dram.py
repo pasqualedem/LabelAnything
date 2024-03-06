@@ -18,8 +18,8 @@ def collate_fn(batched_input):
     )
 
     return {
-        BatchKeys.IMAGES: images,
-        BatchKeys.DIMS: dims,
+        BatchKeys.IMAGES: images.unsqueeze(dim=0),
+        BatchKeys.DIMS: dims.unsqueeze(dim=0),
     }, gts
 
 
