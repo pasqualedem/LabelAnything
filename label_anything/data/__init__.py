@@ -112,7 +112,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
             )
             val_dataloaders[dataset] = val_dataloader
     else:
-        val_dataloader = None
+        val_dataloaders = None
     if test_datasets_params:
         test_datasets = [
             TEST_DATASETS[dataset](**params, preprocess=preprocess)

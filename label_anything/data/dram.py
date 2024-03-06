@@ -13,8 +13,9 @@ def collate_fn(batched_input):
     images = torch.stack([x[BatchKeys.IMAGES] for x in batched_input])
     dims = torch.stack([x[BatchKeys.DIMS] for x in batched_input])
 
+    max_dims = torch.max(dims, 0).values.tolist()
     gts = torch.stack(
-        [collate_gts(x[BatchKeys.GROUND_TRUTHS], [500, 500]) for x in batched_input]
+        [collate_gts(x[BatchKeys.GROUND_TRUTHS], max_dims) for x in batched_input]
     )
 
     return {
@@ -107,7 +108,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         size = img.size
         if self.preprocess:
             img = self.preprocess(img)
-        return img, torch.as_tensor(size)
+        return img, torch.as_tensor(size[::-1]).t()
 
     def _load_gt(self, fname):
         gt = Image.open(fname)
