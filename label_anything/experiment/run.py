@@ -129,7 +129,9 @@ class Run:
         )
         model_name = self.model_params.get("name")
         logger.info(f"Creating model {model_name}")
-        self.model = model_registry[model_name](**deepcopy(self.model_params).pop("name"))
+        model_registry_params = deepcopy(self.model_params)
+        model_registry_params.pop("name")
+        self.model = model_registry[model_name](**model_registry_params)
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
