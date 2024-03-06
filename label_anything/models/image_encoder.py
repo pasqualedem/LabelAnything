@@ -120,7 +120,7 @@ class ImageEncoderViT(nn.Module):
             last_block = x.clone()
 
         if not self.project_last_hidden:
-            return last_block
+            return x
         
         x = self.neck(x)
 
