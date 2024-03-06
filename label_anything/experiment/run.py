@@ -50,6 +50,7 @@ from .utils import (
     set_class_embeddings,
 )
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder
+from copy import deepcopy
 
 logger = get_logger(__name__)
 SIZE = 1024
@@ -126,9 +127,9 @@ class Run:
             self.dataloader_params,
             self.accelerator.num_processes,
         )
-        model_name = self.model_params.pop("name")
+        model_name = self.model_params.get("name")
         logger.info(f"Creating model {model_name}")
-        self.model = model_registry[model_name](**self.model_params)
+        self.model = model_registry[model_name](**deepcopy(self.model_params).pop("name"))
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
@@ -184,9 +185,6 @@ class Run:
     def _load_state(self):
         if self.plat_logger.accelerator_state_dir:
             overwritten = False
-            print(self.params["model"])
-            print(self.model_params)
-            exit()
             # Merge image_encoder dict with the state dict
             if (
                 "checkpoint" in self.model_params
