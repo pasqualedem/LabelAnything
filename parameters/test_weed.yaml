@@ -118,9 +118,9 @@ dataset:
       #   name: coco
       #   split: val
       #   val_fold_idx: 0
-      test_weed:
-        train_root: ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000
-        test_root: ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003
+      test_weedmap:
+        train_root: /ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/000
+        test_root: /ext/stalla/LabelAnything/WeedMap/0_rotations_processed_003_test/RedEdge/003
 experiment:
   desc: null
   value:
