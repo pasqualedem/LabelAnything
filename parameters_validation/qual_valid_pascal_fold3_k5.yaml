@@ -118,7 +118,7 @@ dataset:
         n_folds: 4
         n_shots: 5
         n_ways: 2
-        name: coco
+        name: voc5i
         split: val
         val_fold_idx: 3
       voc5i:
@@ -127,7 +127,7 @@ dataset:
         img_dir: /leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012
         instances_path: /leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json
         n_folds: 4
-        name: coco
+        name: voc5i
         sample_function: uniform
         split: train
         val_fold_idx: 3
