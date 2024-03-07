@@ -62,24 +62,20 @@ parameters:
     check_nan: [1] # check for nan every n batches
 
   model:
-    name: [lam_mae_b] # path to model class or model name contained in EzDL or super-gradients
-    spatial_convs: [3]
-    class_attention: [True]
-    example_attention: [True]
-    image_embed_dim: [768]
-    embed_dim: &embed_dim [256]
-    image_size: &image_size [480]
-    few_type: [Affinity]
-    transformer_feature_size: [30]
-    class_fusion: [sigmoid]
-    class_embedding_dim: [1024]
-    transformer_keys_are_images: [True]
-    use_support_features_in_prompt_encoder: [True]
+    class_attention: [false]
     class_encoder:
-      name: [RandomMatrixEncoder]
       bank_size: [100]
-      embed_dim: *embed_dim
-
+      embed_dim: [512]
+      name: [RandomMatrixEncoder]
+    embed_dim: [512]
+    example_attention: [true]
+    example_class_attention: [false]
+    fusion_transformer: [TwoWayTransformer]
+    image_embed_dim: [768]
+    image_size: [1024]
+    name: [lam_no_vit]
+    spatial_convs: [3]
+    segment_example_logits: [true]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -110,7 +106,6 @@ parameters:
       add_box_noise: [True]
       max_points_annotations: [50]
       max_points_per_annotation: [10]
-      image_size: *image_size
   dataloader:
     num_workers: [0]
     possible_batch_example_nums: [[[2, 2, 1]]]

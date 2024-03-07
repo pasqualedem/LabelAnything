@@ -4,6 +4,7 @@ import itertools
 
 from typing import Any, Dict, List, Tuple
 from torch.utils.data import Dataset, BatchSampler
+from label_anything.data.pascal import VOC5i
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
@@ -21,8 +22,8 @@ datasets = {
     "lvis": CocoLVISDataset,
     # "voc": PascalVOCDataset,
     # "val_voc": PascalVOCDataset,
-    "voc5i": Coco20iDataset,
-    "val_voc5i": Coco20iDataset,
+    "voc5i": VOC5i,
+    "val_voc5i": VOC5i,
     "val_lvis": CocoLVISDataset,
 }
 

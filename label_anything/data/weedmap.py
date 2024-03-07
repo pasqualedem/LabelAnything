@@ -84,7 +84,7 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
-            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            BatchKeys.FLAG_EXAMPLES: flag_masks,
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict

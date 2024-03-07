@@ -1,0 +1,232 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    python_version: 3.11.0
+    cli_version: 0.16.3
+    framework: huggingface
+    huggingface_version: 4.37.2
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1709751048.98676
+    t:
+      1:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      2:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      3:
+      - 3
+      - 4
+      - 7
+      - 15
+      - 18
+      - 23
+      - 37
+      - 42
+      4: 3.11.0
+      5: 0.16.3
+      6: 4.37.2
+      8:
+      - 5
+      13: linux-x86_64
+    m:
+    - 1: train/step
+      6:
+      - 3
+    - 1: validate/step
+      6:
+      - 3
+dataloader:
+  desc: null
+  value:
+    num_workers: 32
+    possible_batch_example_nums:
+    - - 2
+      - 1
+      - 4
+    - - 2
+      - 4
+      - 2
+    - - 2
+      - 1
+      - 2
+    - - 4
+      - 2
+      - 2
+    - - 4
+      - 4
+      - 1
+    - - 16
+      - 1
+      - 1
+    prefetch_factor: 2
+    prompt_choice_level:
+    - episode
+    prompt_types:
+    - point
+    - bbox
+    - mask
+    val_possible_batch_example_nums:
+    - - 2
+      - 1
+    val_prompt_types:
+    - point
+    - bbox
+dataset:
+  desc: null
+  value:
+    common:
+      add_box_noise: true
+      do_subsample: false
+      image_size: 1024
+      load_gts: false
+      max_points_annotations: 70
+      max_points_per_annotation: 10
+      remove_small_annotations: true
+    datasets:
+      coco20i:
+        all_example_categories: false
+        emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
+        img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+        instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2014.json
+        n_folds: 4
+        name: coco
+        sample_function: uniform
+        split: train
+        val_fold_idx: 0
+      val_coco20i_N1K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
+        img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+        instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 1
+        name: coco
+        split: val
+        val_fold_idx: 0
+      val_coco20i_N2K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
+        img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+        instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 2
+        name: coco
+        split: val
+        val_fold_idx: 0
+      val_coco20i_N1K5:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
+        img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+        instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 5
+        n_ways: 1
+        name: coco
+        split: val
+        val_fold_idx: 0
+      val_coco20i_N2K5:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
+        img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
+        instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 5
+        n_ways: 2
+        name: coco
+        split: val
+        val_fold_idx: 0
+experiment:
+  desc: null
+  value:
+    continue_with_errors: false
+    direction: null
+    excluded_files: ''
+    group: Ablations
+    logger: null
+    max_parallel_runs: 1
+    n_trials: null
+    name: LabelAnything
+    resume: false
+    resume_last: false
+    search: grid
+    start_from_grid: 0
+    start_from_run: 0
+    timestamp: '20240306_193652'
+    tracking_dir: ''
+    uuid: 0baade85
+logger:
+  desc: null
+  value:
+    experiment_save_delta: null
+    log_frequency: 10
+    tmp_dir: /leonardo_work/IscrC_PENELOPE/tmp
+    train_image_log_frequency: null
+    val_image_log_frequency: null
+    wandb:
+      entity: cilabuniba
+      offline: false
+      offline_directory: /leonardo_work/IscrC_PENELOPE/offline
+      run_id: n9623ye5
+      tags:
+      - Ablations
+model:
+  desc: null
+  value:
+    class_attention: false
+    class_encoder:
+      bank_size: 100
+      embed_dim: 512
+      name: RandomMatrixEncoder
+    embed_dim: 512
+    example_attention: true
+    example_class_attention: false
+    fusion_transformer: TwoWayTransformer
+    image_embed_dim: 768
+    image_size: 1024
+    name: lam_no_vit
+    spatial_convs: 3
+train_params:
+  desc: null
+  value:
+    accumulate_substitution: false
+    check_nan: 1
+    compile: false
+    initial_lr: 5.0e-05
+    loss:
+      class_weighting: true
+      components:
+        focal:
+          weight: 1.0
+    max_epochs: 50
+    num_points: 1
+    optimizer: AdamW
+    scheduler:
+      num_warmup_steps: 1000
+      step_moment: batch
+      type: cosine
+    seed: 42
+    substitute: false
+    validation_reruns: 5
+    watch_metric: miou
