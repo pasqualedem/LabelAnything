@@ -194,9 +194,9 @@ class DramTestDataset(LabelAnythingTestDataset):
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
-            BatchKeys.FLAG_EXAMPLES: flag_examples,
-            BatchKeys.PROMPT_MASKS: masks,
-            BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.FLAG_EXAMPLES: flag_examples[:, 1:],
+            BatchKeys.PROMPT_MASKS: masks[:, 1:],
+            BatchKeys.FLAG_MASKS: flag_masks[:, 1:],
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
