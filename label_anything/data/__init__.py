@@ -5,7 +5,7 @@ from torchvision.transforms import Compose, PILToTensor, Resize, Normalize, ToTe
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
-from label_anything.data.dram import DramTestDataset
+from label_anything.data.dram import DramTestDataset, collate_fn as dram_collate
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.data.weedmap import WeedMapTestDataset
 from label_anything.data.pascal import PascalVOCTestDataset
@@ -20,6 +20,13 @@ TEST_DATASETS = {
     "test_brain": BrainMriTestDataset,
     "test_pascal": PascalVOCTestDataset,
 }
+
+
+def map_collate(dataset):
+    if isinstance(dataset, DramTestDataset):
+        return dram_collate
+    return dataset.collate_fn if hasattr(dataset, "collate_fn") else None
+    
 
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
@@ -115,7 +122,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
             DataLoader(
                 dataset=data,
                 **dataloader_args,
-                collate_fn=data.collate_fn if hasattr(data, "collate_fn") else None,
+                collate_fn=map_collate(data),
             )
             for data in test_datasets
         ]

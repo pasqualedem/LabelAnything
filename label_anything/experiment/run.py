@@ -13,7 +13,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
 from torch.optim import AdamW
-from torchmetrics import MetricCollection
+from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
@@ -50,6 +50,7 @@ from .utils import (
     set_class_embeddings,
 )
 from label_anything.models.contrastive_pe import ContrastivePromptEncoder
+from copy import deepcopy
 
 logger = get_logger(__name__)
 SIZE = 1024
@@ -126,9 +127,11 @@ class Run:
             self.dataloader_params,
             self.accelerator.num_processes,
         )
-        model_name = self.model_params.pop("name")
+        model_name = self.model_params.get("name")
         logger.info(f"Creating model {model_name}")
-        self.model = model_registry[model_name](**self.model_params)
+        model_registry_params = deepcopy(self.model_params)
+        model_registry_params.pop("name")
+        self.model = model_registry[model_name](**model_registry_params)
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
@@ -387,7 +390,9 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["train_params"]["seed"] + epoch)
-            logger.info(f"Setting seed to {self.params['train_params']['seed'] + epoch}")
+            logger.info(
+                f"Setting seed to {self.params['train_params']['seed'] + epoch}"
+            )
         self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
@@ -736,6 +741,7 @@ class Run:
                 self.accelerator.prepare(
                     DistributedBinaryJaccardIndex(ignore_index=-100)
                 ),
+                self.accelerator.prepare(F1Score(task="multiclass", num_classes=3)),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -754,23 +760,39 @@ class Run:
             desc=f"Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-
+        tot_images = 0
+        epoch = 0
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
-
+                batch_size = image_dict["images"].size(0)
                 outputs = self.model.predict(image_dict)
+                # self.plat_logger.log_batch(
+                #     batch_idx=batch_idx,
+                #     image_idx=tot_images,
+                #     epoch=epoch,
+                #     substitution_step=0,
+                #     input_dict=image_dict,
+                #     input_shape=self.input_image_size,
+                #     gt=gt,
+                #     pred=outputs,
+                #     dataset=self.test_loader.dataset,
+                #     dataset_names='WeedMap',
+                #     phase="test",
+                #     run_idx=0,
+                # )
                 total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
-
-            total_loss /= len(dataloader)
+                tot_images += batch_size
+                epoch += 1
+            # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
             self.plat_logger.log_metrics(metrics=metrics_values)
             for k, v in metrics_values.items():
                 logger.info(f"Test - {k}: {v}")
-            logger.info(f"Test - Loss: {total_loss}")
+            # logger.info(f"Test - Loss: {total_loss}")
 
     def end(self):
         logger.info("Ending run")

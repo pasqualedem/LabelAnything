@@ -108,6 +108,7 @@ class ImageEncoderViT(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, return_last_block_state: bool = False) -> torch.Tensor:
+        # return torch.rand(5, 768, 64, 64).cuda()
         x = self.patch_embed(x)
         if self.pos_embed is not None:
             x = x + self.pos_embed
@@ -119,6 +120,9 @@ class ImageEncoderViT(nn.Module):
         if return_last_block_state:
             last_block = x.clone()
 
+        if not self.project_last_hidden:
+            return x
+        
         x = self.neck(x)
 
         return x if not return_last_block_state else {

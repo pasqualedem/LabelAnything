@@ -160,6 +160,8 @@ class Lam(nn.Module):
             B, N = images.shape[0:2]
             images = rearrange(images, "b n c h w -> (b n) c h w")
             embeddings = self.image_encoder(images)
+            if self.neck is not None:
+                embeddings = self.neck(embeddings)
             # embeddings = torch.rand((B*N, 256, 64, 64))
             embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
@@ -312,7 +314,7 @@ class Lam(nn.Module):
             masks=masks,
             chunk_size=chunk_size,
             flag_examples=flag_examples,
-        )[ResultDict.CLASS_EMBS]
+        )
         return class_embeddings
 
     def predict(self, batched_input, class_embeddings=None):
@@ -325,9 +327,11 @@ class Lam(nn.Module):
         ]  # There is only query image
 
         seg = self.mask_decoder(
-            image_embeddings=query_embeddings,
+            query_embeddings=query_embeddings,
+            support_embeddings=None,
             image_pe=self.prompt_encoder.get_dense_pe(),
             class_embeddings=class_embeddings,
+            flag_examples=None,
         )
 
         return self.postprocess_masks(

@@ -57,11 +57,13 @@ class BrainMriTestDataset(LabelAnythingTestDataset):
         contain_tumor = (masks == 1).sum(dim=(1, 2)) > 0
         flag_masks = torch.stack([backflag, contain_tumor]).T
         masks = one_hot(masks.long(), 2).permute(0, 3, 1, 2).float()
+        flag_examples = flag_masks.clone().bool()
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
@@ -82,7 +84,7 @@ class BrainMriTestDataset(LabelAnythingTestDataset):
         size = img.size
         if self.preprocess:
             img = self.preprocess(img)  # 3 x h x w
-        return img, torch.tensor(size).unsqueeze(0)
+        return img, torch.tensor(size)
 
     def _get_gt(self, annotation_info):
         gt = mask_utils.decode(annotation_info["segmentation"])
@@ -96,7 +98,7 @@ class BrainMriTestDataset(LabelAnythingTestDataset):
         image, size = self._get_image(image_info)
         gt = self._get_gt(annotation_info)
         return {
-            BatchKeys.IMAGES: image,
+            BatchKeys.IMAGES: image.unsqueeze(0),
             BatchKeys.DIMS: size,
         }, gt
 
