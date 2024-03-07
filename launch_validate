@@ -8,7 +8,7 @@
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=0
 #SBATCH --gres=gpu:4
-#SBATCH --job-name=test_model
+#SBATCH --job-name=validate_model
 #SBATCH --out=validate.out
 #SBATCH --err=validate.out
 
