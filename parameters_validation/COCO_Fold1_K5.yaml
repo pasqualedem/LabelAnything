@@ -108,26 +108,26 @@ dataset:
         sample_function: uniform
         split: train
         val_fold_idx: 1
-      val_coco20i_N1K1:
+      val_coco20i_N1K5:
         add_box_noise: false
         do_subsample: false
         emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
         img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
         instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
         n_folds: 4
-        n_shots: 1
+        n_shots: 5
         n_ways: 1
         name: coco
         split: val
         val_fold_idx: 1
-      val_coco20i_N2K1:
+      val_coco20i_N2K5:
         add_box_noise: false
         do_subsample: false
         emb_dir: /leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state
         img_dir: /leonardo_scratch/large/userexternal/nfanelli/train_val_2017
         instances_path: /leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json
         n_folds: 4
-        n_shots: 1
+        n_shots: 5
         n_ways: 2
         name: coco
         split: val
