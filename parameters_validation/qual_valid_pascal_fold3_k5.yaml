@@ -162,7 +162,7 @@ logger:
       entity: cilabuniba
       offline: false
       offline_directory: /leonardo_work/IscrC_PENELOPE/offline
-      run_id: nbtyz8sh
+      run_id: 027n58xc
       tags:
       - SOTA
 model:
