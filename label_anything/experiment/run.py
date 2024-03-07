@@ -758,31 +758,31 @@ class Run:
             disable=not self.accelerator.is_local_main_process,
         )
         tot_images=0
+        epoch = 0
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
                 batch_size = image_dict["images"].size(0)
                 outputs = self.model.predict(image_dict)
-                # self.plat_logger.log_batch(
-                #     batch_idx=batch_idx,
-                #     image_idx=tot_images,
-                #     batch_size=cur_batch_size,
-                #     epoch=epoch,
-                #     step=tot_steps,
-                #     substitution_step=0,
-                #     input_dict=image_dict,
-                #     input_shape=self.input_image_size,
-                #     gt=gt,
-                #     pred=outputs,
-                #     dataset=val_loader.dataset,
-                #     dataset_names=dataset_names,
-                #     phase="val",
-                #     run_idx=validation_run,
-                # )
-                # total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
+                self.plat_logger.log_batch(
+                    batch_idx=batch_idx,
+                    image_idx=tot_images,
+                    epoch=epoch,
+                    substitution_step=0,
+                    input_dict=image_dict,
+                    input_shape=self.input_image_size,
+                    gt=gt,
+                    pred=outputs,
+                    dataset=self.test_loader.dataset,
+                    dataset_names='WeedMap',
+                    phase="test",
+                    run_idx=0,
+                )
+                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
                 tot_images += batch_size 
+                epoch +=1
             # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
