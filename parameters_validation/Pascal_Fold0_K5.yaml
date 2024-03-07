@@ -183,7 +183,6 @@ model:
     image_size: 1024
     name: lam_no_vit
     spatial_convs: 3
-    segment_example_logits: true
 train_params:
   desc: null
   value:
