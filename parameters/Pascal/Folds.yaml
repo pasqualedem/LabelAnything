@@ -48,7 +48,7 @@ parameters:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [False]
-    example_attention: [False]
+    example_attention: [True]
     example_class_attention: [False]
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
@@ -67,7 +67,7 @@ parameters:
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
         img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         split: ["train"]
-        val_fold_idx: [0]
+        val_fold_idx: [1]
         n_folds: [4]
         sample_function: [uniform]
         all_example_categories: [False]
@@ -77,7 +77,7 @@ parameters:
         emb_dir: *emb_dir
         img_dir: *img_dir
         split: ["val"]
-        val_fold_idx: [0]
+        val_fold_idx: [1]
         n_folds: [4]
         n_shots: [1]
         n_ways: [1]
@@ -104,3 +104,27 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        voc5i:
+          val_fold_idx: [2]
+        val_voc5i_N1K1:
+          val_fold_idx: [2]
+        val_voc5i_N2K1:
+          val_fold_idx: [2]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        voc5i:
+          val_fold_idx: [3]
+        val_voc5i_N1K1:
+          val_fold_idx: [3]
+        val_voc5i_N2K1:
+          val_fold_idx: [3]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        voc5i:
+          val_fold_idx: [0]
+        val_voc5i_N1K1:
+          val_fold_idx: [0]
+        val_voc5i_N2K1:
+          val_fold_idx: [0]

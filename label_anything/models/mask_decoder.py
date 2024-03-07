@@ -284,6 +284,7 @@ class MaskDecoderLam(nn.Module):
         )
         if self.segment_example_logits:
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
+            seg[flag_examples.logical_not()] = float("-inf")
             seg = seg.max(dim=1).values
         return seg
 
