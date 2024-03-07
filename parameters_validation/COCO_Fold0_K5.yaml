@@ -157,8 +157,8 @@ logger:
     experiment_save_delta: null
     log_frequency: 10
     tmp_dir: /leonardo_work/IscrC_PENELOPE/tmp
-    train_image_log_frequency: 100000
-    val_image_log_frequency: 100
+    train_image_log_frequency: null
+    val_image_log_frequency: null
     wandb:
       entity: cilabuniba
       offline: false
