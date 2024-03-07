@@ -205,3 +205,4 @@ train_params:
     substitute: false
     val_frequency: 4
     validation_reruns: 5
+    watch_metric: miou
