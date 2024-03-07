@@ -757,11 +757,11 @@ class Run:
             desc=f"Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-
+        tot_images=0
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
-
+                batch_size = image_dict["images"].size(0)
                 outputs = self.model.predict(image_dict)
                 # self.plat_logger.log_batch(
                 #     batch_idx=batch_idx,
@@ -782,7 +782,7 @@ class Run:
                 # total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
-
+                tot_images += batch_size 
             # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
