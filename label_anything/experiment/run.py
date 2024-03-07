@@ -13,7 +13,7 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
 from torch.optim import AdamW
-from torchmetrics import MetricCollection
+from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
@@ -390,7 +390,9 @@ class Run:
     ):
         if epoch > 0:
             set_seed(self.params["train_params"]["seed"] + epoch)
-            logger.info(f"Setting seed to {self.params['train_params']['seed'] + epoch}")
+            logger.info(
+                f"Setting seed to {self.params['train_params']['seed'] + epoch}"
+            )
         self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
@@ -739,6 +741,7 @@ class Run:
                 self.accelerator.prepare(
                     DistributedBinaryJaccardIndex(ignore_index=-100)
                 ),
+                self.accelerator.prepare(F1Score(task="multiclass", num_classes=3)),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -757,7 +760,7 @@ class Run:
             desc=f"Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-        tot_images=0
+        tot_images = 0
         epoch = 0
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
@@ -781,8 +784,8 @@ class Run:
                 total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
-                tot_images += batch_size 
-                epoch +=1
+                tot_images += batch_size
+                epoch += 1
             # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
