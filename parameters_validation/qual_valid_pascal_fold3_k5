@@ -157,12 +157,12 @@ logger:
     log_frequency: 10
     tmp_dir: /leonardo_work/IscrC_PENELOPE/tmp
     train_image_log_frequency: null
-    val_image_log_frequency: null
+    val_image_log_frequency: 10
     wandb:
       entity: cilabuniba
       offline: false
       offline_directory: /leonardo_work/IscrC_PENELOPE/offline
-      run_id: 027n58xc
+      run_id: nbtyz8sh
       tags:
       - SOTA
 model:
