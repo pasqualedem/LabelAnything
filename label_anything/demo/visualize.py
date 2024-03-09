@@ -16,6 +16,7 @@ from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys, flags_
 from accelerate import Accelerator
 
 from label_anything.experiment.utils import WrapperModule
+from label_anything.logger.utils import take_image
 
 
 colors = [
@@ -169,10 +170,9 @@ def draw_boxes(img: Image, boxes: torch.Tensor, colors):
             img = cv2.rectangle(img, (x1, y1), (x2, y2), colors[i], 2)
     return img
 
-
-def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes, dims=None):
-    resized_image = resize(img.copy(), seg.shape[-2:])
-    masked_image = resized_image.copy()
+import streamlit as st
+def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
+    masked_image = img.copy()
     for i in range(1, num_classes):
         binary_mask = (seg == i)[0]
         mask = binary_mask.cpu().numpy()
@@ -181,7 +181,7 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes, dims=None):
                                 masked_image)
     
     masked_image = masked_image.astype(np.uint8)
-    return cv2.addWeighted(np.array(resized_image), 0.6, masked_image, 0.4, 0)
+    return cv2.addWeighted(np.array(img), 0.6, masked_image, 0.4, 0)
 
 
 def draw_all(img: Image, masks, boxes, points, colors):
@@ -231,41 +231,56 @@ def plot_all(dataset, batch, colors):
     plot_images(images, unbatched["classes"], dataset.categories["coco"])
     
     
-def plot_segs(input, seg, gt, colors, dims):
-    num_classes = len(input['classes'][0][0]) + 1
-    image = get_image(input['images'][0, 0])
-    segmask = draw_seg(
-        image,
-        seg.cpu(),
-        colors,
-        num_classes=num_classes
-    )
-
-    gtmask = draw_seg(
-        image,
-        gt,
-        colors,
-        num_classes=num_classes
-    )
+def plot_seg_gt(input, seg, gt, colors, dims, classes):
+    query_dim = dims[0, 0]
+    num_classes = len(classes) + 1
+    image = take_image(get_image(input["images"][0, 0]))
+    segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes)
+    gtmask = draw_seg(image, gt, colors, num_classes=num_classes)
     blank_seg = Image.fromarray(np.zeros_like(segmask))
     blank_gt = Image.fromarray(np.zeros_like(gtmask))
     blank_segmask = draw_seg(
-        blank_seg,
-        seg.cpu(),
-        colors,
-        num_classes=num_classes
+        blank_seg, seg.cpu(), colors, num_classes=num_classes
     )
-
     blank_gtmask = draw_seg(
-        blank_gt,
-        gt,
-        colors,
-        num_classes=num_classes
+        blank_gt, gt, colors, num_classes=num_classes
     )
     plots = [segmask, gtmask, blank_segmask, blank_gtmask, image, image]
-    titles = ["Predicted", "Ground Truth", "Predicted", "Ground Truth", "Original", "Original"]
+    titles = [
+        "Predicted",
+        "Ground Truth",
+        "Predicted",
+        "Ground Truth",
+        "Original",
+        "Original",
+    ]
 
     subplots = plt.subplots(3, 2, figsize=(20, 30))
+    for i, (plot, title) in enumerate(zip(plots, titles)):
+        subplots[1].flatten()[i].imshow(plot)
+        subplots[1].flatten()[i].set_title(title)
+        subplots[1].flatten()[i].axis("off")
+    return plots, titles
+
+
+def plot_seg(input, seg, colors, dims, classes):
+    query_dim = dims[0, 0]
+    num_classes = len(classes) + 1
+    query_image = input["images"][0, 0]
+    image = get_image(take_image(query_image, dims=query_dim, input_shape=query_image.shape[-1]))
+    seg = seg[:, : query_dim[0], : query_dim[1]]
+    segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes)
+    blank_seg = Image.fromarray(np.zeros_like(segmask))
+    blank_segmask = draw_seg(
+        blank_seg, seg.cpu(), colors, num_classes=num_classes
+    )
+    plots = [segmask, blank_segmask, image, image]
+    titles = [
+        "Overlay",
+        "Mask",
+    ]
+
+    subplots = plt.subplots(1, 2, figsize=(20, 30))
     for i, (plot, title) in enumerate(zip(plots, titles)):
         subplots[1].flatten()[i].imshow(plot)
         subplots[1].flatten()[i].set_title(title)

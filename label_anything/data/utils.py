@@ -171,6 +171,69 @@ def rearrange_classes(classes: List[Dict[int, int]]) -> Dict[int, int]:
     return {val: ix for ix, val in enumerate(distinct_classes, start=1)}
 
 
+def annotations_to_tensor(
+    prompts_processor, annotations: list, img_sizes: list, prompt_type: PromptType
+) -> torch.Tensor:
+    """Convert a list of annotations to a tensor.
+
+    Args:
+        prompts_processor (PromptsProcessor): The prompts processor.
+        annotations (list): A list of annotations.
+        img_sizes (list): A list of tuples containing the image sizes.
+        prompt_type (PromptType): The type of the prompt.
+
+    Returns:
+        torch.Tensor: The tensor containing the annotations.
+    """
+    n = len(annotations)
+    c = len(annotations[0])
+
+    if prompt_type == PromptType.BBOX:
+        max_annotations = get_max_annotations(annotations)
+        tensor_shape = (n, c, max_annotations, 4)
+    elif prompt_type == PromptType.MASK:
+        tensor_shape = (n, c, 256, 256)
+    elif prompt_type == PromptType.POINT:
+        max_annotations = get_max_annotations(annotations)
+        tensor_shape = (n, c, max_annotations, 2)
+
+    tensor = torch.zeros(tensor_shape)
+    flag = (
+        torch.zeros(tensor_shape[:-1]).type(torch.uint8)
+        if prompt_type != PromptType.MASK
+        else torch.zeros(tensor_shape[:2]).type(torch.uint8)
+    )
+
+    if prompt_type == PromptType.MASK:
+        for i, annotation in enumerate(annotations):
+            for j, cat_id in enumerate(annotation):
+                mask = prompts_processor.apply_masks(annotation[cat_id])
+                tensor_mask = torch.tensor(mask)
+                tensor[i, j, :] = tensor_mask
+                flag[i, j] = 1 if torch.sum(tensor_mask) > 0 else 0
+    else:
+        for i, (annotation, img_original_size) in enumerate(
+            zip(annotations, img_sizes)
+        ):
+            for j, cat_id in enumerate(annotation):
+                if annotation[cat_id].size == 0:
+                    continue
+                m = annotation[cat_id].shape[0]
+                if prompt_type == PromptType.BBOX:
+                    boxes_ann = prompts_processor.apply_boxes(
+                        annotation[cat_id], img_original_size
+                    )
+                    tensor[i, j, :m, :] = torch.tensor(boxes_ann)
+                elif prompt_type == PromptType.POINT:
+                    points_ann = prompts_processor.apply_coords(
+                        annotation[cat_id], img_original_size
+                    )
+                    tensor[i, j, :m, :] = torch.tensor(points_ann)
+                flag[i, j, :m] = 1
+
+    return tensor, flag
+
+
 def collate_gt(
     tensor: torch.Tensor, original_classes: Dict[int, int], new_classes: Dict[int, int]
 ) -> torch.Tensor:

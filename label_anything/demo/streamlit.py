@@ -1,4 +1,5 @@
 import itertools
+from einops import rearrange
 import pandas as pd
 import streamlit as st
 import torch
@@ -6,6 +7,9 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from PIL import Image
+from streamlit_image_annotation import detection
+from streamlit_tags import st_tags
+from tempfile import NamedTemporaryFile
 
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
@@ -20,7 +24,9 @@ import numpy as np
 import os
 
 import lovely_tensors as lt
+from label_anything.demo.preprocess import preprocess_to_batch
 from label_anything.experiment.substitution import Substitutor
+from label_anything.models.build_vit import build_vit_b
 from label_anything.utils.utils import ResultDict, load_yaml
 from label_anything.models import model_registry
 
@@ -42,7 +48,8 @@ from label_anything.demo.visualize import (
     load_from_wandb,
     obtain_batch,
     plot_emebddings,
-    # plot_segs,
+    plot_seg_gt,
+    plot_seg,
     draw_all,
     get_image,
     colors,
@@ -81,42 +88,11 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes, dim=None):
     return cv2.addWeighted(np.array(resized_image), 0.6, masked_image, 0.4, 0)
 
 
-def plot_segs(input, seg, gt, colors, dims):
-    query_dim = dims[0, 0]
-    num_classes = len(input["classes"][0][0]) + 1
-    image = get_image(input["images"][0, 0])
-    segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes, dim=query_dim)
-    gtmask = draw_seg(image, gt, colors, num_classes=num_classes, dim=query_dim)
-    blank_seg = Image.fromarray(np.zeros_like(segmask))
-    blank_gt = Image.fromarray(np.zeros_like(gtmask))
-    blank_segmask = draw_seg(
-        blank_seg, seg.cpu(), colors, num_classes=num_classes, dim=query_dim
-    )
-    blank_gtmask = draw_seg(
-        blank_gt, gt, colors, num_classes=num_classes, dim=query_dim
-    )
-    plots = [segmask, gtmask, blank_segmask, blank_gtmask, image, image]
-    titles = [
-        "Predicted",
-        "Ground Truth",
-        "Predicted",
-        "Ground Truth",
-        "Original",
-        "Original",
-    ]
-
-    subplots = plt.subplots(3, 2, figsize=(20, 30))
-    for i, (plot, title) in enumerate(zip(plots, titles)):
-        subplots[1].flatten()[i].imshow(plot)
-        subplots[1].flatten()[i].set_title(title)
-        subplots[1].flatten()[i].axis("off")
-    return plots, titles
-
-
 IMG_DIR = "/ext/stalla/LabelAnything/images/train2017"
 ANNOTATIONS_DIR = "data/annotations/instances_val2017.json"
 EMBEDDINGS_DIR = "/ext/stalla/LabelAnything/embeddings"
 MAX_EXAMPLES = 30
+VIT_B_SAM_PATH = "checkpoints/sam_vit_b_01ec64.pth"
 
 SIZE = 1024
 
@@ -129,8 +105,10 @@ def get_data(_accelerator):
         {
             "coco": {
                 "name": "coco",
-                "instances_path": ANNOTATIONS_DIR,
-                "img_dir": IMG_DIR,
+                "instances_path": st.session_state.get(
+                    "annotations_dir", ANNOTATIONS_DIR
+                ),
+                "img_dir": st.session_state.get("img_dir", IMG_DIR),
                 "preprocess": preprocess,
             }
         },
@@ -177,6 +155,21 @@ def load_model(_accelerator: Accelerator, run_id):
         ]:
             st.warning(f"Unexpected keys: {unmatched_keys.unexpected_keys}")
     return model
+
+
+@st.cache_resource
+def load_image_encoder(image_encoder):
+    checkpoint = VIT_B_SAM_PATH
+    if not os.path.exists(checkpoint):
+        st.warning(f"Checkpoint {checkpoint} not found")
+        return None
+    if image_encoder == "None":
+        return None
+    return build_vit_b(
+        checkpoint=checkpoint,
+        use_sam_checkpoint=True,
+        project_last_hidden=False,
+    ).cuda()
 
 
 def show_image(idx, coco_dataset):
@@ -321,6 +314,24 @@ def get_result(model, batch, gt):
     )
 
 
+@st.cache_resource(hash_funcs={torch.Tensor: lambda x: x.sum().item()})
+def get_features(_model, batch):
+    b, n = batch.shape[:2]
+    batch = rearrange(batch, "b n c h w -> (b n) c h w")
+    with torch.no_grad():
+        result = _model(batch)
+    result = rearrange(result, "(b n) c h w -> b n c h w", b=b)
+    return result
+
+
+def predict(model, image_encoder, batch):
+    image_features = get_features(image_encoder, batch[BatchKeys.IMAGES])
+    batch[BatchKeys.EMBEDDINGS] = image_features
+    with torch.no_grad():
+        result = model(batch)
+    return result
+
+
 def plot_embeddings(examples_class_embeddings, example_flags):
     embeddings_2d = st.session_state.get("reduced_embeddings", None)
     b, n, c, _ = examples_class_embeddings.shape
@@ -364,28 +375,37 @@ def plot_results():
             examples_class_embeddings=result[ResultDict.EXAMPLES_CLASS_EMBS],
             example_flags=input[BatchKeys.FLAG_EXAMPLES],
         )
-    plots, titles = plot_segs(input, seg, one_gt, colors, dims=input[BatchKeys.DIMS])
+    plots, titles = plot_seg_gt(
+        input,
+        seg,
+        one_gt,
+        colors,
+        dims=input[BatchKeys.DIMS],
+        classes=input["classes"][0][0],
+    )
     cols = st.columns(2)
     for i, plot in enumerate(plots):
         cols[i % 2].image(plot, caption=titles[i], use_column_width=True)
 
 
-def main():
-    st.set_page_config(layout="wide", page_title="Label Anything")
-    st.title("Label Anything")
-    st.sidebar.title("Settings")
-    accelerator = Accelerator()
-    # uploaded_image = st.file_uploader("Choose an image", type=["png", "jpg"])
-    dataset = get_data(_accelerator=accelerator)
+def built_in_dataset(accelerator, model):
+    st.write("## Under maintanaince")
+    return
+    st.text_input("Image directory", IMG_DIR, key="img_dir")
+    st.text_input("Annotations directory", ANNOTATIONS_DIR, key="annotations_dir")
+
+    datalaoder = get_data(accelerator)
+    st.session_state["dataset"] = (
+        get_data(_accelerator=accelerator) if st.button("Load dataset") else None
+    )
+    dataset = st.session_state.get("dataset", None)
+    if dataset is None:
+        return
     coco = dataset.dataset.datasets["coco"]
-    with st.sidebar:
-        # load model
-        run_id = st.text_input("Run ID", "4pdvxpgy")
-        model = load_model(accelerator, run_id).model  # WrapperModule
-        datalaoder = get_data(accelerator)
-        image_idx = st.slider("Image index", 0, len(dataset) - 1, 0)
-        num_examples = st.slider("Number of examples", 1, MAX_EXAMPLES, 1)
-        prompt_types = get_prompt_types()
+
+    image_idx = st.slider("Image index", 0, len(dataset) - 1, 0)
+    num_examples = st.slider("Number of examples", 1, MAX_EXAMPLES, 1)
+    prompt_types = get_prompt_types()
     base_image_data, img_cats, chosen_classes = show_image(image_idx, coco)
     if st.button("Generate Examples"):
         generate_examples(coco, base_image_data, img_cats, chosen_classes, num_examples)
@@ -416,19 +436,136 @@ def main():
             if st.session_state.get("result", None) is not None:
                 plot_results()
 
-    # load image
-    # image_placeholder = row[0].empty()
-    # if uploaded_image is not None:
-    #     image = np.array(Image.open(uploaded_image))
-    #     image_placeholder.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # show prediction
-    # if uploaded_file is not None and uploaded_image is not None:
-    #     button_row = st.columns([1, 1, 1])
-    #     if button_row[1].button("Predict"):
-    #         prediction = model(image)
-    #         row[1].write("Prediction")
-    #         row[1].image(prediction, caption="Prediction Image", use_column_width=True)
+def reset_support(idx, image=False):
+    if idx is None:
+        st.session_state["support_set"] = {}
+        return
+    if idx in st.session_state["support_set"]:
+        st.session_state["support_set"][idx]["prompts"]["bboxes"] = []
+        st.session_state["support_set"][idx]["prompts"]["labels"] = []
+        if image:
+            st.session_state["support_set"].pop(idx)
+
+
+def build_support_set():
+    st.write("Choose the classes you want to segment in the image")
+    classes = st_tags(
+        label="Classes",
+        text="Type and press enter",
+        value=[],
+        suggestions=["person", "car", "dog", "cat", "bus", "truck"],
+    )
+    if len(classes) < len(st.session_state.get("classes", [])):  # Reset annotations
+        for k in st.session_state["support_set"].keys():
+            reset_support(k)
+    if not classes:
+        return
+    st.write(classes)
+    st.session_state["classes"] = classes
+    if st.session_state.get("support_set", None) is None:
+        st.session_state["support_set"] = {}
+    st.write("## Upload and annotate the support images")
+    i = 0
+    support_image = st.file_uploader(
+        f"Choose the first support image",
+        type=["png", "jpg"],
+        key=f"support_image_{i}",
+        on_change=lambda: reset_support(None, True),
+    )
+    while support_image is not None:
+        add_support_image(support_image, i)
+        i += 1
+        support_image = st.file_uploader(
+            f"If you want, you can upload and annotate another support image",
+            type=["png", "jpg"],
+            on_change=lambda: reset_support(None, True),
+            key=f"support_image_{i}",
+        )
+    st.write("Review the support set")
+    st.json(st.session_state["support_set"], expanded=False)
+
+
+def add_support_image(support_image, idx):
+    support_image = Image.open(support_image)
+    # Save image in a temp file
+    tmp_support_file = NamedTemporaryFile(delete=False)
+    support_image.save(tmp_support_file.name + ".png")
+    if idx not in st.session_state["support_set"]:
+        st.session_state["support_set"][idx] = {}
+        st.session_state["support_set"][idx]["img"] = support_image
+    if "prompts" not in st.session_state["support_set"][idx]:
+        st.session_state["support_set"][idx]["prompts"] = {}
+        st.session_state["support_set"][idx]["prompts"]["bboxes"] = []
+        st.session_state["support_set"][idx]["prompts"]["labels"] = []
+    st.write(
+        f"Use the annotation tool to annotate the image with bounding boxes, click Complete when you are done"
+    )
+    results = detection(
+        tmp_support_file.name + ".png",
+        label_list=st.session_state["classes"],
+        labels=st.session_state["support_set"][idx]["prompts"]["labels"],
+        height=support_image.height,
+        width=support_image.width,
+        bboxes=st.session_state["support_set"][idx]["prompts"]["bboxes"],
+        key=f"input_prompt_detection_{idx}",
+    )
+    if results is not None:
+        st.session_state["support_set"][idx]["prompts"]["bboxes"] = [
+            v["bbox"] for v in results
+        ]
+        st.session_state["support_set"][idx]["prompts"]["labels"] = [
+            v["label_id"] for v in results
+        ]
+
+
+def try_it_yourself(model, image_encoder):
+    st.write("Upload the image the you want to segment")
+    query_image = st.file_uploader("Choose an image", type=["png", "jpg"])
+    image_placeholder = st.empty()
+    if query_image is not None:
+        image = Image.open(query_image)
+        # Save image in a temp file
+        image_placeholder.image(image, caption="Query Image", width=300)
+        build_support_set()
+        if "support_set" not in st.session_state:
+            return
+        batch = preprocess_to_batch(
+            image,
+            st.session_state["support_set"],
+            list(range(len(st.session_state["classes"]))),
+        )
+        if st.button("Predict"):
+            result = predict(model, image_encoder, batch)
+            st.json(result, expanded=False)
+            plots, titles = plot_seg(
+                batch,
+                result[ResultDict.LOGITS].argmax(dim=1),
+                colors,
+                dims=batch[BatchKeys.DIMS],
+                classes=st.session_state["classes"],
+            )
+            cols = st.columns(2)
+            cols[0].image(plots[0], caption=titles[0], use_column_width=True)
+            cols[1].image(plots[1], caption=titles[1], use_column_width=True)
+
+
+def main():
+    st.set_page_config(layout="wide", page_title="Label Anything")
+    st.title("Label Anything")
+    st.sidebar.title("Settings")
+    accelerator = Accelerator()
+    with st.sidebar:
+        # load model
+        run_id = st.text_input("Run ID", "n9623ye5")
+        model = load_model(accelerator, run_id).model  # WrapperModule
+        image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b"])
+        image_encoder = load_image_encoder(image_encoder)
+    tiy_tab, dataset_tab = st.tabs(["Try it yourself", "Built-in dataset"])
+    with tiy_tab:
+        try_it_yourself(model, image_encoder)
+    with dataset_tab:
+        built_in_dataset(accelerator, model)
 
 
 if __name__ == "__main__":
