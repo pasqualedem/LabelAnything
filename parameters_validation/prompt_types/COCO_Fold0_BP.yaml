@@ -86,6 +86,7 @@ dataloader:
       - 1
     val_prompt_types:
     - bbox
+    - point
 dataset:
   desc: null
   value:
