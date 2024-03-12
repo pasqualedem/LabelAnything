@@ -319,7 +319,7 @@ def get_features(_model, batch):
     b, n = batch.shape[:2]
     batch = rearrange(batch, "b n c h w -> (b n) c h w")
     with torch.no_grad():
-        result = _model(batch)
+        result = torch.cat([_model(batch[i].unsqueeze(0)) for i in range(batch.shape[0])], dim=0)
     result = rearrange(result, "(b n) c h w -> b n c h w", b=b)
     return result
 
