@@ -12,11 +12,17 @@ from tqdm import tqdm
 
 url_voc = "http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrainval_11-May-2012.tar"
 download_command = f"wget {url_voc}"
-tar_command = f"tar -xf VOCtrainval_11-May-2012.tar"
+tar_command = f"tar -xf VOCtrainval_11-May-2012.tar -C data/raw/"
+unzip_segmention_aug = (
+    f"unzip data/raw/SegmentationClassAug.zip -d data/raw/VOCdevkit/VOC2012/"
+)
+unzip_segmentaion_list = (
+    f"unzip data/raw/list.zip -d data/raw/VOCdevkit/VOC2012/ImageSets/Segmentation/"
+)
 instances_voc12 = {
     "info": {
         "description": "VOC 2012 Dataset Annotations files",
-        "version": "1.0",
+        "version": "1.1",
         "year": 2024,
         "contributor": "CILAB",
         "date_created": datetime.now().strftime("%Y-%m-%d"),
@@ -35,7 +41,8 @@ def get_items(root, ids):
     all_masks = []
     all_labels = []
 
-    for image_id in tqdm(ids):
+    for image_id in ids:
+
         image = _get_images(root, image_id)
         masks, boxes = _get_boxes_and_masks(root, image_id)
         labels = _get_label(root, image_id)
@@ -52,7 +59,9 @@ def _read_image_ids(image_sets_file):
     ids = []
     with open(image_sets_file) as f:
         for line in f:
-            ids.append(line.rstrip())
+            image_path, _ = line.rstrip().split(" ")
+            image_id = os.path.splitext(os.path.basename(image_path))[0]
+            ids.append(image_id)
     return ids
 
 
@@ -64,7 +73,7 @@ def _get_images(root, image_id):
 
 
 def _get_boxes_and_masks(root, image_id):
-    mask_file = os.path.join(root, "SegmentationObject", image_id + ".png")
+    mask_file = os.path.join(root, "SegmentationClassAug", image_id + ".png")
     mask_array = np.array(Image.open(mask_file))
     unique_values = np.unique(mask_array)
     masks = {}
@@ -170,15 +179,15 @@ def preprocess_voc(input_folder):
     else:
         print("VOC2012 dataset already exists!")
 
-    if not os.path.exists(
-        os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")
-    ):
-        print("Generating dataset file...")
-        dataset = generate_dataset_file(input_folder)
-    else:
-        print("Dataset file already exists!")
+    # if not os.path.exists(
+    #     os.path.join(input_folder, "ImageSets/SegmentationAug/trainval_aug.txt")
+    # ):
+    #     print("Generating dataset file...")
+    #     dataset = generate_dataset_file(input_folder)
+    # else:
+    #     print("Dataset file already exists!")
 
-    dataset = os.path.join(input_folder, "ImageSets/Segmentation/dataset.txt")
+    dataset = os.path.join(input_folder, "ImageSets/Segmentation/list/trainval_aug.txt")
 
     ids = _read_image_ids(dataset)
     print(f"len ids: {len(ids)}")
