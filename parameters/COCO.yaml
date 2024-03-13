@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: SOTA # name of group of experiments for the logger platform
+  group: COCO20i # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -82,9 +82,16 @@ parameters:
         n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
+      val_coco20i_N1K5:
+        <<: *val_coco20i_N1K1
+        n_shots: [5]
       val_coco20i_N2K1:
         <<: *val_coco20i_N1K1
         n_ways: [2]
+      val_coco20i_N2K5:
+        <<: *val_coco20i_N1K1
+        n_ways: [2]
+        n_shots: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
@@ -117,5 +124,9 @@ other_grids:
           val_fold_idx: [3]
         val_coco20i_N1K1:
           val_fold_idx: [3]
+        val_coco20i_N1K5:
+          val_fold_idx: [3]
         val_coco20i_N2K1:
+          val_fold_idx: [3]
+        val_coco20i_N2K5:
           val_fold_idx: [3]
