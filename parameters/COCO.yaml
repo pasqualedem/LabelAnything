@@ -15,12 +15,12 @@ parameters:
     train_image_log_frequency: [100000]
     val_image_log_frequency: [100]
     experiment_save_delta: [null] # save experiment every n seconds
-    tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
+    tmp_dir: [tmp]
     wandb:
       offline: [False]
       entity: [cilabuniba]
       tags: [[SOTA]]
-      offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      offline_directory: [offline]
 
   train_params:
     loss:
@@ -62,9 +62,9 @@ parameters:
     datasets:
       coco20i:
         name: [coco]
-        instances_path: [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/rscaring/vit_b_sam_embeddings/last_block_state]
-        img_dir: &img_dir [/leonardo_scratch/large/userexternal/nfanelli/train_val_2017]
+        instances_path: [data/coco/annotations/instances_train2014.json]
+        emb_dir: &emb_dir [data/coco/vit_b_sam_embeddings/last_block_state]
+        img_dir: &img_dir [data/coco/train_val_2017]
         split: ["train"]
         val_fold_idx: [1]
         n_folds: [4]
@@ -72,7 +72,7 @@ parameters:
         all_example_categories: [False]
       val_coco20i_N1K1: &val_coco20i_N1K1
         name: [coco]
-        instances_path: &instance_dir [/leonardo_scratch/large/userexternal/nfanelli/annotations/instances_val2014.json]
+        instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
         emb_dir: *emb_dir
         img_dir: *img_dir
         split: ["val"]
