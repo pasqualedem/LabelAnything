@@ -46,6 +46,8 @@ parameters:
     freeze_backbone: [True]
   model:
     name: [lam_b] # path to model class or model name contained in EzDL or super-gradients
+    checkpoint: [checkpoints/sam_vit_b_01ec64.pth]
+    use_sam_checkpoint: [True]
     spatial_convs: [3]
     class_attention: [False]
     example_attention: [True]
