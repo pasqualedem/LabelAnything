@@ -1,10 +1,92 @@
-LabelAnything
-==============================
+# LabelAnything
 
-A short description of the project.
+This repository contains the official code for the paper "LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts".
 
-Project Organization
-------------
+## Requirements
+
+Create a virtual environment using our conda environment file:
+
+```bash
+conda env create -f environment.yml
+conda activate label_anything
+```
+
+## Prepare the Datasets
+
+Enter the `data` directory, create and enter the directory `coco` and download the COCO 2017 train and val images and the COCO 2014 annotations from the [COCO website](https://cocodataset.org/#download):
+
+```bash
+cd data
+mkdir coco
+cd coco
+wget http://images.cocodataset.org/zips/train2017.zip
+wget http://images.cocodataset.org/zips/val2017.zip
+wget http://images.cocodataset.org/annotations/annotations_trainval2014.zip
+```
+
+Unzip the files:
+
+```bash
+unzip train2017.zip
+unzip val2017.zip
+unzip annotations_trainval2014.zip
+rm -rf train2017.zip val2017.zip annotations_trainval2014.zip
+```
+
+The `coco` directory should now contain the following files and directories:
+
+```
+coco
+├── annotations
+│   ├── captions_train2014.json
+│   ├── captions_val2014.json
+│   ├── instances_train2014.json
+│   ├── instances_val2014.json
+|   ├── person_keypoints_train2014.json
+|   └── person_keypoints_val2014.json
+├── train2017
+└── val2017
+```
+
+Now, join the images of the train and val sets into a single directory:
+
+```bash
+mv val2017/* train2017
+mv train2017 train_val_2017
+rm -rf val2017
+```
+
+Finally, you will have to rename image filenames in the COCO 2014 annotations to match the filenames in the `train_val_2017` directory. To do this, run the following script:
+
+```bash
+python main.py rename_coco20i_json --instances-path data/coco/annotations/instances_train2014.json
+python main.py rename_coco20i_json --instances-path data/coco/annotations/instances_val2014.json
+```
+
+## Preprocess
+
+We use [Segment Anything](https://github.com/facebookresearch/segment-anything) pretrained models to extract image features. Enter the `checkpoints` directory and download the pretrained models from the Segment Anything repository:
+
+```bash
+cd checkpoints
+wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+```
+
+**Optional**: To optimize model training and evaluation, you can extract the output of the vision encoder for each image in the COCO dataset, and save it to disk. We call `last_hidden_state` the directory containing the output of the convolutional neck we added on top of the Vision Transformer, while we call `last_block_state` the final output of ViT. This can be done by running the following script:
+
+```bash
+mkdir -p data/coco/vit_sam_embeddings/last_hidden_state
+mkdir data/coco/vit_sam_embeddings/last_block_state
+python main.py preprocess --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/coco/train_val_2017 --batch_size 16 --num_workers=8 --outfolder data/coco/vit_sam_embeddings/last_hidden_state --last_block_dir data/coco/vit_sam_embeddings/last_block_state
+```
+
+## Train (Optional)
+
+## Test
+
+## Demo
+
+## Project Organization
 
     ├── LICENSE
     ├── Makefile           <- Makefile with commands like `make data` or `make train`
