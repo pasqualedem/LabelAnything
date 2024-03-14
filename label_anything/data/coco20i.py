@@ -5,7 +5,15 @@ import torch
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.examples import build_example_generator
-from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys, PromptType, StrEnum, flags_merge
+from label_anything.data.utils import (
+    AnnFileKeys,
+    BatchKeys,
+    BatchMetadataKeys,
+    PromptType,
+    StrEnum,
+    annotations_to_tensor,
+    flags_merge,
+)
 
 
 class Coco20iSplit(StrEnum):
@@ -38,8 +46,12 @@ class Coco20iDataset(CocoLVISDataset):
         assert val_fold_idx < n_folds
         assert split == Coco20iSplit.TRAIN or n_shots is not None
         # If n_shots is min, n_ways should be max
-        assert n_shots != "min" or self.n_ways == "max", "If n_shots is min, n_ways should be max"
-        assert self.n_ways != "max" or (n_shots == "min" or n_shots is None), "If n_ways is max, n_shots should be min"
+        assert (
+            n_shots != "min" or self.n_ways == "max"
+        ), "If n_shots is min, n_ways should be max"
+        assert self.n_ways != "max" or (
+            n_shots == "min" or n_shots is None
+        ), "If n_ways is max, n_shots should be min"
 
         self.split = split
         self.val_fold_idx = val_fold_idx
@@ -116,13 +128,15 @@ class Coco20iDataset(CocoLVISDataset):
                 # sample a random category
                 cat_ids = [-1, random.choice(list(self.categories.keys()))]
                 # sample random img ids
-                image_ids = random.sample(list(self.cat2img[cat_ids[1]]), self.n_shots + 1)
-            else:         
+                image_ids = random.sample(
+                    list(self.cat2img[cat_ids[1]]), self.n_shots + 1
+                )
+            else:
                 # sample n_ways categories
                 cat_ids = random.sample(list(self.categories.keys()), self.n_ways)
                 # Choose a random image from the first category
                 query_image_id = random.choice(list(self.cat2img[cat_ids[0]]))
-                
+
                 # sample n_shots images from each category
                 image_ids = [query_image_id]
                 for cat_id in cat_ids:
@@ -140,14 +154,14 @@ class Coco20iDataset(CocoLVISDataset):
             )
 
             # obtain padded tensors
-            bboxes, flag_bboxes = self.annotations_to_tensor(
-                bboxes, img_sizes, PromptType.BBOX
+            bboxes, flag_bboxes = annotations_to_tensor(
+                self.prompts_processor, bboxes, img_sizes, PromptType.BBOX
             )
-            masks, flag_masks = self.annotations_to_tensor(
-                masks, img_sizes, PromptType.MASK
+            masks, flag_masks = annotations_to_tensor(
+                self.prompts_processor, masks, img_sizes, PromptType.MASK
             )
-            points, flag_points = self.annotations_to_tensor(
-                points, img_sizes, PromptType.POINT
+            points, flag_points = annotations_to_tensor(
+                self.prompts_processor, points, img_sizes, PromptType.POINT
             )
 
             # obtain ground truths
@@ -160,7 +174,7 @@ class Coco20iDataset(CocoLVISDataset):
             ground_truths = torch.stack(
                 [utils.collate_gts(x, max_dims) for x in ground_truths]
             )
-            
+
             flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
             if self.load_gts:

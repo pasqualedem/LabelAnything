@@ -276,7 +276,7 @@ def pretrain_pe(parameters):
 @main.command("rename_coco20i_json")
 @click.option(
     "--instances_path",
-    default="data/raw/instances_train2014.json",
+    default="data/annotations/instances_train2014.json",
     help="Path to the instances file",
 )
 def rename_coco20i_json_cli(instances_path):

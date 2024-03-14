@@ -13,4 +13,4 @@
 #SBATCH --out=extractCLIP.out
 #SBATCH --err=extractCLIP.out
 
-srun ./clip_extract_exe_single
+srun ./slurm/clip_extract_exe_single

@@ -106,6 +106,7 @@ exp_log.csv
 label_anything/data/annotations/instances_voc12.json
 tmp
 out
+offline
 streamlit
 settings
 VOCtrainval_11-May-2012.tar

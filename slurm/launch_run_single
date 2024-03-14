@@ -13,4 +13,4 @@
 #SBATCH --out=out/run.log
 #SBATCH --err=out/run.log
 
-srun ./launch_run_single_exe $1
+srun ./slurm/launch_run_single_exe $1

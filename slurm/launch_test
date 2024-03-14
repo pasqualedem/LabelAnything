@@ -12,4 +12,4 @@
 #SBATCH --out=test.out
 #SBATCH --err=test.out
 
-srun ./launch_test_exe $@
+srun ./slurm/launch_test_exe $@
