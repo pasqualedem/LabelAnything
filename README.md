@@ -12,7 +12,7 @@ Create a virtual environment using our conda environment file:
 
 ```bash
 conda env create -f label-anything.yml
-conda activate label_anything
+conda activate label-anything
 ```
 
 ## Prepare the Datasets
