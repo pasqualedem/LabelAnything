@@ -2,6 +2,8 @@
 
 This repository contains the official code for the paper "LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts".
 
+![Label Anything](assets/la.png)
+
 ## Requirements
 
 **Note**: The following instructions are for a Linux environment using CUDA 12.1. 
