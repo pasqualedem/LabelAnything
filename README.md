@@ -80,9 +80,9 @@ mkdir data/coco/vit_sam_embeddings/last_block_state
 python main.py preprocess --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/coco/train_val_2017 --batch_size 16 --num_workers=8 --outfolder data/coco/vit_sam_embeddings/last_hidden_state --last_block_dir data/coco/vit_sam_embeddings/last_block_state
 ```
 
-## Train (Optional)
+## Train and Test
 
-You can train LabelAnything model by running the command:
+You can train LabelAnything model on COCO-20i by running the command:
 
 ```bash
 python main.py experiment --parameters="parameters/COCO_vit.yaml"
@@ -94,6 +94,8 @@ If you extracted the embeddings you can run the command:
 python main.py experiment --parameters="parameters/COCO.yaml"
 ```
 
+By default, four training processes will be launched sequentially, one for each fold of the 4-fold cross-validation. It is possible to launch only interesting training by deleting them from the `other_grids` section of the parameter file. Remember to also change the `val_fold_idx` in the `parameters.dataset` section to the fold you want to validate, which will be executed at the beginning. If you start a model training, you don't need to run the the validation step, as it is already included in the training process.
+
 If you have a multi GPU machine, you can run the command:
 
 ```bash
@@ -101,9 +103,22 @@ accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO.y
 accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"  
 ```
 
+Experiments are tracked using [Weights & Biases](https://wandb.ai/site). The resulting run files are stored in the `offline/wandb/run-<date>-<run_id>` directory. Model weights for the specific run are saved in the `files` subdirectory of the run folder.
+
+
 ## Test
 
+To protect anonimity, our pretrained models are not available for download. Model weights will be available upon acceptance.
+
 ## Demo
+
+If you have trained the model and want to use it in an interactive way to segment images, you can run the following command:
+
+```bash
+python -m streamlit run label_anything/demo/streamlit.py
+```
+
+In the web interface, enter the Weights & Biases run id of the model you want to use. Currently, the demo only supports box annotations. You will be asked to enter a query image, class names, and support images with prompts.
 
 ## Project Organization
 
@@ -151,6 +166,8 @@ accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_v
 
 
 --------
+
+## Old Stuff
 
 * HOW TO CREATE A VENV FOR CINECA
 - we need to add another file for cineca requirements
