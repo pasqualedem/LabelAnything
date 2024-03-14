@@ -122,7 +122,7 @@ If you have trained the model and want to use it in an interactive way to segmen
 python -m streamlit run app.py
 ```
 
-In the web interface, enter the Weights & Biases run id of the model you want to use. Currently, the demo only supports box annotations. You will be asked to enter a query image, class names, and support images with prompts.
+In the web interface, enter the Weights & Biases path to a run id `<entity>/<project>/<run-id>` ([help](https://docs.wandb.ai/ref/python/public-api/api#run)) of the model you want to use. Currently, the demo only supports box annotations. You will be asked to enter a query image, class names, and support images with prompts.
 
 ## Project Organization
 
