@@ -106,3 +106,47 @@ If you have a multi GPU machine, you can run the command:
 accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO.yaml"
 accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"  
 ```
+
+#### Set up the pretrained weights
+
+You can download the pretrained weights from the following links:
+Fold 0: https://drive.google.com/file/d/1aTyBM1geU28tZU-KhIEV8k5FBGZUQuRD/view?usp=drive_link
+Fold 1: https://drive.google.com/file/d/1UbVGSxSWVC947g8-GCGVf9btvLzNh2SA/view?usp=drive_link
+Fold 2: https://drive.google.com/file/d/12d-dPq5Wjz5YakymTEefnzC__1YTq9ue/view?usp=drive_link
+Fold 3: https://drive.google.com/file/d/1EVYhVP3H82LN7HP3zMDFskchbGfWND0H/view?usp=drive_link
+
+Create the folders for the weights
+```bash
+# Fold 0
+mkdir -p wandb/offline-run-20240306_195048-n9623ye5/files/best
+# Fold 1
+mkdir -p wandb/offline-run-20240306_214217-3ndl7had/files/best
+# Fold 2
+mkdir -p wandb/offline-run-20240306_214216-b3wov30u/files/best
+# Fold 3
+mkdir -p wandb/offline-run-20240306_214216-cwrjbktc/files/best
+```
+Move each weight to the corresponding folder
+
+```bash
+# Fold 0
+mv pytorch_model_0.bin wandb/offline-run-20240306_195048-n9623ye5/files/best/pytorch_model.bin
+# Fold 1
+mv pytorch_model_1.bin wandb/offline-run-20240306_214217-3ndl7had/files/best/pytorch_model.bin
+# Fold 2
+mv pytorch_model_2.bin wandb/offline-run-20240306_214216-b3wov30u/files/best/pytorch_model.bin
+# Fold 3
+mv pytorch_model_3.bin wandb/offline-run-20240306_214216-cwrjbktc/files/best/pytorch_model.bin
+```
+
+Run the validations
+```bash
+# Fold 0
+python3 validate.py --parameters="parameters_validation/COCO_Fold0.yaml"
+# Fold 1
+python3 validate.py --parameters="parameters_validation/COCO_Fold1.yaml"
+# Fold 2
+python3 validate.py --parameters="parameters_validation/COCO_Fold2.yaml"
+# Fold 3
+python3 validate.py --parameters="parameters_validation/COCO_Fold3.yaml"
+``` 
