@@ -4,10 +4,12 @@ This repository contains the official code for the paper "LabelAnything: Multi-C
 
 ## Requirements
 
+**Note**: The following instructions are for a Linux environment using CUDA 12.1. 
+
 Create a virtual environment using our conda environment file:
 
 ```bash
-conda env create -f environment.yml
+conda env create -f label-anything.yml
 conda activate label_anything
 ```
 
@@ -115,7 +117,7 @@ To protect anonimity, our pretrained models are not available for download. Mode
 If you have trained the model and want to use it in an interactive way to segment images, you can run the following command:
 
 ```bash
-python -m streamlit run label_anything/demo/streamlit.py
+python -m streamlit run app.py
 ```
 
 In the web interface, enter the Weights & Biases run id of the model you want to use. Currently, the demo only supports box annotations. You will be asked to enter a query image, class names, and support images with prompts.
