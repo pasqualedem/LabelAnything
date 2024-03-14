@@ -93,7 +93,16 @@ cp path/to/out/dir/pytorch_model_1.bin path/to/checkpoint/dir
 cd path/to/checkpoint/dir/
 mv pytorch_model_1.bin model.bin
 ```
-Finally, you can train LabelAnything with pretrained prompt encoder
+Finally, you can train LabelAnything model by running the command:
 ```
-sh launch_experiment_exe
+python3 experiment --parameters="parameters/COCO_vit.yaml"
+```
+If you extracted the embeddings you can run the command:
+```
+python3 experiment --parameters="parameters/COCO.yaml"
+```
+If you have a multi GPU machine, you can run the command:
+``` 
+accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO.yaml"
+accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"  
 ```
