@@ -65,7 +65,7 @@ def validate(parameters, generate_json):
 )
 @click.option(
     "--directory",
-    default="/leonardo_scratch/large/userexternal/nfanelli/train_val_2017",
+    default="/data/coco/train_val_2017",
     help="Select the file to use as checkpoint",
 )
 @click.option(
@@ -80,7 +80,7 @@ def validate(parameters, generate_json):
 )
 @click.option(
     "--outfolder",
-    default="/leonardo_scratch/large/userexternal/rscaring/vit_embeddings",
+    default="data/coco/vit_embeddings",
     help="Folder to save the embeddings",
 )
 @click.option(

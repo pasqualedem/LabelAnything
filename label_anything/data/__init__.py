@@ -5,28 +5,14 @@ from torchvision.transforms import Compose, PILToTensor, Resize, Normalize, ToTe
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
-from label_anything.data.dram import DramTestDataset, collate_fn as dram_collate
 from label_anything.data.transforms import CustomNormalize, CustomResize
-from label_anything.data.weedmap import WeedMapTestDataset
-from label_anything.data.pascal import PascalVOCTestDataset
-from label_anything.data.brain_mri import BrainMriTestDataset
 
 
 TEST_DATASETS = {
     "test_coco": CocoLVISTestDataset,
     "test_lvis": CocoLVISTestDataset,
-    "test_weedmap": WeedMapTestDataset,
-    "test_dram": DramTestDataset,
-    "test_brain": BrainMriTestDataset,
-    "test_pascal": PascalVOCTestDataset,
 }
-
-
-def map_collate(dataset):
-    if isinstance(dataset, DramTestDataset):
-        return dram_collate
-    return dataset.collate_fn if hasattr(dataset, "collate_fn") else None
-    
+   
 
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
@@ -113,21 +99,8 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
             val_dataloaders[dataset] = val_dataloader
     else:
         val_dataloaders = None
-    if test_datasets_params:
-        test_datasets = [
-            TEST_DATASETS[dataset](**params, preprocess=preprocess)
-            for dataset, params in test_datasets_params.items()
-        ]
-        test_dataloaders = [
-            DataLoader(
-                dataset=data,
-                **dataloader_args,
-                collate_fn=map_collate(data),
-            )
-            for data in test_datasets
-        ]
-    else:
-        test_dataloaders = None
+
+    test_dataloaders = None
     return (
         train_dataloader,
         val_dataloaders,

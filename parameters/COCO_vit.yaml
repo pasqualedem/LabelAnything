@@ -18,7 +18,6 @@ parameters:
     tmp_dir: [tmp]
     wandb:
       offline: [False]
-      entity: [cilabuniba]
       tags: [[SOTA]]
       offline_directory: [offline]
 

@@ -557,7 +557,7 @@ def main():
     accelerator = Accelerator()
     with st.sidebar:
         # load model
-        run_id = st.text_input("Run ID", "3ndl7had")
+        run_id = st.text_input("Weights and Biases path", "")
         model = load_model(accelerator, run_id).model  # WrapperModule
         image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b"])
         image_encoder = load_image_encoder(image_encoder)

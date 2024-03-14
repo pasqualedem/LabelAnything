@@ -294,7 +294,7 @@ def resize_ground_truth(ground_truth, dims):
 
 def load_from_wandb(run_id, wandb_folder):
     api = wandb.Api()
-    run = api.run(f"cilabuniba/LabelAnything/{run_id}")
+    run = api.run(run_id)
     files = run.files()
     model_file = None
     config_file = None
