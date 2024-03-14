@@ -1,4 +1,4 @@
-# LabelAnything
+# Label Anything
 
 This repository contains the official code for the paper "LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts".
 
