@@ -69,7 +69,7 @@ parameters:
         instances_path: [data/coco/annotations/instances_train2014.json]
         img_dir: &img_dir [data/coco/train_val_2017]
         split: ["train"]
-        val_fold_idx: [1]
+        val_fold_idx: [0]
         n_folds: [4]
         sample_function: [uniform]
         all_example_categories: [False]
@@ -78,7 +78,7 @@ parameters:
         instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
         img_dir: *img_dir
         split: ["val"]
-        val_fold_idx: [1]
+        val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
         n_ways: [1]
@@ -112,13 +112,29 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+- dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        coco20i:
+          val_fold_idx: [1]
+        val_coco20i_N1K1:
+          val_fold_idx: [1]
+        val_coco20i_N1K5:
+          val_fold_idx: [1]
+        val_coco20i_N2K1:
+          val_fold_idx: [1]
+        val_coco20i_N2K5:
+          val_fold_idx: [1]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         coco20i:
           val_fold_idx: [2]
         val_coco20i_N1K1:
           val_fold_idx: [2]
+        val_coco20i_N1K5:
+          val_fold_idx: [2]
         val_coco20i_N2K1:
+          val_fold_idx: [2]
+        val_coco20i_N2K5:
           val_fold_idx: [2]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
