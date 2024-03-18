@@ -73,7 +73,7 @@ parameters:
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
     image_size: [1024]
-    name: [lam_no_vit]
+    name: [lam_b]
     spatial_convs: [3]
     segment_example_logits: [true]
 

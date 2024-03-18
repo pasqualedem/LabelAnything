@@ -19,48 +19,6 @@ from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.utils import take_image
 
 
-colors = [
-    # blue
-    (0, 0, 255),
-    # red
-    (255, 0, 0),
-    # green
-    (0, 255, 0),
-    # yellow
-    (255, 255, 0),
-    # purple
-    (255, 0, 255),
-    # cyan
-    (0, 255, 255),
-    # orange
-    (255, 165, 0),
-    # pink
-    (255, 192, 203),
-    # brown
-    (139, 69, 19),
-    # grey
-    (128, 128, 128),
-    # black
-    (0, 0, 0),
-    # white
-    (255, 255, 255),
-]
-
-text_colors = [
-    "blue",
-    "red",
-    "green",
-    "yellow",
-    "purple",
-    "cyan",
-    "orange",
-    "pink",
-    "brown",
-    "grey",
-    "black",
-    "white",
-]
-
 def to_device(batch, device):
     if isinstance(batch, (list, tuple)):
         return [to_device(b, device) for b in batch]
@@ -177,7 +135,7 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
         binary_mask = (seg == i)[0]
         mask = binary_mask.cpu().numpy()
         masked_image = np.where(np.repeat(mask[:, :, np.newaxis], 3, axis=2),
-                                np.asarray(colors[i], dtype="uint8"),
+                                np.asarray(colors[i-1], dtype="uint8"),
                                 masked_image)
     
     masked_image = masked_image.astype(np.uint8)
