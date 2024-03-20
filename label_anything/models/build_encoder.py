@@ -2,10 +2,9 @@ from einops import rearrange
 import torch
 from functools import partial
 
-from transformers import ViTModel
+from transformers import ViTModel, AutoModel
 
 from .image_encoder import ImageEncoderViT
-
 
 vit_configs = dict(
     vit_h=dict(
@@ -93,3 +92,17 @@ class ViTModelWrapper(ViTModel):
 def build_vit_b_mae(project_last_hidden=False):
     vit_mae = ViTModelWrapper.from_pretrained("facebook/vit-mae-base")
     return vit_mae
+
+
+def build_encoder(name, **kwargs):
+    if name in ENCODERS:
+        return ENCODERS[name](**kwargs)
+    return AutoModel.from_pretrained(name)
+
+
+ENCODERS = {
+    "vit_h": build_vit_h,
+    "vit_l": build_vit_l,
+    "vit_b": build_vit_b,
+    "vit_b_mae": build_vit_b_mae,
+}

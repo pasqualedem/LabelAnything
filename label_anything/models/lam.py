@@ -17,8 +17,8 @@ from label_anything.models.common import SAM_EMBED_DIM
 from label_anything.utils.utils import ResultDict
 
 from .image_encoder import ImageEncoderViT
-from .mask_decoder import MaskDecoder
-from .prompt_encoder import PromptImageEncoder
+from .mask_decoder import MaskDecoder, MultiLevelMaskDecoder
+from .prompt_encoder import PromptImageEncoder, MultiLevelPromptEncoder
 
 
 class Lam(nn.Module):
@@ -481,3 +481,34 @@ class BinaryLam(Lam):
             ResultDict.LOGITS: logits,
             ResultDict.EXAMPLES_CLASS_EMBS: dummy_embeddings,
         }
+
+
+class MultiLevelLam(Lam):
+    def __init__(
+        self,
+        image_encoder: nn.Module,
+        prompt_encoder: MultiLevelPromptEncoder,
+        mask_decoder: MultiLevelMaskDecoder,
+        neck: nn.Module,
+        image_size: int = 1024,
+    ) -> None:
+        super().__init__(image_encoder, prompt_encoder, mask_decoder, neck, image_size)
+
+    def prepare_embeddings(self, batched_input):
+        if "embeddings" in batched_input:
+            embeddings = batched_input["embeddings"]
+        elif "images" in batched_input:
+            images = batched_input["images"]
+            B, N = images.shape[0:2]
+            images = rearrange(images, "b n c h w -> (b n) c h w")
+            embeddings = self.image_encoder(
+                {"pixel_values": images}, return_hidden_states=True
+            )["hidden_states"]
+            embeddings = [
+                rearrange(embedding, "(b n) c h w -> b n c h w", b=B)
+                for embedding in embeddings
+            ]
+        else:
+            raise ValueError("Either 'images' or 'embeddings' must be provided.")
+
+        return embeddings

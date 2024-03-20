@@ -33,7 +33,7 @@ from label_anything.demo.utils import (
     open_rgb_image,
 )
 from label_anything.experiment.substitution import Substitutor
-from label_anything.models.build_vit import build_vit_b
+from label_anything.models.build_encoder import build_vit_b
 from label_anything.utils.utils import ResultDict, load_yaml
 from label_anything.models import model_registry
 

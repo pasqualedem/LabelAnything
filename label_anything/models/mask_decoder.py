@@ -241,6 +241,35 @@ class MaskDecoderLam(nn.Module):
             dropout=dropout,
         )
 
+    def _get_class_embeddings(self, class_embeddings):
+        if self.segment_example_logits:
+            class_embeddings = rearrange(
+                class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
+            )
+        else:
+            class_embeddings = class_embeddings[ResultDict.CLASS_EMBS]
+        return class_embeddings
+
+    def _upscale(self, query_embeddings, class_embeddings):
+        class_embeddings = self.class_mlp(class_embeddings)
+        upscaled_embeddings = self.output_upscaling(query_embeddings)
+        if self.spatial_convs is not None:
+            upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
+        return upscaled_embeddings, class_embeddings
+    
+    def _classify(self, query_embeddings, class_embeddings, flag_examples):
+        b, d, h, w = query_embeddings.shape
+        _, c, _ = class_embeddings.shape
+        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(
+            b, -1, h, w
+        )
+        if self.segment_example_logits:
+            seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
+            seg[flag_examples.logical_not()] = float("-inf")
+            seg = seg.max(dim=1).values
+        return seg
+        
+
     def forward(
         self,
         query_embeddings: torch.Tensor,
@@ -261,32 +290,17 @@ class MaskDecoderLam(nn.Module):
           torch.Tensor: batched predicted segmentations
         """
         b, d, h, w = query_embeddings.shape
-        _, c, _ = class_embeddings[ResultDict.CLASS_EMBS].shape
-        if self.segment_example_logits:
-            class_embeddings = rearrange(
-                class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
-            )
-        else:
-            class_embeddings = class_embeddings[ResultDict.CLASS_EMBS]
+        class_embeddings = self._get_class_embeddings(class_embeddings)
+
         class_embeddings, query_embeddings = self.transformer(
             query_embeddings, image_pe, class_embeddings
         )
         query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
 
-        upscaled_embeddings = self.output_upscaling(query_embeddings)
-        if self.spatial_convs is not None:
-            upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
-        b, d, h, w = upscaled_embeddings.shape
-
-        class_embeddings = self.class_mlp(class_embeddings)
-        seg = (class_embeddings @ upscaled_embeddings.view(b, d, h * w)).view(
-            b, -1, h, w
+        upscaled_embeddings, class_embeddings = self._upscale(
+            query_embeddings, class_embeddings
         )
-        if self.segment_example_logits:
-            seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
-            seg[flag_examples.logical_not()] = float("-inf")
-            seg = seg.max(dim=1).values
-        return seg
+        return self._classify(upscaled_embeddings, class_embeddings, flag_examples)
 
 
 class AffinityDecoder(nn.Module):
@@ -458,14 +472,20 @@ class AffinityDecoder(nn.Module):
             affinity_embeddings = self.output_upscaling[i](affinity_embeddings)
             reduce_embeddings = self.output_upscaling[i](reduce_embeddings)
         d4 = prototypes.shape[2]
-        _, _, h8, w8 = reduce_embeddings.shape 
+        _, _, h8, w8 = reduce_embeddings.shape
         heads = 32
         proto_logits = rearrange(
             prototypes, "b d (c heads) -> (b heads) d c", heads=8
         ) @ rearrange(
             affinity_embeddings, "b (d heads) h w -> (b heads) d (h w)", heads=heads
         )
-        proto_logits = rearrange(proto_logits, "(b heads) c (h w) -> (b c) heads h w", heads=heads, h=h8, w=w8)
+        proto_logits = rearrange(
+            proto_logits,
+            "(b heads) c (h w) -> (b c) heads h w",
+            heads=heads,
+            h=h8,
+            w=w8,
+        )
         for i in range(len(self.output_upscaling) - 3, len(self.output_upscaling) - 1):
             proto_logits = self.output_upscaling[i](proto_logits)
             affinity_embeddings = self.output_upscaling[i](affinity_embeddings)
@@ -565,6 +585,98 @@ class AffinityDecoder(nn.Module):
 
             logits = rearrange(padded_logits, "(b c) 1 h w -> b c h w", c=c)
         return logits
+
+
+class MultiLevelMaskDecoder(nn.Module):
+    def __init__(
+        self,
+        mask_decoders: List[MaskDecoderLam],
+        embed_dims: List[int],
+    ) -> None:
+        self.mask_decoders = mask_decoders
+        max_embed_dim = max(embed_dims)
+        
+        self.feature_maps_projectors = nn.ModuleList(
+            [
+                nn.Conv2d(
+                    embed_dim,
+                    max_embed_dim,
+                    kernel_size=1,
+                )
+                for embed_dim in embed_dims
+            ]
+        )
+        self.class_embeddings_projectors = nn.ModuleList(
+            [
+                nn.Linear(
+                    embed_dim,
+                    max_embed_dim,
+                )
+                for embed_dim in embed_dims
+            ]
+        )
+        
+    def _classify(self, query_embeddings, class_embeddings, flag_examples):
+        b, d, h, w = query_embeddings.shape
+        _, c, _ = class_embeddings.shape
+        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(
+            b, -1, h, w
+        )
+        if self.segment_example_logits:
+            seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
+            seg[flag_examples.logical_not()] = float("-inf")
+            seg = seg.max(dim=1).values
+        return seg
+        
+    def forward(
+        self,
+        ml_query_embeddings: list[torch.Tensor],
+        ml_support_embeddings: list[torch.Tensor],
+        ml_image_pe: list[torch.Tensor],
+        ml_class_embeddings: list[torch.Tensor],
+        flag_examples: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Predict masks given image and prompt embeddings.
+
+        Arguments:
+            image_embeddings (torch.Tensor): the embeddings from the image encoder
+            image_pe (torch.Tensor): positional encoding with the shape of image_embeddings
+            class_embeddings ResultDict: the embeddings of each example and class
+
+        Returns:
+            torch.Tensor: batched predicted segmentations
+        """
+        decoder_results = []
+        for query_embeddings, support_embeddings, image_pe, class_embeddings, mask_decoder in zip(
+            ml_query_embeddings, ml_support_embeddings, ml_image_pe, ml_class_embeddings, self.mask_decoders
+        ):
+            b, d, h, w = query_embeddings.shape
+            class_embeddings = self._get_class_embeddings(class_embeddings)
+
+            class_embeddings, query_embeddings = self.transformer(
+                query_embeddings, image_pe, class_embeddings
+            )
+            query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
+
+            upscaled_embeddings, class_embeddings = self._upscale(
+                query_embeddings, class_embeddings
+            )
+            decoder_results.append(upscaled_embeddings, class_embeddings)
+        b, d, h, w = decoder_results[0][0].shape # Get max h, w
+        feature_maps, class_embeddings = zip(*decoder_results)
+        # Upscale feature maps
+        feature_maps = [F.interpolate(fm, size=(h, w), mode="bilinear") for fm in feature_maps]
+        # Project feature maps and class embeddings to the same dimension
+        feature_maps = [projector(fm) for fm, projector in zip(feature_maps, self.feature_maps_projectors)]
+        class_embeddings = [projector(ce) for ce, projector in zip(class_embeddings, self.class_embeddings_projectors)]
+        
+        # Sum feature maps and class embeddings
+        feature_maps = sum(feature_maps)
+        class_embeddings = sum(class_embeddings)
+        
+        # Classify
+        return self._classify(feature_maps, class_embeddings, flag_examples)
 
 
 # Lightly adapted from
