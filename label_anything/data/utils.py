@@ -6,13 +6,11 @@ from enum import IntEnum, Enum
 from itertools import combinations
 from typing import Dict, List, Tuple
 
-import numpy as np
-import pandas as pd
+
 import torch
-import torchvision.transforms
 from PIL import Image, ImageDraw
 from torch.utils.data import Dataset
-
+from transformers.utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 
 class StrEnum(str, Enum):
     pass
@@ -535,3 +533,19 @@ class RandomDataset(Dataset):
         return {
             k: torch.stack(v) if k != "classes" else v for k, v in result_dict.items()
         }, torch.stack(gt_list)
+
+
+def get_mean_std(mean, std):
+    str_to_mean = {
+        "default": IMAGENET_DEFAULT_MEAN,
+        "standard": IMAGENET_STANDARD_MEAN,
+    }
+    str_to_std = {
+        "default": IMAGENET_DEFAULT_STD,
+        "standard": IMAGENET_STANDARD_STD,
+    }
+    if isinstance(mean, str):
+        mean = str_to_mean[mean]
+    if isinstance(std, str):
+        std = str_to_std[std]
+    return mean, std

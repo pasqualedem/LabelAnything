@@ -174,6 +174,7 @@ class MaskDecoderLam(nn.Module):
         activation: Type[nn.Module] = nn.GELU,
         segment_example_logits: bool = False,
         classification_layer_downsample_rate: int = 8,
+        conv_upsample_stride: int = 2,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -196,23 +197,36 @@ class MaskDecoderLam(nn.Module):
             else 1
         )
 
-        self.output_upscaling = nn.Sequential(
-            nn.ConvTranspose2d(
+        if conv_upsample_stride > 1 or classification_layer_downsample_rate > 1:
+            self.output_upscaling = nn.Sequential(
+                nn.ConvTranspose2d(
+                    transformer_dim,
+                    transformer_dim // first_layer_downsample_rate,
+                    kernel_size=conv_upsample_stride,
+                    stride=conv_upsample_stride,
+                ),
+                LayerNorm2d(transformer_dim // first_layer_downsample_rate),
+                activation(),
+                nn.ConvTranspose2d(
+                    transformer_dim // first_layer_downsample_rate,
+                    transformer_dim // classification_layer_downsample_rate,
+                    kernel_size=conv_upsample_stride,
+                    stride=conv_upsample_stride,
+                ),
+            ) 
+            self.class_mlp = MLP(
                 transformer_dim,
-                transformer_dim // first_layer_downsample_rate,
-                kernel_size=2,
-                stride=2,
-            ),
-            LayerNorm2d(transformer_dim // first_layer_downsample_rate),
-            activation(),
-            nn.ConvTranspose2d(
-                transformer_dim // first_layer_downsample_rate,
+                transformer_dim,
                 transformer_dim // classification_layer_downsample_rate,
-                kernel_size=2,
-                stride=2,
-            ),
-        )
+                3,
+                dropout=dropout,
+            )
+        else:
+            self.output_upscaling = nn.Identity()
+            self.class_mlp = nn.Identity()
+            
         self.transformer = transformer
+        
         self.spatial_convs = None
         if spatial_convs is not None:
             module_list = []
@@ -233,13 +247,6 @@ class MaskDecoderLam(nn.Module):
                     )
                     module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
-        self.class_mlp = MLP(
-            transformer_dim,
-            transformer_dim,
-            transformer_dim // classification_layer_downsample_rate,
-            3,
-            dropout=dropout,
-        )
 
     def _get_class_embeddings(self, class_embeddings):
         if self.segment_example_logits:
@@ -253,9 +260,12 @@ class MaskDecoderLam(nn.Module):
     def _upscale(self, query_embeddings, class_embeddings):
         class_embeddings = self.class_mlp(class_embeddings)
         upscaled_embeddings = self.output_upscaling(query_embeddings)
-        if self.spatial_convs is not None:
-            upscaled_embeddings = self.spatial_convs(upscaled_embeddings)
         return upscaled_embeddings, class_embeddings
+    
+    def _spatial_convs(self, query_embeddings):
+        if self.spatial_convs is not None:
+            query_embeddings = self.spatial_convs(query_embeddings)
+        return query_embeddings
     
     def _classify(self, query_embeddings, class_embeddings, flag_examples):
         b, d, h, w = query_embeddings.shape
@@ -300,6 +310,7 @@ class MaskDecoderLam(nn.Module):
         upscaled_embeddings, class_embeddings = self._upscale(
             query_embeddings, class_embeddings
         )
+        upscaled_embeddings = self._spatial_convs(upscaled_embeddings)
         return self._classify(upscaled_embeddings, class_embeddings, flag_examples)
 
 
@@ -592,8 +603,11 @@ class MultiLevelMaskDecoder(nn.Module):
         self,
         mask_decoders: List[MaskDecoderLam],
         embed_dims: List[int],
+        segment_example_logits: bool = False,
     ) -> None:
+        super().__init__()
         self.mask_decoders = mask_decoders
+        self.segment_example_logits = segment_example_logits
         max_embed_dim = max(embed_dims)
         
         self.feature_maps_projectors = nn.ModuleList(
@@ -630,10 +644,10 @@ class MultiLevelMaskDecoder(nn.Module):
         
     def forward(
         self,
-        ml_query_embeddings: list[torch.Tensor],
-        ml_support_embeddings: list[torch.Tensor],
-        ml_image_pe: list[torch.Tensor],
-        ml_class_embeddings: list[torch.Tensor],
+        query_embeddings: list[torch.Tensor],
+        support_embeddings: list[torch.Tensor],
+        image_pe: list[torch.Tensor],
+        class_embeddings: dict[torch.Tensor],
         flag_examples: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -648,35 +662,38 @@ class MultiLevelMaskDecoder(nn.Module):
             torch.Tensor: batched predicted segmentations
         """
         decoder_results = []
-        for query_embeddings, support_embeddings, image_pe, class_embeddings, mask_decoder in zip(
-            ml_query_embeddings, ml_support_embeddings, ml_image_pe, ml_class_embeddings, self.mask_decoders
+        # Turn dict of lists into list of dicts
+        class_embeddings = [{k: v[i] for k, v in class_embeddings.items()} for i in range(len(query_embeddings))]
+        for lv_query_embeddings, lv_support_embeddings, lv_image_pe, lv_class_embeddings, mask_decoder in zip(
+            query_embeddings, support_embeddings, image_pe, class_embeddings, self.mask_decoders
         ):
-            b, d, h, w = query_embeddings.shape
-            class_embeddings = self._get_class_embeddings(class_embeddings)
+            b, d, h, w = lv_query_embeddings.shape
+            lv_class_embeddings = mask_decoder._get_class_embeddings(lv_class_embeddings)
 
-            class_embeddings, query_embeddings = self.transformer(
-                query_embeddings, image_pe, class_embeddings
+            lv_class_embeddings, lv_query_embeddings = mask_decoder.transformer(
+                lv_query_embeddings, lv_image_pe, lv_class_embeddings
             )
-            query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
+            lv_query_embeddings = rearrange(lv_query_embeddings, "b (h w) c -> b c h w", h=h)
 
-            upscaled_embeddings, class_embeddings = self._upscale(
-                query_embeddings, class_embeddings
+            upscaled_embeddings, lv_class_embeddings = mask_decoder._upscale(
+                lv_query_embeddings, lv_class_embeddings
             )
-            decoder_results.append(upscaled_embeddings, class_embeddings)
+            upscaled_embeddings = mask_decoder._spatial_convs(upscaled_embeddings)
+            decoder_results.append((upscaled_embeddings, lv_class_embeddings))
         b, d, h, w = decoder_results[0][0].shape # Get max h, w
-        feature_maps, class_embeddings = zip(*decoder_results)
+        feature_maps, lv_class_embeddings = zip(*decoder_results)
         # Upscale feature maps
         feature_maps = [F.interpolate(fm, size=(h, w), mode="bilinear") for fm in feature_maps]
         # Project feature maps and class embeddings to the same dimension
         feature_maps = [projector(fm) for fm, projector in zip(feature_maps, self.feature_maps_projectors)]
-        class_embeddings = [projector(ce) for ce, projector in zip(class_embeddings, self.class_embeddings_projectors)]
+        lv_class_embeddings = [projector(ce) for ce, projector in zip(lv_class_embeddings, self.class_embeddings_projectors)]
         
         # Sum feature maps and class embeddings
         feature_maps = sum(feature_maps)
-        class_embeddings = sum(class_embeddings)
+        lv_class_embeddings = sum(lv_class_embeddings)
         
         # Classify
-        return self._classify(feature_maps, class_embeddings, flag_examples)
+        return self._classify(feature_maps, lv_class_embeddings, flag_examples)
 
 
 # Lightly adapted from

@@ -493,21 +493,44 @@ class MultiLevelLam(Lam):
         image_size: int = 1024,
     ) -> None:
         super().__init__(image_encoder, prompt_encoder, mask_decoder, neck, image_size)
+        
+    def _forward_encoder(self, images: List[Dict[str, Any]]) -> torch.Tensor:
+        B, N = images.shape[0:2]
+        images = rearrange(images, "b n c h w -> (b n) c h w")
+        embeddings = self.image_encoder(
+            pixel_values=images, output_hidden_states=True
+        )["hidden_states"]
+        embeddings = [
+            rearrange(embedding, "(b n) c h w -> b n c h w", b=B)
+            for embedding in embeddings
+        ]
+        return embeddings
+        
+    def prepare_query_example_embeddings(self, batched_input):
+        if "embeddings" in batched_input:
+            embeddings = batched_input["embeddings"]
+            B, N, C, H, W = embeddings.shape
+            if self.neck is not None:
+                raise NotImplementedError("Neck not implemented for MultiLevelLam")
+        elif "images" in batched_input:
+            images = batched_input["images"]
+            embeddings = self._forward_encoder(images)
+            if self.neck is not None:
+                raise NotImplementedError("Neck not implemented for MultiLevelLam")
+        else:
+            raise ValueError("Either 'images' or 'embeddings' must be provided.")
+
+        query_embeddings = [embedding[:, 0] for embedding in embeddings]
+        prompt_embeddings = [embedding[:, 1:] for embedding in embeddings]
+
+        return query_embeddings, prompt_embeddings
 
     def prepare_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
         elif "images" in batched_input:
             images = batched_input["images"]
-            B, N = images.shape[0:2]
-            images = rearrange(images, "b n c h w -> (b n) c h w")
-            embeddings = self.image_encoder(
-                {"pixel_values": images}, return_hidden_states=True
-            )["hidden_states"]
-            embeddings = [
-                rearrange(embedding, "(b n) c h w -> b n c h w", b=B)
-                for embedding in embeddings
-            ]
+            embeddings = self._forward_encoder(images)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
 

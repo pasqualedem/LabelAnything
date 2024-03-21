@@ -7,6 +7,7 @@ from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampl
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
 from label_anything.data.dram import DramTestDataset, collate_fn as dram_collate
 from label_anything.data.transforms import CustomNormalize, CustomResize
+from label_anything.data.utils import get_mean_std
 from label_anything.data.weedmap import WeedMapTestDataset
 from label_anything.data.pascal import PascalVOCTestDataset
 from label_anything.data.brain_mri import BrainMriTestDataset
@@ -26,22 +27,27 @@ def map_collate(dataset):
     if isinstance(dataset, DramTestDataset):
         return dram_collate
     return dataset.collate_fn if hasattr(dataset, "collate_fn") else None
-    
 
 
-def get_dataloaders(dataset_args, dataloader_args, num_processes):
+def get_preprocessing(params):
     SIZE = 1024
-    size = dataset_args.get("common", {}).get("image_size", SIZE)
-
-    if "custom_preprocess" in dataset_args.get("common", {}):
-        custom_preprocess = dataset_args["common"].pop("custom_preprocess")
-        mean = custom_preprocess["mean"]
-        std = custom_preprocess["std"]
+    size = params.get("common", {}).get("image_size", SIZE)
+    if "preprocess" in params.get("common", {}):
+        preprocess_params = params["common"].pop("preprocess")
+        mean = preprocess_params["mean"]
+        std = preprocess_params["std"]
+        mean, std = get_mean_std(mean, std)
         preprocess = Compose(
-            [Resize(size=(size, size)), ToTensor(), Normalize(mean, std)]
+            [CustomResize(size=(size, size)), ToTensor(), CustomNormalize(size, mean, std)]
         )
     else:
         preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+    return preprocess
+
+
+def get_dataloaders(dataset_args, dataloader_args, num_processes):
+    preprocess = get_preprocessing(dataset_args)
+    
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")

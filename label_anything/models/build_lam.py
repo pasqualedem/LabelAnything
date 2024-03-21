@@ -191,6 +191,7 @@ def build_mask_decoder(
     segment_example_logits=False,
     spatial_convs=None,
     classification_layer_downsample_rate=8,
+    conv_upsample_stride=2,
     transformer_feature_size=None,
     dropout=0.0,
     class_fusion="sum",
@@ -213,6 +214,7 @@ def build_mask_decoder(
             transformer=fusion_transformer,
             segment_example_logits=segment_example_logits,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
+            conv_upsample_stride=conv_upsample_stride,
             dropout=dropout,
         )
     elif few_type == "Affinity" or few_type == "PrototypeAffinity":
@@ -280,8 +282,11 @@ def build_multilevel_lam(
     prompt_encoders = nn.ModuleList(
         [
             PromptImageEncoder(
-                embed_dim=encoder.embed_dim,
-                image_embedding_size=(image_size // (2**i), image_size // (2**i)),
+                embed_dim=hidden_size,
+                image_embedding_size=(
+                    image_size // (4 * (2**i)),
+                    image_size // (4 * (2**i)),
+                ),
                 input_image_size=(image_size, image_size),
                 mask_in_chans=16,
                 class_attention=class_attention,
@@ -292,7 +297,7 @@ def build_multilevel_lam(
                 use_support_features=use_support_features_in_prompt_encoder,
                 transformer=TwoWayTransformer(
                     depth=2,
-                    embedding_dim=encoder.embed_dim,
+                    embedding_dim=hidden_size,
                     mlp_dim=2048,
                     attention_downsample_rate=encoder_attention_downsample_rate,
                     num_heads=8,
@@ -312,7 +317,8 @@ def build_multilevel_lam(
                 segment_example_logits=segment_example_logits,
                 fusion_transformer=fusion_transformer,
                 decoder_attention_downsample_rate=decoder_attention_downsample_rate,
-                classification_layer_downsample_rate=classification_layer_downsample_rate,
+                classification_layer_downsample_rate=1,
+                conv_upsample_stride=1,
                 transformer_feature_size=transformer_feature_size,
                 dropout=dropout,
                 few_type=few_type,
@@ -322,7 +328,11 @@ def build_multilevel_lam(
             for embed_dim in hidden_sizes
         ]
     )
-    mask_decoder = MultiLevelMaskDecoder(masd_decoders, embed_dims=hidden_sizes)
+    mask_decoder = MultiLevelMaskDecoder(
+        masd_decoders,
+        embed_dims=hidden_sizes,
+        segment_example_logits=segment_example_logits,
+    )
     lam = MultiLevelLam(
         image_size=image_size,
         image_encoder=encoder,

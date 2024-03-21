@@ -684,16 +684,36 @@ class MultiLevelPromptEncoder(nn.Module):
         flag_examples: Optional[torch.Tensor],
         chunk_size=None,
     ):
-        prompt_encodings = []
-        for prompt_encoder in self.prompt_encoders:
-            prompt_encodings.append(
-                prompt_encoder(
-                    image_embeddings,
-                    points,
-                    boxes,
-                    masks,
-                    flag_examples,
-                    chunk_size=chunk_size,
-                )
+        result_dict = {
+            result_key: []
+            for result_key in [
+                ResultDict.CLASS_EMBS,
+                ResultDict.EXAMPLES_CLASS_SRC,
+                ResultDict.EXAMPLES_CLASS_EMBS,
+            ]
+        }
+        for prompt_encoder, level_image_embeddings in zip(
+            self.prompt_encoders, image_embeddings
+        ):
+            result = prompt_encoder(
+                level_image_embeddings,
+                points,
+                boxes,
+                masks,
+                flag_examples,
+                chunk_size=chunk_size,
             )
-        return prompt_encodings
+
+            result_dict[ResultDict.CLASS_EMBS].append(result[ResultDict.CLASS_EMBS])
+            result_dict[ResultDict.EXAMPLES_CLASS_SRC].append(
+                result[ResultDict.EXAMPLES_CLASS_SRC]
+            )
+            result_dict[ResultDict.EXAMPLES_CLASS_EMBS].append(
+                result[ResultDict.EXAMPLES_CLASS_EMBS]
+            )
+        return result_dict
+
+    def get_dense_pe(self):
+        return [
+            prompt_encoder.get_dense_pe() for prompt_encoder in self.prompt_encoders
+        ]

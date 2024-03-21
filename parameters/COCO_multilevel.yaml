@@ -100,47 +100,46 @@ parameters:
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
-    # possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]] 
-    possible_batch_example_nums: [[[1, 1, 2]]]
+    possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]]
     val_possible_batch_example_nums: [[[2, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
 
 other_grids:
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [1]
-        val_coco20i_N1K1:
-          val_fold_idx: [1]
-        val_coco20i_N1K5:
-          val_fold_idx: [1]
-        val_coco20i_N2K1:
-          val_fold_idx: [1]
-        val_coco20i_N2K5:
-          val_fold_idx: [1]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [2]
-        val_coco20i_N1K1:
-          val_fold_idx: [2]
-        val_coco20i_N1K5:
-          val_fold_idx: [2]
-        val_coco20i_N2K1:
-          val_fold_idx: [2]
-        val_coco20i_N2K5:
-          val_fold_idx: [2]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [3]
-        val_coco20i_N1K1:
-          val_fold_idx: [3]
-        val_coco20i_N1K5:
-          val_fold_idx: [3]
-        val_coco20i_N2K1:
-          val_fold_idx: [3]
-        val_coco20i_N2K5:
-          val_fold_idx: [3]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N1K5:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N2K5:
+  #         val_fold_idx: [1]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N1K5:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N2K5:
+  #         val_fold_idx: [2]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N1K5:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N2K5:
+  #         val_fold_idx: [3]
