@@ -72,6 +72,7 @@ python main.py rename_coco20i_json --instances-path data/coco/annotations/instan
 We use [Segment Anything](https://github.com/facebookresearch/segment-anything) pretrained models to extract image features. Enter the `checkpoints` directory and download the pretrained models from the Segment Anything repository:
 
 ```bash
+mkdir offline
 cd checkpoints
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
 ```
