@@ -162,6 +162,11 @@ def preprocess_huggingface(
     default=None,
     help="Folder to save last transformer block",
 )
+@click.option(
+    "--custom",
+    is_flag=True,
+    help="Whether to use custom resize and normalize",
+)
 def preprocess(
     encoder,
     checkpoint,
@@ -172,6 +177,7 @@ def preprocess(
     num_workers,
     outfolder,
     last_block_dir,
+    custom,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings
 
@@ -185,6 +191,7 @@ def preprocess(
         outfolder=outfolder,
         last_block_dir=last_block_dir,
         compile=compile,
+        custom=custom,
     )
 
 

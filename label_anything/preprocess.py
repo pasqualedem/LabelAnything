@@ -85,6 +85,7 @@ def preprocess_images_to_embeddings(
     last_block_dir=None,
     device="cuda",
     compile=False,
+    custom=True,
 ):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
@@ -111,6 +112,8 @@ def preprocess_images_to_embeddings(
         print("Model compiled")
     preprocess_image = Compose(
         [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
+    ) if custom else Compose(
+        [Resize(1024), PILToTensor(), Normalize()]
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
