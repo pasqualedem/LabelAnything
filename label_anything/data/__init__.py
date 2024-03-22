@@ -32,22 +32,37 @@ def map_collate(dataset):
 def get_preprocessing(params):
     SIZE = 1024
     size = params.get("common", {}).get("image_size", SIZE)
+    custom_preprocess = params.get("common", {}).get("custom_preprocess", True)
     if "preprocess" in params.get("common", {}):
         preprocess_params = params["common"].pop("preprocess")
         mean = preprocess_params["mean"]
         std = preprocess_params["std"]
         mean, std = get_mean_std(mean, std)
-        preprocess = Compose(
-            [CustomResize(size=(size, size)), ToTensor(), CustomNormalize(size, mean, std)]
+        preprocess = (
+            Compose(
+                [
+                    CustomResize(size=(size, size)),
+                    ToTensor(),
+                    CustomNormalize(size, mean, std),
+                ]
+            )
+            if custom_preprocess
+            else Compose(
+                [Resize(size=(size, size)), ToTensor(), Normalize(size, mean, std)]
+            )
         )
     else:
-        preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+        preprocess = (
+            Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+            if custom_preprocess
+            else Compose([Resize(size), PILToTensor(), Normalize(size)])
+        )
     return preprocess
 
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
     preprocess = get_preprocessing(dataset_args)
-    
+
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")

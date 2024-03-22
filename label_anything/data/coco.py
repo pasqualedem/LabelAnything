@@ -60,6 +60,7 @@ class CocoLVISDataset(Dataset):
         all_example_categories: bool = True,
         sample_function: str = "power_law",
         dtype=torch.float32,
+        custom_preprocess: bool = True,
     ):
         """Initialize the dataset.
 
@@ -157,6 +158,7 @@ class CocoLVISDataset(Dataset):
         self.prompts_processor = PromptsProcessor(
             long_side_length=self.image_size,
             masks_side_length=256,
+            custom_preprocess=custom_preprocess,
         )
 
     def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict, dict]:

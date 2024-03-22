@@ -89,7 +89,7 @@ def validate(parameters, generate_json):
     help='Image resolution for ViT',
 )
 @click.option(
-    "--custom",
+    "--custom_preprocess",
     is_flag=True,
     help="Whether to use custom resize and normalize",
 )
@@ -101,7 +101,7 @@ def preprocess_huggingface(
         outfolder,
         compile,
         image_resolution,
-        custom,
+        custom_preprocess,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
     preprocess_images_to_embeddings_huggingface(
@@ -112,7 +112,7 @@ def preprocess_huggingface(
         outfolder=outfolder,
         compile=compile,
         image_resolution=image_resolution,
-        custom=custom
+        custom_preprocess=custom_preprocess
     )
 
 
@@ -163,7 +163,7 @@ def preprocess_huggingface(
     help="Folder to save last transformer block",
 )
 @click.option(
-    "--custom",
+    "--custom_preprocess",
     is_flag=True,
     help="Whether to use custom resize and normalize",
 )
@@ -177,7 +177,7 @@ def preprocess(
     num_workers,
     outfolder,
     last_block_dir,
-    custom,
+    custom_preprocess,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings
 
@@ -191,7 +191,7 @@ def preprocess(
         outfolder=outfolder,
         last_block_dir=last_block_dir,
         compile=compile,
-        custom=custom,
+        custom_preprocess=custom_preprocess,
     )
 
 

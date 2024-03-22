@@ -66,9 +66,10 @@ class Denormalize(object):
 
 
 class PromptsProcessor:
-    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256):
+    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256, custom_preprocess=True):
         self.long_side_length = long_side_length
         self.masks_side_length = masks_side_length
+        self.custom_preprocess=custom_preprocess
 
     def __ann_to_rle(self, ann, h, w):
         """Convert annotation which can be polygons, to RLE.
@@ -203,11 +204,12 @@ class PromptsProcessor:
         mask = torch.as_tensor(np.logical_or.reduce(masks).astype(np.uint8)).unsqueeze(
             0
         )
-        new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], self.long_side_length)
-        mask = resize(mask, (new_h, new_w), interpolation=Image.NEAREST)
-        padw = self.long_side_length - new_w
-        padh = self.long_side_length - new_h
-        mask = F.pad(mask, (0, padw, 0, padh))
+        if self.custom_preprocess:
+            new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], self.long_side_length)
+            mask = resize(mask, (new_h, new_w), interpolation=Image.NEAREST)
+            padw = self.long_side_length - new_w
+            padh = self.long_side_length - new_h
+            mask = F.pad(mask, (0, padw, 0, padh))
         mask = resize(
             mask,
             (self.masks_side_length, self.masks_side_length),

@@ -24,10 +24,10 @@ from einops import rearrange
 from label_anything.utils.utils import ResultDict
 
 
-def generate_ground_truths(dataset_name, anns_path, outfolder):
+def generate_ground_truths(dataset_name, anns_path, outfolder, custom_preprocess=True):
     with open(anns_path, "r") as f:
         anns = json.load(f)
-    pp = PromptsProcessor()
+    pp = PromptsProcessor(custom_preprocess=custom_preprocess)
     images = anns["images"]
     annotations = anns["annotations"]
 
@@ -85,7 +85,7 @@ def preprocess_images_to_embeddings(
     last_block_dir=None,
     device="cuda",
     compile=False,
-    custom=True,
+    custom_preprocess=True,
 ):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
@@ -112,7 +112,7 @@ def preprocess_images_to_embeddings(
         print("Model compiled")
     preprocess_image = Compose(
         [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
-    ) if custom else Compose(
+    ) if custom_preprocess else Compose(
         [Resize(1024), PILToTensor(), Normalize()]
     )
     dataset = LabelAnyThingOnlyImageDataset(
@@ -214,7 +214,7 @@ def preprocess_images_to_embeddings_huggingface(
     device="cuda",
     compile=False,
     image_resolution=480,
-    custom=True,
+    custom_preprocess=True,
 ):
     os.makedirs(outfolder, exist_ok=True)
     model = ViTModel.from_pretrained(model_name)
@@ -232,7 +232,7 @@ def preprocess_images_to_embeddings_huggingface(
                 CustomNormalize(image_resolution),
             ]
         )
-        if custom
+        if custom_preprocess
         else Compose([Resize(image_resolution), PILToTensor(), Normalize()])
     )
     dataset = LabelAnyThingOnlyImageDataset(
