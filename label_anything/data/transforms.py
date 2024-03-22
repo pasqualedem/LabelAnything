@@ -8,7 +8,8 @@ import numpy as np
 from copy import deepcopy
 from typing import Tuple
 from label_anything.data.utils import get_preprocess_shape
-
+from torchvision.transforms import Normalize as Norm
+from torchvision.transforms import Resize
 
 class CustomResize(object):
     def __init__(self, long_side_length: int = 1024):
@@ -43,6 +44,11 @@ class CustomNormalize(object):
         padw = self.long_side_length - w
         sample = F.pad(sample, (0, padw, 0, padh))
         return sample
+    
+class Normalize(Norm):
+    def __init__(self, mean: Any = [123.675, 116.28, 103.53], std: Any = [58.395, 57.12, 57.375], inplace=False):
+        super().__init__(mean, std, inplace)
+    
     
     
 class Denormalize(object):
