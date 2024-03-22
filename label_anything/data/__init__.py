@@ -1,7 +1,8 @@
 import torch
 
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, PILToTensor, Resize, Normalize, ToTensor
+from torchvision.transforms import Compose, PILToTensor, ToTensor
+from label_anything.data.transforms import Normalize, Resize
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
@@ -55,7 +56,7 @@ def get_preprocessing(params):
         preprocess = (
             Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
             if custom_preprocess
-            else Compose([Resize(size), PILToTensor(), Normalize(size)])
+            else Compose([Resize(size), PILToTensor(), Normalize()])
         )
     return preprocess
 

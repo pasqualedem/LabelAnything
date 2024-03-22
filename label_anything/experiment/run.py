@@ -432,6 +432,7 @@ class Run:
             long_side_length=self.dataset_params.get("common", {}).get(
                 "image_size", SIZE
             ),
+            custom_preprocess=self.dataset_params.get("common", {}).get("custom_preprocess", True)
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
