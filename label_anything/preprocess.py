@@ -11,7 +11,12 @@ from tqdm import tqdm
 
 from label_anything.data.coco import LabelAnyThingOnlyImageDataset
 from label_anything.data.transforms import PromptsProcessor
-from label_anything.data.transforms import CustomNormalize, CustomResize
+from label_anything.data.transforms import (
+    CustomNormalize,
+    CustomResize,
+    Normalize,
+    Resize,
+)
 from label_anything.models import model_registry
 import safetensors.torch as safetch
 from transformers import ViTModel
@@ -30,16 +35,20 @@ def generate_ground_truths(dataset_name, anns_path, outfolder):
         image_anns = [ann for ann in annotations if ann["image_id"] == image["id"]]
         image_mask = torch.zeros(image["height"], image["width"], dtype=torch.long)
         for ann in image_anns:
-            mask = pp.convert_mask(ann["segmentation"], image["height"], image["width"]).astype(np.int64)
+            mask = pp.convert_mask(
+                ann["segmentation"], image["height"], image["width"]
+            ).astype(np.int64)
             mask[mask == 1] = ann["category_id"]
             image_mask = torch.max(image_mask, torch.from_numpy(mask))
         loaded = safetch.load_file(
             os.path.join(outfolder, f"{str(image['id']).zfill(12)}.safetensors")
         )
         loaded[f"{dataset_name}_gt"] = image_mask
-        save_file(loaded, os.path.join(outfolder, f"{str(image['id']).zfill(12)}.safetensors"))
+        save_file(
+            loaded, os.path.join(outfolder, f"{str(image['id']).zfill(12)}.safetensors")
+        )
 
-    
+
 @torch.no_grad()
 def create_image_embeddings(model, dataloader, outfolder, device="cuda"):
     """
@@ -118,7 +127,7 @@ def preprocess_images_to_embeddings(
             dataloader=dataloader,
             last_hidden_dir=outfolder,
             last_block_dir=last_block_dir,
-            device=device
+            device=device,
         )
     else:
         create_image_embeddings(model, dataloader, outfolder, device=device)
@@ -126,11 +135,11 @@ def preprocess_images_to_embeddings(
 
 @torch.no_grad()
 def create_image_and_neck_embeddings(
-        model,
-        dataloader,
-        last_hidden_dir,
-        last_block_dir,
-        device='cuda',
+    model,
+    dataloader,
+    last_hidden_dir,
+    last_block_dir,
+    device="cuda",
 ):
     logging.basicConfig(
         level=logging.INFO,
@@ -161,7 +170,9 @@ def create_image_and_neck_embeddings(
 
 
 @torch.no_grad()
-def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cuda", image_resolution=480):
+def create_image_embeddings_huggingface(
+    model, dataloader, outfolder, device="cuda", image_resolution=480
+):
     """
     Create image embeddings for all images in dataloader and save them to outfolder.
     """
@@ -175,8 +186,12 @@ def create_image_embeddings_huggingface(model, dataloader, outfolder, device="cu
     for idx, batch in enumerate(dataloader):
         img, image_id = batch
         img = img.to(device)
-        out = model(img, interpolate_pos_encoding=True).last_hidden_state[:, 1:, :].cpu()
-        out = rearrange(out, "b (h w) c -> b c h w", h=image_resolution//16).contiguous()
+        out = (
+            model(img, interpolate_pos_encoding=True).last_hidden_state[:, 1:, :].cpu()
+        )
+        out = rearrange(
+            out, "b (h w) c -> b c h w", h=image_resolution // 16
+        ).contiguous()
         for i in range(out.shape[0]):
             save_file(
                 {"embedding": out[i]},
@@ -196,6 +211,7 @@ def preprocess_images_to_embeddings_huggingface(
     device="cuda",
     compile=False,
     image_resolution=480,
+    custom=True,
 ):
     os.makedirs(outfolder, exist_ok=True)
     model = ViTModel.from_pretrained(model_name)
@@ -205,8 +221,16 @@ def preprocess_images_to_embeddings_huggingface(
     if compile:
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
-    preprocess_image = Compose(
-        [CustomResize(image_resolution), PILToTensor(), CustomNormalize(image_resolution)]
+    preprocess_image = (
+        Compose(
+            [
+                CustomResize(image_resolution),
+                PILToTensor(),
+                CustomNormalize(image_resolution),
+            ]
+        )
+        if custom
+        else Compose([Resize(image_resolution), PILToTensor(), Normalize()])
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
@@ -216,7 +240,9 @@ def preprocess_images_to_embeddings_huggingface(
         dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
     print("Dataloader created")
-    create_image_embeddings_huggingface(model, dataloader, outfolder, device=device, image_resolution=image_resolution)
+    create_image_embeddings_huggingface(
+        model, dataloader, outfolder, device=device, image_resolution=image_resolution
+    )
 
 
 def rename_coco20i_json(instances_path: str):
