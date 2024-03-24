@@ -105,9 +105,6 @@ def _build_lam(
 
     vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
 
-    if n_encoder_layers is not None:
-        vit = delete_encoder_layers(vit, n_encoder_layers)
-
     if class_encoder is not None:
         cls = globals()[class_encoder["name"]]
         params = {k: v for k, v in class_encoder.items() if k != "name"}
@@ -186,6 +183,12 @@ def _build_lam(
             lam.init_pretrained_weights(state_dict)
         else:
             lam.load_state_dict(state_dict)
+
+    # should we put it here?
+    if n_encoder_layers is not None:
+        vit = delete_encoder_layers(vit, n_encoder_layers)
+        lam.image_encoder = vit
+
     return lam
 
 
