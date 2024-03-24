@@ -106,7 +106,7 @@ def _build_lam(
     vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
 
     if n_encoder_layers is not None:
-        delete_encoder_layers(vit, n_encoder_layers)
+        vit = delete_encoder_layers(vit, n_encoder_layers)
 
     if class_encoder is not None:
         cls = globals()[class_encoder["name"]]
