@@ -80,6 +80,7 @@ class CocoLVISDataset(Dataset):
             prompt_types (list[PromptType], optional): List of prompt types to be used. Defaults to [PromptType.BBOX, PromptType.MASK, PromptType.POINT].
             all_example_categories (bool, optional): Specify if all exaple categories are taken into account.
             sample_function (str, optional): Specify strategy to sample support images.
+            custom_preprocess (bool, optional): Specify if custom preprocessing is used. Defaults to True.
         """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")

@@ -39,25 +39,26 @@ def get_preprocessing(params):
         mean = preprocess_params["mean"]
         std = preprocess_params["std"]
         mean, std = get_mean_std(mean, std)
-        preprocess = (
-            Compose(
-                [
-                    CustomResize(size=(size, size)),
-                    ToTensor(),
-                    CustomNormalize(size, mean, std),
-                ]
-            )
-            if custom_preprocess
-            else Compose(
-                [Resize(size=(size, size)), ToTensor(), Normalize(size, mean, std)]
-            )
-        )
     else:
-        preprocess = (
-            Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
-            if custom_preprocess
-            else Compose([Resize(size), PILToTensor(), Normalize()])
+        mean, std = get_mean_std("default", "default")
+    preprocess = (
+        Compose(
+            [
+                CustomResize(long_side_length=size),
+                ToTensor(),
+                CustomNormalize(size, mean, std),
+            ]
         )
+        if custom_preprocess
+        else Compose(
+            [
+                Resize(size=(size, size)),
+                ToTensor(),
+                lambda x: x / 255.0,
+                Normalize(mean, std),
+            ]
+        )
+    )
     return preprocess
 
 
