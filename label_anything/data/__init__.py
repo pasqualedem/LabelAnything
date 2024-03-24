@@ -54,7 +54,6 @@ def get_preprocessing(params):
             [
                 Resize(size=(size, size)),
                 ToTensor(),
-                lambda x: x / 255.0,
                 Normalize(mean, std),
             ]
         )

@@ -36,7 +36,6 @@ class CustomNormalize(object):
         """
         Normalize the image.
         """
-        sample = sample / 255.0
         sample = (sample - self.pixel_mean) / self.pixel_std
 
         # Pad
