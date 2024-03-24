@@ -1,8 +1,9 @@
-from einops import rearrange
-import torch
+import copy
 from functools import partial
 
-from transformers import ViTModel, AutoModel
+import torch
+from einops import rearrange
+from transformers import AutoModel, ViTModel
 
 from .image_encoder import ImageEncoderViT
 
@@ -85,8 +86,32 @@ class ViTModelWrapper(ViTModel):
         h, w = x.shape[-2:]
         output = super().forward(x, interpolate_pos_encoding=True)
         hs = output.last_hidden_state[:, 1:, :]
-        out = rearrange(hs, "b (h w) c -> b c h w", h=h//16).contiguous()
+        out = rearrange(hs, "b (h w) c -> b c h w", h=h // 16).contiguous()
         return out
+
+
+def delete_encoder_layers(
+    model: ViTModelWrapper | ImageEncoderViT, num_layers_to_keep: int
+):  
+    assert num_layers_to_keep > 0
+    # must pass in the full bert model
+    if isinstance(model, ViTModelWrapper):
+        old_module_list = model.encoder.layer
+        new_module_list = torch.nn.ModuleList()
+
+        # Now iterate over all layers, only keepign only the relevant layers.
+        for i in range(0, len(num_layers_to_keep)):
+            new_module_list.append(old_module_list[i])
+
+        # create a copy of the model, modify it with the new list, and return
+        copy_of_model = copy.deepcopy(model)
+        copy_of_model.encoder.layer = new_module_list
+        del model
+
+        return copy_of_model
+    elif isinstance(model, ImageEncoderViT):
+        model.blocks = model.blocks[:num_layers_to_keep]
+        return model
 
 
 def build_vit_b_mae(project_last_hidden=False):

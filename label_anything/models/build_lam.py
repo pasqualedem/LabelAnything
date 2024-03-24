@@ -13,6 +13,7 @@ from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
 from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
 from label_anything.models.transformer import AffinityTransformer
+from label_anything.models.build_encoder import ViTModelWrapper, delete_encoder_layers
 
 from . import (
     ImageEncoderViT,
@@ -97,11 +98,16 @@ def _build_lam(
     segment_example_logits=False,
     dropout: float = 0.0,
     binary=False,
+    n_encoder_layers=None,
 ):
 
     image_embedding_size = image_size // vit_patch_size
 
     vit = build_vit(project_last_hidden=use_vit_sam_neck) if use_vit else None
+
+    if n_encoder_layers is not None:
+        delete_encoder_layers(vit, n_encoder_layers)
+
     if class_encoder is not None:
         cls = globals()[class_encoder["name"]]
         params = {k: v for k, v in class_encoder.items() if k != "name"}
