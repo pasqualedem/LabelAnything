@@ -70,6 +70,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         example_split: str = "dram",
         prompt_mask_size: int = 256,
         preprocess: Union[Compose, ToTensor] = ToTensor(),
+        custom_preprocess=True,
     ):
         super().__init__()
         self.image_dir = image_dir
@@ -87,7 +88,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         self.example_data = _get_data(self.example_image_dir, self.example_split)
 
         self.example_img2cat, self.example_cat2img = self._get_support_dict()
-        self.prompt_processor = PromptsProcessor(masks_side_length=prompt_mask_size)
+        self.prompt_processor = PromptsProcessor(masks_side_length=prompt_mask_size, custom_preprocess=custom_preprocess)
 
     def _get_support_dict(self):
         img2cat = {}
