@@ -816,7 +816,7 @@ class LabelAnyThingOnlyImageDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, item):
-        img = Image.open(os.path.join(self.directory, self.files[item]))
+        img = Image.open(os.path.join(self.directory, self.files[item])).convert("RGB")
         image_id, _ = os.path.splitext(self.files[item])
         return self.preprocess(img), image_id  # load image
 
