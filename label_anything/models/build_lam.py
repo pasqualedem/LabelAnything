@@ -185,7 +185,7 @@ def _build_lam(
             lam.load_state_dict(state_dict)
 
     # should we put it here?
-    if n_encoder_layers is not None:
+    if vit is not None and n_encoder_layers is not None:
         vit = delete_encoder_layers(vit, n_encoder_layers)
         lam.image_encoder = vit
 
