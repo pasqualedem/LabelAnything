@@ -6,7 +6,7 @@ import torch
 import json
 import torch.nn.functional as F
 from safetensors.torch import save_file
-from torchvision.transforms import Compose, PILToTensor
+from torchvision.transforms import Compose, ToTensor
 from tqdm import tqdm
 
 from label_anything.data.coco import LabelAnyThingOnlyImageDataset
@@ -111,9 +111,9 @@ def preprocess_images_to_embeddings(
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
     preprocess_image = Compose(
-        [CustomResize(1024), PILToTensor(), CustomNormalize(1024)]
+        [CustomResize(1024), ToTensor(), CustomNormalize(1024)]
     ) if custom_preprocess else Compose(
-        [Resize(1024), PILToTensor(), Normalize()]
+        [Resize(1024), ToTensor(), Normalize()]
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
@@ -228,12 +228,12 @@ def preprocess_images_to_embeddings_huggingface(
         Compose(
             [
                 CustomResize(image_resolution),
-                PILToTensor(),
+                ToTensor(),
                 CustomNormalize(image_resolution),
             ]
         )
         if custom_preprocess
-        else Compose([Resize(image_resolution), PILToTensor(), Normalize()])
+        else Compose([Resize(image_resolution), ToTensor(), Normalize()])
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
