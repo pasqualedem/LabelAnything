@@ -233,7 +233,7 @@ def preprocess_images_to_embeddings_huggingface(
             ]
         )
         if custom_preprocess
-        else Compose([Resize(image_resolution), ToTensor(), Normalize()])
+        else Compose([Resize((image_resolution, image_resolution)), ToTensor(), Normalize()])
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
