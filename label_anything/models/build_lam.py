@@ -30,6 +30,7 @@ from .build_encoder import (
     build_vit_h,
     build_vit_l,
     build_vit_b_mae,
+    build_vit_b_imagenet_i21k,
 )
 
 
@@ -60,6 +61,12 @@ def build_lam_vit_mae_b(**kwargs):
         **kwargs,
     )
 
+
+def build_lam_vit_b_imagenet_i21k(**kwargs):
+    return _build_lam(
+        build_vit_b_imagenet_i21k,
+        **kwargs,
+    )
 
 def build_lam_no_vit(**kwargs):
     return _build_lam(

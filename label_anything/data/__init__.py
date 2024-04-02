@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, PILToTensor, ToTensor
+from torchvision.transforms import Compose, ToTensor
 from label_anything.data.transforms import Normalize, Resize
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler

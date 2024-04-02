@@ -94,6 +94,13 @@ def build_vit_b_mae(project_last_hidden=False):
     return vit_mae
 
 
+def build_vit_b_imagenet_i21k(project_last_hidden=False):
+    vit_b_imagenet_i21k = ViTModelWrapper.from_pretrained(
+        "google/vit-base-patch16-224-in21k"
+    )
+    return vit_b_imagenet_i21k
+
+
 def build_encoder(name, **kwargs):
     if name in ENCODERS:
         return ENCODERS[name](**kwargs)
