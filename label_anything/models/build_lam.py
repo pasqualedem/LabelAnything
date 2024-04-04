@@ -104,6 +104,7 @@ def _build_lam(
     segment_example_logits=False,
     dropout: float = 0.0,
     binary=False,
+    custom_preprocess=True,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -177,6 +178,7 @@ def _build_lam(
             class_fusion=class_fusion,
             transformer_keys_are_images=transformer_keys_are_images,
         ),
+        custom_preprocess=custom_preprocess,
     )
     lam.eval()
     if checkpoint is not None:

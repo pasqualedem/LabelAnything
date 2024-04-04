@@ -32,6 +32,7 @@ class Lam(nn.Module):
         mask_decoder: MaskDecoder,
         neck: nn.Module,
         image_size: int = 1024,
+        custom_preprocess: bool = True,
     ) -> None:
         """
         LAM predicts object masks from an image and a list of examples images with prompts.
@@ -42,6 +43,7 @@ class Lam(nn.Module):
           prompt_encoder (PromptEncoder): Encodes various types of input prompts with their corresponding images.
           mask_decoder (MaskDecoder): Predicts masks from the image embeddings
             and encoded prompts.
+          custom_preprocess (bool): Whether to use custom preprocessing (padding)
         """
         super().__init__()
         self.image_size = image_size
@@ -50,6 +52,7 @@ class Lam(nn.Module):
         self.mask_decoder = mask_decoder
         self.class_embeddings = None
         self.neck = neck
+        self.custom_preprocess = custom_preprocess
 
     def forward(
         self, batched_input: List[Dict[str, Any]]
@@ -369,11 +372,14 @@ class Lam(nn.Module):
             mode="bilinear",
             align_corners=False,
         )
-        # remove padding from masks
-        masks = [
-            masks[i, :, : input_size[0], : input_size[1]]
-            for i, input_size in enumerate(input_sizes)
-        ]
+
+        if self.custom_preprocess:
+            # remove padding from masks
+            masks = [
+                masks[i, :, : input_size[0], : input_size[1]]
+                for i, input_size in enumerate(input_sizes)
+            ]
+            
         # interpolate masks to the original size
         masks = [
             F.interpolate(
