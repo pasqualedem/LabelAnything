@@ -63,10 +63,10 @@ parameters:
     datasets:
       voc5i:
         name: [coco]
-        instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
-        mask_folders: [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass, '/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug']
+        instances_path: &instances_path [/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/trainval_aug.txt]
+        mask_folders: [["/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/SegmentationClass", "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/SegmentationClassAug"]]
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
-        root: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
+        root: &img_dir [/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
