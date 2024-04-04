@@ -63,22 +63,23 @@ parameters:
     datasets:
       voc5i:
         name: [coco]
-        instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/annotations/instances_voc12.json]
-        mask_folders: [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass, '/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug']
+        root: &root [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
+        instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/train_aug.txt]
+        mask_folder: &mask_folder [["/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug","/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass"]]
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
-        root: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         split: ["train"]
-        val_fold_idx: [0]
+        val_fold_idx: [1]
         n_folds: [4]
         sample_function: [uniform]
         all_example_categories: [False]
       val_voc5i_N1K1: &val_voc5i_N1K1
         name: [coco]
-        instances_path: *instances_path
+        root: *root
+        instances_path: [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/val_aug.txt]
+        mask_folder: *mask_folder
         emb_dir: *emb_dir
-        img_dir: *img_dir
         split: ["val"]
-        val_fold_idx: [0]
+        val_fold_idx: [1]
         n_folds: [4]
         n_shots: [1]
         n_ways: [1]
