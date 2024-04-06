@@ -1,7 +1,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: COCO20i # name of group of experiments for the logger platform
+  group: MultiLevel # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -100,7 +100,8 @@ parameters:
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
-    possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]]
+    # possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]] 
+    possible_batch_example_nums: [[[1, 1, 2]]]
     val_possible_batch_example_nums: [[[2, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]

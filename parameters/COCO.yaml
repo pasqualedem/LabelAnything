@@ -111,7 +111,7 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-- dataset: # parameters depending on the class you defined for the dataset
+  - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         coco20i:
           val_fold_idx: [1]
