@@ -60,6 +60,7 @@ class CocoLVISDataset(Dataset):
         all_example_categories: bool = True,
         sample_function: str = "power_law",
         dtype=torch.float32,
+        custom_preprocess: bool = True,
     ):
         """Initialize the dataset.
 
@@ -79,6 +80,7 @@ class CocoLVISDataset(Dataset):
             prompt_types (list[PromptType], optional): List of prompt types to be used. Defaults to [PromptType.BBOX, PromptType.MASK, PromptType.POINT].
             all_example_categories (bool, optional): Specify if all exaple categories are taken into account.
             sample_function (str, optional): Specify strategy to sample support images.
+            custom_preprocess (bool, optional): Specify if custom preprocessing is used. Defaults to True.
         """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -157,6 +159,7 @@ class CocoLVISDataset(Dataset):
         self.prompts_processor = PromptsProcessor(
             long_side_length=self.image_size,
             masks_side_length=256,
+            custom_preprocess=custom_preprocess,
         )
 
     def _load_annotation_dicts(self) -> tuple[dict, dict, dict, dict, dict]:
@@ -813,7 +816,7 @@ class LabelAnyThingOnlyImageDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, item):
-        img = Image.open(os.path.join(self.directory, self.files[item]))
+        img = Image.open(os.path.join(self.directory, self.files[item])).convert("RGB")
         image_id, _ = os.path.splitext(self.files[item])
         return self.preprocess(img), image_id  # load image
 

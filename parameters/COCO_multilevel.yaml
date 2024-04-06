@@ -100,8 +100,7 @@ parameters:
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
-    # possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]] 
-    possible_batch_example_nums: [[[1, 1, 2]]]
+    possible_batch_example_nums: [[[1, 1, 4], [1, 4, 2], [2, 1, 2], [2, 2, 2], [2, 4, 1], [16, 1, 1]]]
     val_possible_batch_example_nums: [[[2, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]

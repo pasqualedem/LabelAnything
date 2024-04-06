@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import pathlib
+import random
 import cv2
 import numpy as np
 from pycocotools import mask as mask_utils
@@ -37,22 +38,22 @@ VOC2012 = pathlib.Path("data/raw/VOCdevkit/VOC2012")
 
 def get_items(root, ids):
     images = []
-    all_boxes = []
     all_masks = []
     all_labels = []
 
     for image_id in ids:
-
-        image = _get_images(root, image_id)
-        masks, boxes = _get_boxes_and_masks(root, image_id)
-        labels = _get_label(root, image_id)
+        try:
+            image = _get_images(root, image_id)
+            masks = _get_masks(root, image_id)
+            labels = _get_label(root, image_id)
+        except Exception as e:
+            print(f"Error processing {image_id}: {e}")
 
         images.append(image)
-        all_boxes.append(boxes)
         all_masks.append(masks)
         all_labels.append(labels)
 
-    return images, all_boxes, all_masks, all_labels
+    return images, all_masks, all_labels
 
 
 def _read_image_ids(image_sets_file):
@@ -68,39 +69,43 @@ def _read_image_ids(image_sets_file):
 def _get_images(root, image_id):
     image_file = os.path.join(root, "JPEGImages", image_id + ".jpg")
     image = cv2.imread(str(image_file))
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return image
+    return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
 
-def _get_boxes_and_masks(root, image_id):
-    mask_file = os.path.join(root, "SegmentationClassAug", image_id + ".png")
-    mask_array = np.array(Image.open(mask_file))
+def _get_masks(root, image_id):
+    mask_dir = random.sample(
+        [
+            os.path.join(root, "SegmentationClass"),
+            os.path.join(root, "SegmentationClassAug"),
+        ],
+        2,
+    )
+    for dir in mask_dir:
+        mask_path = os.path.join(dir, image_id + ".png")
+        if os.path.isfile(mask_path):
+            break
+        else:
+            continue
+    mask_array = np.array(Image.open(mask_path))
     unique_values = np.unique(mask_array)
     masks = {}
 
     for value in unique_values:
-        if value in [0, 255]:
-            # If the value is 0 or 255, add it to the mask for 0
-            _ = masks.get(0, np.zeros_like(mask_array)) | (mask_array == value)
-        else:
+        if value not in [0, 255]:
             # Apply binary dilation before finding connected components
             dilated_mask = binary_dilation(mask_array == value)
             labeled_array, num_features = label(dilated_mask)
             for i in range(1, num_features + 1):
-                masks[f"{value}_{i}"] = np.where(labeled_array == i, 1, 0)
+                for i in range(1, num_features + 1):
+                    mask = np.where(labeled_array == i, 1, 0)
+                    rle = mask_utils.encode(np.asfortranarray(mask.astype(np.uint8)))
+                    rle["counts"] = rle["counts"].decode(
+                        "utf-8"
+                    )  # Convert bytes to string
+                    rle_mask_key = f"{value}_{i}"
+                    masks[rle_mask_key] = rle
 
-    rle_masks = {}
-    boxes = []
-
-    for key, value in masks.items():
-        rle = mask_utils.encode(np.asfortranarray(value.astype(np.uint8)))
-        rle["counts"] = rle["counts"].decode("utf-8")  # Convert bytes to string
-        rle_masks[key] = rle
-
-        bbox = mask_utils.toBbox(rle)
-        boxes.append(bbox.tolist())
-
-    return rle_masks, np.array(boxes, dtype=np.float32)
+    return masks
 
 
 def _get_label(root, image_id):
@@ -115,7 +120,7 @@ def _get_label(root, image_id):
     return np.array(labels)
 
 
-def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
+def create_annotation(ids, images, rle_masks, labels, annotations):
     # generate set of categories
     annotations_images = []
     annotations_segmentations = []
@@ -139,13 +144,12 @@ def create_annotation(ids, images, boxes, rle_masks, labels, annotations):
         annotations_images.append(image)
 
     i = 0
-    for enum, (id_, box, rle, label) in enumerate(zip(ids, boxes, rle_masks, labels)):
-        for b, (_, rle_value), l in zip(box, rle.items(), label):
+    for enum, (id_, rle, label) in enumerate(zip(ids, rle_masks, labels)):
+        for (_, rle_value), l in zip(rle.items(), label):
             annotation = {
                 "segmentation": rle_value,
                 "area": int(mask_utils.area(rle_value)),
                 "image_id": id_,
-                "bbox": b.tolist(),  # Assuming box is a list/array of [x_min, y_min, x_max, y_max]
                 "category_id": category_to_id[l],
                 "id": i,
             }
@@ -179,23 +183,26 @@ def preprocess_voc(input_folder):
     else:
         print("VOC2012 dataset already exists!")
 
-    # if not os.path.exists(
-    #     os.path.join(input_folder, "ImageSets/SegmentationAug/trainval_aug.txt")
-    # ):
-    #     print("Generating dataset file...")
-    #     dataset = generate_dataset_file(input_folder)
-    # else:
-    #     print("Dataset file already exists!")
+    if not os.path.exists(
+        os.path.join(input_folder, "ImageSets/Segmentation/trainval.txt")
+    ):
+        print("Generating dataset file...")
+        dataset = generate_dataset_file(input_folder)
+    else:
+        print("Dataset file already exists!")
 
-    dataset = os.path.join(input_folder, "ImageSets/Segmentation/list/trainval_aug.txt")
+    dataset = os.path.join(input_folder, "ImageSets/SegmentationAug/trainval_aug.txt")
 
     ids = _read_image_ids(dataset)
     print(f"len ids: {len(ids)}")
-    images, boxes, polygons, labels = get_items(input_folder, ids)
+    #tic toc time 
+    tic = datetime.now()
+    images, polygons, labels = get_items(input_folder, ids)
+    toc = datetime.now()
+    print(f"Time taken: {toc - tic}")
     annotations = create_annotation(
         ids,
         images,
-        boxes,
         polygons,
         labels,
         instances_voc12,

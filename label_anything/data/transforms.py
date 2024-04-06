@@ -8,7 +8,8 @@ import numpy as np
 from copy import deepcopy
 from typing import Tuple
 from label_anything.data.utils import get_preprocess_shape
-
+from torchvision.transforms import Normalize as Norm
+from torchvision.transforms import Resize
 
 class CustomResize(object):
     def __init__(self, long_side_length: int = 1024):
@@ -25,7 +26,7 @@ class CustomResize(object):
 
 class CustomNormalize(object):
     def __init__(
-        self, long_side_length: int = 1024, mean: Any = [123.675, 116.28, 103.53], std: Any = [58.395, 57.12, 57.375]
+        self, long_side_length: int = 1024, mean: Any = [0.485, 0.456, 0.406], std: Any = [0.229, 0.224, 0.225]
     ):
         self.long_side_length = long_side_length
         self.pixel_mean = torch.tensor(mean).view(-1, 1, 1)
@@ -44,9 +45,14 @@ class CustomNormalize(object):
         sample = F.pad(sample, (0, padw, 0, padh))
         return sample
     
+class Normalize(Norm):
+    def __init__(self, mean: Any = [0.485, 0.456, 0.406], std: Any = [0.229, 0.224, 0.225], inplace=False):
+        super().__init__(mean, std, inplace)
+    
+    
     
 class Denormalize(object):
-    def __init__(self, mean: Any = [123.675, 116.28, 103.53], std: Any = [58.395, 57.12, 57.375], device: Any = "cpu"):
+    def __init__(self, mean: Any = [0.485, 0.456, 0.406], std: Any = [0.229, 0.224, 0.225], device: Any = "cpu"):
         self.pixel_mean = torch.tensor(mean, device=device).view(-1, 1, 1)
         self.pixel_std = torch.tensor(std, device=device).view(-1, 1, 1)
         self.long_side_length = 1024
@@ -60,9 +66,10 @@ class Denormalize(object):
 
 
 class PromptsProcessor:
-    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256):
+    def __init__(self, long_side_length: int = 1024, masks_side_length: int = 256, custom_preprocess=True):
         self.long_side_length = long_side_length
         self.masks_side_length = masks_side_length
+        self.custom_preprocess=custom_preprocess
 
     def __ann_to_rle(self, ann, h, w):
         """Convert annotation which can be polygons, to RLE.
@@ -157,7 +164,10 @@ class PromptsProcessor:
         original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
+        if self.custom_preprocess:
+            new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
+        else:
+            new_h, new_w = self.long_side_length, self.long_side_length
         coords = deepcopy(coords).astype(float)
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
@@ -171,7 +181,10 @@ class PromptsProcessor:
         original image size in (H, W) format.
         """
         old_h, old_w = original_size
-        new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
+        if self.custom_preprocess:
+            new_h, new_w = get_preprocess_shape(original_size[0], original_size[1], self.long_side_length)
+        else:
+            new_h, new_w = self.long_side_length, self.long_side_length
         coords = coords.clone().float()
         coords[..., 0] = coords[..., 0] * (new_w / old_w)
         coords[..., 1] = coords[..., 1] * (new_h / old_h)
@@ -197,11 +210,12 @@ class PromptsProcessor:
         mask = torch.as_tensor(np.logical_or.reduce(masks).astype(np.uint8)).unsqueeze(
             0
         )
-        new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], self.long_side_length)
-        mask = resize(mask, (new_h, new_w), interpolation=Image.NEAREST)
-        padw = self.long_side_length - new_w
-        padh = self.long_side_length - new_h
-        mask = F.pad(mask, (0, padw, 0, padh))
+        if self.custom_preprocess:
+            new_h, new_w = get_preprocess_shape(masks[0].shape[0], masks[0].shape[1], self.long_side_length)
+            mask = resize(mask, (new_h, new_w), interpolation=Image.NEAREST)
+            padw = self.long_side_length - new_w
+            padh = self.long_side_length - new_h
+            mask = F.pad(mask, (0, padw, 0, padh))
         mask = resize(
             mask,
             (self.masks_side_length, self.masks_side_length),

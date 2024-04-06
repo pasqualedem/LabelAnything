@@ -1,7 +1,8 @@
 import torch
 
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, PILToTensor, Resize, Normalize, ToTensor
+from torchvision.transforms import Compose, ToTensor
+from label_anything.data.transforms import Normalize, Resize
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.coco import CocoLVISTestDataset, CocoLVISDataset
@@ -32,22 +33,37 @@ def map_collate(dataset):
 def get_preprocessing(params):
     SIZE = 1024
     size = params.get("common", {}).get("image_size", SIZE)
+    custom_preprocess = params.get("common", {}).get("custom_preprocess", True)
     if "preprocess" in params.get("common", {}):
         preprocess_params = params["common"].pop("preprocess")
         mean = preprocess_params["mean"]
         std = preprocess_params["std"]
         mean, std = get_mean_std(mean, std)
-        preprocess = Compose(
-            [CustomResize(size=(size, size)), ToTensor(), CustomNormalize(size, mean, std)]
-        )
     else:
-        preprocess = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+        mean, std = get_mean_std("default", "default")
+    preprocess = (
+        Compose(
+            [
+                CustomResize(long_side_length=size),
+                ToTensor(),
+                CustomNormalize(size, mean, std),
+            ]
+        )
+        if custom_preprocess
+        else Compose(
+            [
+                Resize(size=(size, size)),
+                ToTensor(),
+                Normalize(mean, std),
+            ]
+        )
+    )
     return preprocess
 
 
 def get_dataloaders(dataset_args, dataloader_args, num_processes):
     preprocess = get_preprocessing(dataset_args)
-    
+
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
     possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")
