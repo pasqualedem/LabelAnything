@@ -15,6 +15,7 @@ from label_anything.data import utils
 from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys, flags_merge
 from accelerate import Accelerator
 
+from label_anything.demo.utils import debug_write
 from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.utils import take_image
 

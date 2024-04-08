@@ -1,4 +1,5 @@
 import re
+import streamlit as st
 from PIL import Image
 
 COLORS = [
@@ -42,6 +43,9 @@ TEXT_COLORS = [
     "white",
 ]
 
+def debug_write(*args):
+    st.write(*args)
+
 
 def color_to_class(color):
     # color is in format rgba(r, g, b, a)
@@ -69,3 +73,19 @@ def open_rgb_image(path):
     img = Image.open(path)
     img = img.convert("RGB") 
     return img
+
+
+class SupportExample(dict):
+    img: Image
+    prompts: dict
+    reshape: tuple
+
+    def __init__(
+        self, support_image: Image, prompts: dict = {}, reshape: tuple = ()
+    ):
+        self.img = support_image
+        self.prompts = prompts
+        self.reshape = reshape
+        self['img'] = support_image
+        self['prompts'] = prompts
+        self['reshape'] = reshape

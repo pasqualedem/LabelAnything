@@ -6,7 +6,6 @@ import torch
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from PIL import Image
 from streamlit_image_annotation import detection
 from streamlit_drawable_canvas import st_canvas
 from streamlit_tags import st_tags
@@ -29,8 +28,10 @@ from label_anything.demo.preprocess import preprocess_to_batch
 from label_anything.demo.utils import (
     COLORS,
     TEXT_COLORS,
+    SupportExample,
     get_color_from_class,
     open_rgb_image,
+    debug_write,
 )
 from label_anything.experiment.substitution import Substitutor
 from label_anything.models.build_encoder import build_vit_b
@@ -78,19 +79,6 @@ preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
 class SS(StrEnum):
     SUPPORT_SET = "support_set"
     CLASSES = "classes"
-
-
-class SupportExample:
-    img: Image
-    prompts: dict
-    reshape: tuple
-
-    def __init__(
-        self, support_image: Image, prompts: dict = {}, reshape: tuple = ()
-    ):
-        self.img = support_image
-        self.prompts = prompts
-        self.reshape = reshape
 
 
 @st.cache_resource
@@ -227,42 +215,74 @@ def add_support_image(support_image, idx):
     st.write(
         f"Use the annotation tool to annotate the image with bounding boxes, click Complete when you are done"
     )
-    cols = st.columns(3)
-    with cols[0]:
-        selected_class = st.selectbox(
-            "Select the class you want to annotate",
-            st.session_state[SS.CLASSES],
-            key=f"selectbox_class_{idx}",
+    tab1, tab2 = st.tabs(["Annotate", "Load mask"])
+    with tab1:
+        cols = st.columns(3)
+        with cols[0]:
+            selected_class = st.selectbox(
+                "Select the class you want to annotate",
+                st.session_state[SS.CLASSES],
+                key=f"selectbox_class_{idx}",
+            )
+        with cols[1]:
+            prompt_type = st.selectbox(
+                "Prompt Type",
+                ["rect", "point", "polygon"],
+                key=f"drawing_mode_{idx}",
+            )
+        with cols[2]:
+            edit_mode = st.checkbox("Edit annotations", key=f"edit_mode_{idx}")
+        edit_mode = prompt_type if not edit_mode else "transform"
+        selected_class_color_f, selected_class_color_st = get_color_from_class(
+            st.session_state[SS.CLASSES], selected_class
         )
-    with cols[1]:
-        prompt_type = st.selectbox(
-            "Prompt Type",
-            ["rect", "point", "polygon"],
-            key=f"drawing_mode_{idx}",
+        shape = get_preprocess_shape(
+            support_image.size[1], support_image.size[0], LONG_SIDE_LENGTH
         )
-    with cols[2]:
-        edit_mode = st.checkbox("Edit annotations", key=f"edit_mode_{idx}")
-    edit_mode = prompt_type if not edit_mode else "transform"
-    selected_class_color_f, selected_class_color_st = get_color_from_class(
-        st.session_state[SS.CLASSES], selected_class
-    )
-    shape = get_preprocess_shape(
-        support_image.size[1], support_image.size[0], LONG_SIDE_LENGTH
-    )
-    results = st_canvas(
-        fill_color=selected_class_color_f,  # Fixed fill color with some opacity
-        stroke_color=selected_class_color_st,  # Fixed stroke color with full opacity
-        background_image=support_image,
-        drawing_mode=edit_mode,
-        key=f"input_prompt_detection_{idx}",
-        width=shape[1],
-        height=shape[0],
-        stroke_width=2,
-        update_streamlit=False,
-    )
-    if results is not None and results.json_data['objects']:
-        st.session_state[SS.SUPPORT_SET][idx].prompts = results.json_data
-        st.session_state[SS.SUPPORT_SET][idx].reshape = shape
+        results = st_canvas(
+            fill_color=selected_class_color_f,  # Fixed fill color with some opacity
+            stroke_color=selected_class_color_st,  # Fixed stroke color with full opacity
+            background_image=support_image,
+            drawing_mode=edit_mode,
+            key=f"input_prompt_detection_{idx}",
+            width=shape[1],
+            height=shape[0],
+            stroke_width=2,
+            update_streamlit=False,
+        )
+    with tab2:
+        st.write("Load a mask to segment the image")
+        st.write("Select the color for each class (background is always black)")
+        color_map = {}
+        color_cols = st.columns(len(st.session_state[SS.CLASSES]))
+        for i, cls in enumerate(st.session_state[SS.CLASSES]):
+            with color_cols[i]:
+                color = st.selectbox(
+                    f"Select color for {cls}",
+                    TEXT_COLORS,
+                    key=f"color_{idx}_{cls}",
+                    index=i,
+                )
+                color_map[i] = np.array(COLORS[TEXT_COLORS.index(color)])
+        mask = st.file_uploader(
+            "Upload the mask", type=["png", "jpg"], accept_multiple_files=False
+        )
+        mask = np.array(open_rgb_image(mask)) if mask is not None else None
+        st.image(mask, caption="Mask", use_column_width=True) if mask is not None else None
+        if mask is not None:
+            results = {
+                "mask": mask,
+                "color_map": color_map,
+            }
+    if results is not None:
+        if hasattr(results, "json_data") and results.json_data is not None:
+            st.write("Extracting prompts from canvas")
+            st.session_state[SS.SUPPORT_SET][idx].prompts = results.json_data
+            st.session_state[SS.SUPPORT_SET][idx].reshape = shape
+        if isinstance(results, dict) and "mask" in results:
+            st.write("Extracting prompts from mask")
+            st.session_state[SS.SUPPORT_SET][idx].prompts = results
+            st.session_state[SS.SUPPORT_SET][idx].reshape = shape
 
 
 def try_it_yourself(model, image_encoder):
@@ -294,16 +314,18 @@ def try_it_yourself(model, image_encoder):
             for image in images
         ]
         st.write(batches)
+        debug_write(batches[0]["images"][0][0])
         if st.button("Predict"):
             progress = st.progress(0)
             tabs = st.tabs([f"Query Image {i+1}" for i in range(len(batches))])
             for i, batch in enumerate(batches):
                 with tabs[i]:
                     result = predict(model, image_encoder, batch)
+                    pred = result[ResultDict.LOGITS].argmax(dim=1)
                     st.json(result, expanded=False)
                     plots, titles = plot_seg(
                         batch,
-                        result[ResultDict.LOGITS].argmax(dim=1),
+                        pred,
                         COLORS,
                         dims=batch[BatchKeys.DIMS],
                         classes=st.session_state[SS.CLASSES],

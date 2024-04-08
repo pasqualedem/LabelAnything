@@ -10,7 +10,7 @@ from label_anything.data.transforms import (
 )
 from label_anything.data import utils
 
-from label_anything.demo.utils import canvas_to_prompt_type, color_to_class
+from label_anything.demo.utils import canvas_to_prompt_type, color_to_class, debug_write
 
 
 def canvas_to_coco_path(path):
@@ -38,11 +38,42 @@ def reshape_mask(mask, source_shape, target_shape):
     mask = mask * reshaper
     mask = mask.reshape(1, -1)
     return mask.tolist()
+
+def extract_mask_from_image(canvas, source_shape, target_shape):
+    """
+    Extracts mask from image for each class using the color map and reshapes the mask to the target shape
+
+    Args:
+        canvas (dict): Containes the image and the color map
+        source_shape (tuple): shape of the image
+        target_shape (tuple): shape of the target image
+    """
+    mask = canvas["mask"]
+    colormap = canvas["color_map"]
+    masks = {cls: np.all(mask == color, axis=2) for cls, color in colormap.items()}
+    # Background always empty
+    masks[-1] = np.zeros(mask.shape[:2], dtype=bool)
+    masks =  [
+            {
+                "mask": masks[i],
+                "label": i,
+            }
+            for i in masks.keys()
+        ]
+    
+    return {
+        "masks": masks,
+        "points": [],
+        "bboxes": [],
+    }
     
 
 def extract_prompts_from_canvas(canvas, source_shape, target_shape):
     if "bboxes" in canvas: # already in the right format
         return canvas
+    # Check if we uploaded a mask
+    if "mask" in canvas and "color_map" in canvas:
+        return extract_mask_from_image(canvas, source_shape, target_shape)
     prompts = {"bboxes": [], "points": [], "masks": []}
     if "objects" not in canvas:
         return prompts
@@ -93,7 +124,7 @@ def preprocess_to_batch(query_image, support_set, classes, custom_preprocess=Tru
     classes = [-1] + classes
     prompts_processor = PromptsProcessor(custom_preprocess=custom_preprocess)
     size = 1024
-    transforms = Compose([CustomResize(size), PILToTensor(), CustomNormalize(size)])
+    transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
 
     if not support_set:
         return {}
@@ -127,7 +158,11 @@ def preprocess_to_batch(query_image, support_set, classes, custom_preprocess=Tru
             points[image_id][label].append(point)
         for mask in elem.prompts["masks"]:
             label = mask["label"]
-            mask = prompts_processor.convert_mask(mask["mask"], *image_size)
+            # Check if mask or RLE
+            if isinstance(mask["mask"], list):   
+                mask = prompts_processor.convert_mask(mask["mask"], *image_size)
+            else:
+                mask = mask["mask"]
             masks[image_id][label].append(mask)
 
     for i in range(len(images)):
@@ -151,6 +186,8 @@ def preprocess_to_batch(query_image, support_set, classes, custom_preprocess=Tru
     images = torch.stack(
         [transforms(query_image)] + [transforms(img) for img in images]
     )
+    for image in images:
+        debug_write(query_image)
 
     data_dict = {
         utils.BatchKeys.IMAGES: images.unsqueeze(0).cuda(),
