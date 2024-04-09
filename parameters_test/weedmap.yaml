@@ -98,15 +98,6 @@ dataset:
       max_points_per_annotation: 10
       remove_small_annotations: true
     datasets:
-      coco20i:
-        all_example_categories: false
-        instances_path: data/annotations/instances_train2014.json
-        img_dir: &img_dir data/images/train2017
-        n_folds: 4
-        name: coco
-        sample_function: uniform
-        split: train
-        val_fold_idx: 0
       test_weedmap:
         train_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/000
         test_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/003
@@ -140,30 +131,27 @@ logger:
     wandb:
       entity: cilabuniba
       offline: false
-      offline_directory: .
-      tags: [NewTraining]
-      run_id: 5nan7slx
+      offline_directory: offline
+      run_id: 3ndl7had
 model:
   desc: null
   value:
-    class_attention: true
-    class_embedding_dim: 1024
+    class_attention: false
     class_encoder:
       bank_size: 100
-      embed_dim: 256
+      embed_dim: 512
       name: RandomMatrixEncoder
-    class_fusion: sigmoid
-    embed_dim: 256
+    embed_dim: 512
     example_attention: true
-    few_type: Affinity
+    example_class_attention: false
+    fusion_transformer: TwoWayTransformer
     image_embed_dim: 768
-    image_size: 480
-    name: lam_mae_b
+    image_size: 1024
+    name: lam_b
     spatial_convs: 3
-    transformer_feature_size: 30
-    transformer_keys_are_images: true
-    use_support_features_in_prompt_encoder: true
-    use_vit_sam_neck: false
+    checkpoint: checkpoints/sam_vit_b_01ec64.pth
+    use_sam_checkpoint: True
+    use_vit_sam_neck: False
 train_params:
   desc: null
   value:
@@ -175,9 +163,7 @@ train_params:
       class_weighting: true
       components:
         focal:
-          weight: 0.9
-        prompt_contrastive:
-          weight: 0.1
+          weight: 1.0
     max_epochs: 50
     num_points: 1
     optimizer: AdamW
