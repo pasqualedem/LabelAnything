@@ -88,26 +88,27 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
         for k, v in datasets_params.items()
         if k not in list(val_datasets_params.keys()) + list(test_datasets_params.keys())
     }
-
-    train_dataset = LabelAnythingDataset(
-        datasets_params=train_datasets_params,
-        common_params={**common_params, "preprocess": preprocess},
-    )
-    train_batch_sampler = VariableBatchSampler(
-        train_dataset,
-        possible_batch_example_nums=possible_batch_example_nums,
-        num_processes=num_processes,
-        prompt_types=prompt_types,
-        prompt_choice_level=prompt_choice_level,
-        shuffle=True,
-        num_steps=num_steps,
-    )
-    train_dataloader = DataLoader(
-        dataset=train_dataset,
-        **dataloader_args,
-        collate_fn=train_dataset.collate_fn,
-        batch_sampler=train_batch_sampler,
-    )
+    train_dataloader = None
+    if train_datasets_params:
+        train_dataset = LabelAnythingDataset(
+            datasets_params=train_datasets_params,
+            common_params={**common_params, "preprocess": preprocess},
+        )
+        train_batch_sampler = VariableBatchSampler(
+            train_dataset,
+            possible_batch_example_nums=possible_batch_example_nums,
+            num_processes=num_processes,
+            prompt_types=prompt_types,
+            prompt_choice_level=prompt_choice_level,
+            shuffle=True,
+            num_steps=num_steps,
+        )
+        train_dataloader = DataLoader(
+            dataset=train_dataset,
+            **dataloader_args,
+            collate_fn=train_dataset.collate_fn,
+            batch_sampler=train_batch_sampler,
+        )
     if val_datasets_params:
         val_dataloaders = {}
         for dataset, params in val_datasets_params.items():
