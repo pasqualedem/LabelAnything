@@ -137,18 +137,18 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
     else:
         val_dataloaders = None
     if test_datasets_params:
-        test_datasets = [
-            TEST_DATASETS[dataset](**params, preprocess=preprocess)
+        test_datasets = {
+            dataset: TEST_DATASETS[dataset](**params, preprocess=preprocess)
             for dataset, params in test_datasets_params.items()
-        ]
-        test_dataloaders = [
-            DataLoader(
+        }
+        test_dataloaders = {
+            name: DataLoader(
                 dataset=data,
                 **dataloader_args,
                 collate_fn=map_collate(data),
             )
-            for data in test_datasets
-        ]
+            for name, data in test_datasets.items()
+        }
     else:
         test_dataloaders = None
     return (

@@ -494,6 +494,51 @@ class WandBLogger(AbstractLogger):
                 sequence_name=sequence_name,
             )
             self.add_image_sequence(sequence_name)
+            
+    @main_process_only
+    def log_test_prediction(
+        self,
+        batch_idx,
+        input_dict,
+        gt,
+        pred,
+        input_shape,
+        id2classes,
+        dataset_name,
+    ):
+        dims = input_dict["dims"]
+        images = input_dict["images"][:, 0]
+
+        for b in range(gt.shape[0]):
+            image = get_image(take_image(images[b], dims[b], input_shape=input_shape))
+
+            sample_gt = gt[b, : dims[b, 0], : dims[b, 1]].detach().cpu().numpy()
+
+            sample_pred = pred[b, :, : dims[b, 0], : dims[b, 1]]
+            sample_pred = torch.argmax(sample_pred, dim=0).detach().cpu().numpy()
+
+            wandb_image = wandb.Image(
+                image,
+                masks={
+                    "ground_truth": {
+                        "mask_data": sample_gt,
+                        "class_labels": id2classes,
+                    },
+                    "prediction": {
+                        "mask_data": sample_pred,
+                        "class_labels": id2classes,
+                    },
+                },
+                classes=[
+                    {"id": c, "name": name} for c, name in id2classes.items()
+                ],
+            )
+
+            self.add_image_to_sequence(
+                dataset_name,
+                f"image_{batch_idx}_sample_{b}",
+                wandb_image,
+            )
 
     @main_process_only
     def log_gt_pred(
@@ -553,6 +598,126 @@ class WandBLogger(AbstractLogger):
                 wandb_image,
                 metadata=[epoch, dataset_names[b]],
             )
+            
+    @main_process_only
+    def log_test_prompts(
+        self,
+        input_dict,
+        id2classes,
+        dataset_name,
+    ):
+        sequence_name = f"{dataset_name}_prompts"
+        self.create_image_sequence(sequence_name)
+        all_masks = (
+            input_dict["prompt_masks"].argmax(dim=1)
+            if input_dict["prompt_masks"] is not None
+            else None
+        )
+        all_boxes = input_dict["prompt_bboxes"]
+        all_points = input_dict["prompt_points"]
+        flags_masks = input_dict["flag_masks"]
+        flags_boxes = input_dict["flag_bboxes"]
+        flags_points = input_dict["flag_points"]
+        images = input_dict["images"]
+
+        for j in range(all_masks.shape[0]):
+            image = get_image(images[j])
+            # log masks, boxes and points
+            points_data = []
+            box_data = []
+            for c in range(1, input_dict["prompt_masks"].shape[1]):
+                if c > len(id2classes):
+                    break
+                boxes = all_boxes[j, c]
+                points = all_points[j, c]
+                flag_boxes = flags_boxes[j, c]
+                flag_points = flags_points[j, c]
+                label = id2classes[c]
+
+                for k in range(boxes.shape[0]):
+                    if flag_boxes[k] == 1:
+                        box = boxes[k].tolist()
+                        box = {
+                            "position": {
+                                "minX": box[0],
+                                "minY": box[1],
+                                "maxX": box[2],
+                                "maxY": box[3],
+                            },
+                            "class_id": c,
+                            "box_caption": f"{label}",
+                            "domain": "pixel",
+                        }
+                        box_data.append(box)
+
+                for k in range(points.shape[0]):
+                    if flag_points[k] != 0:
+                        x, y = points[k].tolist()
+                        # point is one pixel bbox
+                        if flag_points[k] == 1:
+                            point_label = label
+                            class_id = c
+                        else:
+                            point_label = f"Neg-{label}"
+                            class_id = self.MAX_CLASSES + c
+
+                        box = {
+                            "position": {
+                                "minX": x,
+                                "minY": y,
+                                "maxX": x + 10,
+                                "maxY": y + 10,
+                            },
+                            "class_id": class_id,
+                            "box_caption": "",
+                            "domain": "pixel",
+                        }
+                        points_data.append(box)
+
+            masks = None
+            if flags_masks[j].sum() > 0:
+                cur_mask = all_masks[j].unsqueeze(0).unsqueeze(0).float()
+                masks = {
+                    "ground_truth": {
+                        "mask_data": F.interpolate(
+                            cur_mask,
+                            images[j].shape[-2:],
+                        )
+                        .squeeze()
+                        .cpu()
+                        .numpy(),
+                        "class_labels": id2classes,
+                    }
+                }
+            boxes = {}
+            if len(box_data) > 0:
+                boxes["boxes"] = {
+                    "box_data": box_data,
+                    "class_labels": id2classes,
+                }
+            if len(points_data) > 0:
+                boxes["points"] = {
+                    "box_data": points_data,
+                    "class_labels": id2classes,
+                }
+            boxes = None if len(boxes) == 0 else boxes
+
+            wandb_image = wandb.Image(
+                image,
+                masks=masks,
+                boxes=boxes,
+                classes=[
+                    {"id": c, "name": name}
+                    for c, name in id2classes.items()
+                ],
+            )
+
+            self.add_image_to_sequence(
+                sequence_name,
+                f"image_{j}_prompts",
+                wandb_image,
+            )
+        self.add_image_sequence(sequence_name)
 
     @main_process_only
     def log_prompts(

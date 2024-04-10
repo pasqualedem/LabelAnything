@@ -122,7 +122,7 @@ class Run:
         self.plat_logger = get_experiment_logger(self.accelerator, self.params)
         self.url = self.plat_logger.url
         self.name = self.plat_logger.name
-        self.train_loader, self.val_loaders, self.test_loader = get_dataloaders(
+        self.train_loader, self.val_loaders, self.test_loaders = get_dataloaders(
             self.dataset_params,
             self.dataloader_params,
             self.accelerator.num_processes,
@@ -261,7 +261,7 @@ class Run:
                         self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
                 self.save_training_state(epoch, metrics)
 
-        if self.test_loader:
+        if self.test_loaders:
             self.test()
         self.end()
 
@@ -727,13 +727,12 @@ class Run:
 
     def test(self):
         with self.plat_logger.test():
-            for dataloader in self.test_loader:
+            for name, dataloader in self.test_loaders.items():
                 dataloader = self.accelerator.prepare(dataloader)
-                self.test_dataset(dataloader=dataloader)
+                self.test_dataset(dataset_name=name, dataloader=dataloader)
 
-    def test_dataset(self, dataloader):
+    def test_dataset(self, dataset_name, dataloader):
         self.model.eval()
-        total_loss = 0
         metrics = MetricCollection(
             metrics=[
                 self.accelerator.prepare(
@@ -746,7 +745,7 @@ class Run:
                 self.accelerator.prepare(
                     DistributedBinaryJaccardIndex(ignore_index=-100)
                 ),
-                self.accelerator.prepare(F1Score(task="multiclass", num_classes=3)),
+                self.accelerator.prepare(F1Score(task="multiclass", num_classes=dataloader.dataset.num_classes, average="macro")),
             ]
         )
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
@@ -757,6 +756,7 @@ class Run:
 
         examples = dataloader.dataset.extract_prompts()
         self.model = set_class_embeddings(self.accelerator, self.model, examples)
+        self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
 
         bar = tqdm(
             enumerate(dataloader),
@@ -765,39 +765,28 @@ class Run:
             desc=f"Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-        tot_images = 0
-        epoch = 0
+        self.plat_logger.create_image_sequence(dataset_name)
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
-                batch_size = image_dict["images"].size(0)
                 outputs = self.model.predict(image_dict)
-                # self.plat_logger.log_batch(
-                #     batch_idx=batch_idx,
-                #     image_idx=tot_images,
-                #     epoch=epoch,
-                #     substitution_step=0,
-                #     input_dict=image_dict,
-                #     input_shape=self.input_image_size,
-                #     gt=gt,
-                #     pred=outputs,
-                #     dataset=self.test_loader.dataset,
-                #     dataset_names='WeedMap',
-                #     phase="test",
-                #     run_idx=0,
-                # )
-                total_loss += self.criterion(outputs, gt).item()  # sum up batch loss
+                self.plat_logger.log_test_prediction(
+                    batch_idx=batch_idx,
+                    input_dict=image_dict,
+                    gt=gt,
+                    pred=outputs,
+                    input_shape=self.input_image_size,
+                    id2classes=dataloader.dataset.id2class,
+                    dataset_name=dataset_name,
+                )
                 outputs = torch.argmax(outputs, dim=1)
                 metrics.update(outputs, gt)
-                tot_images += batch_size
-                epoch += 1
-            # total_loss /= len(dataloader)
             metrics_values = metrics.compute()
 
             self.plat_logger.log_metrics(metrics=metrics_values)
             for k, v in metrics_values.items():
                 logger.info(f"Test - {k}: {v}")
-            # logger.info(f"Test - Loss: {total_loss}")
+            self.plat_logger.add_image_sequence(dataset_name)
 
     def end(self):
         logger.info("Ending run")

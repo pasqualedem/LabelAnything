@@ -10,6 +10,7 @@ from label_anything.data.test import LabelAnythingTestDataset
 
 
 class WeedMapTestDataset(LabelAnythingTestDataset):
+    id2class = {0: "background", 1: "crop", 2: "weed"}
     num_classes = 3
     def __init__(
         self,
@@ -84,6 +85,11 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.PROMPT_BBOXES: torch.zeros(*flag_examples.shape, 0, 4),
+            BatchKeys.FLAG_BBOXES: torch.zeros(*flag_examples.shape, 0),
+            BatchKeys.PROMPT_POINTS: torch.zeros(*flag_examples.shape, 0, 2),
+            BatchKeys.FLAG_POINTS: torch.zeros(*flag_examples.shape, 0),
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.FLAG_EXAMPLES: flag_masks,
             BatchKeys.DIMS: sizes,
         }
