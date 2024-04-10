@@ -120,12 +120,12 @@ class Attention(nn.Module):
         if key_mask is not None:
             key_mask = repeat(key_mask, 'b n -> b h s n', h=self.num_heads, s=src_len)
             score_mask = torch.zeros_like(
-                key_mask, device=key_mask.device, dtype=torch.long
+                key_mask, device=key_mask.device, dtype=torch.bool
             )
         if attn_mask is not None:
             # Put 0 in attn_mask where is 1 and -inf where is 0
             mask = torch.zeros_like(
-                attn_mask, device=attn_mask.device, dtype=torch.long
+                attn_mask, device=attn_mask.device, dtype=torch.bool
             )
             if score_mask is None:
                 score_mask = mask

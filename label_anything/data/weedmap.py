@@ -78,9 +78,13 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
         contains_weed = (masks == 2).sum(dim=(1, 2)) > 0
         flag_masks = torch.stack([backflag, contains_crop, contains_weed]).T
         
-        masks = one_hot(masks.long(), 3).permute(0, 3, 1, 2).float() 
+        masks = one_hot(masks.long(), 3).permute(0, 3, 1, 2).float()
+        # Set background to 0
+        masks[:, 0] = 0
 
         flag_examples = flag_masks.clone().bool()
+        # Set background to True
+        flag_examples[:, 0] = True
         prompt_dict = {
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
@@ -90,7 +94,6 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
             BatchKeys.PROMPT_POINTS: torch.zeros(*flag_examples.shape, 0, 2),
             BatchKeys.FLAG_POINTS: torch.zeros(*flag_examples.shape, 0),
             BatchKeys.FLAG_EXAMPLES: flag_examples,
-            BatchKeys.FLAG_EXAMPLES: flag_masks,
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
