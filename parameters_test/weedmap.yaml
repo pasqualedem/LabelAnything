@@ -101,13 +101,21 @@ dataset:
       test_weedmap:
         train_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/000
         test_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/003
+        prompt_images: [
+                # List of selected images from the training set
+                "frame0009_2.png",
+                "frame0021_2.png",
+                "frame0033_3.png",
+                "frame0034_1.png",
+                "frame0048_0.png",
+            ]
 experiment:
   desc: null
   value:
     continue_with_errors: false
     direction: null
     excluded_files: ''
-    group: NewTraining
+    group: DomainTests
     logger: null
     max_parallel_runs: 1
     n_trials: null

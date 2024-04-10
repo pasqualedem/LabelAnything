@@ -18,6 +18,7 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
         test_root,
         preprocess=None,
         prompt_images=None,
+        remove_black_images=False,
     ):
         super().__init__()
         self.train_root = train_root
@@ -46,9 +47,25 @@ class WeedMapTestDataset(LabelAnythingTestDataset):
         self.train_images = os.listdir(self.train_channels_folder[0])
         self.test_images = os.listdir(self.test_channels_folder[0])
         
+        if remove_black_images:
+            self.remove_black_images()
+    
+    def remove_black_images(self):
+        print("Removing black images")
+        black_images = []
+        for filename in self.test_images:
+            image = self._get_image(self.test_channels_folder, filename)
+            # If there are at least 10 black pixels
+            summed = image.sum(dim=0)
+            values, counts = summed.unique(return_counts=True)
+            if 0 in values and counts[values == 0] > 10:
+                black_images.append(filename)
+        self.test_images = [x for x in self.test_images if x not in black_images]
+        print(f"Removed {len(black_images)} black images")
+            
 
     def __len__(self):
-        return len(os.listdir(self.test_gt_folder))
+        return len(self.test_images)
     
     def _transform(self, image):
         image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
