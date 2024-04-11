@@ -104,11 +104,19 @@ dataset:
         prompt_images: [
                 # List of selected images from the training set
                 "frame0009_2.png",
+                "frame0020_2.png",
                 "frame0021_2.png",
                 "frame0033_3.png",
                 "frame0034_1.png",
                 "frame0048_0.png",
+                "frame0048_1.png",
+                "frame0049_0.png",
+                "frame0073_3.png",
+                "frame0183_1.png",
+                "frame0157_3.png",
+                "frame0197_0.png",
             ]
+        remove_black_images: false
 experiment:
   desc: null
   value:

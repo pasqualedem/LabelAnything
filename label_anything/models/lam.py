@@ -155,17 +155,22 @@ class Lam(nn.Module):
 
         return query_embeddings, prompt_embeddings
 
-    def prepare_embeddings(self, batched_input):
+    def prepare_embeddings(self, batched_input, chunk_size=None):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
         elif "images" in batched_input:
             images = batched_input["images"]
             B, N = images.shape[0:2]
             images = rearrange(images, "b n c h w -> (b n) c h w")
-            embeddings = self.image_encoder(images)
+            if chunk_size is not None:
+                embeddings = []
+                for i in range(0, N, chunk_size):
+                    embeddings.append(self.image_encoder(images[i : i + chunk_size]))
+                embeddings = torch.cat(embeddings, dim=0)
+            else:
+                embeddings = self.image_encoder(images)
             if self.neck is not None:
                 embeddings = self.neck(embeddings)
-            # embeddings = torch.rand((B*N, 256, 64, 64))
             embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
@@ -308,7 +313,7 @@ class Lam(nn.Module):
         return self.parameters()
 
     def generate_class_embeddings(self, example_dict, chunk_size=None):
-        prompt_embeddings = self.prepare_embeddings(example_dict)
+        prompt_embeddings = self.prepare_embeddings(example_dict, chunk_size=chunk_size)
         points, boxes, masks, flag_examples = self.prepare_prompts(example_dict)
         class_embeddings = self.prompt_encoder(
             image_embeddings=prompt_embeddings,
