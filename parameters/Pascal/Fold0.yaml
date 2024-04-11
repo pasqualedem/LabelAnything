@@ -65,7 +65,7 @@ parameters:
         name: [coco]
         root: &root [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         annotations: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/train_aug.txt]
-        mask_folder: &mask_folder [["/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug","/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass"]]
+        mask_folders: &mask_folders [["/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug","/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass"]]
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
         split: ["train"]
         val_fold_idx: [1]
@@ -76,7 +76,7 @@ parameters:
         name: [coco]
         root: *root
         annotations: [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/val_aug.txt]
-        mask_folder: *mask_folder
+        mask_folders: *mask_folders
         emb_dir: *emb_dir
         split: ["val"]
         val_fold_idx: [1]
