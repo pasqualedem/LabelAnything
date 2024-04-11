@@ -25,6 +25,12 @@ class VOC5i(Coco20iDataset):
         annotations: str,
         mask_folders: list,
         preprocess=None,
+        load_gts: bool = False,
+        do_subsample: bool = True,
+        add_box_noise: bool = True,
+        remove_small_annotations: bool = False,
+        all_example_categories: bool = True,
+        image_size: int = 1024,
     ):
         super().__init__()
         self.root = root
