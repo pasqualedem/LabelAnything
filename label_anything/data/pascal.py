@@ -25,6 +25,7 @@ class VOC5i(Coco20iDataset):
         annotations: str,
         mask_folders: list,
         preprocess=None,
+        emb_dir: Optional[str] = None,
         load_gts: bool = False,
         do_subsample: bool = True,
         add_box_noise: bool = True,
