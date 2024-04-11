@@ -1,26 +1,27 @@
+import json
 import logging
 import os
 
 import numpy as np
+import safetensors.torch as safetch
 import torch
-import json
 import torch.nn.functional as F
+from einops import rearrange
 from safetensors.torch import save_file
 from torchvision.transforms import Compose, ToTensor
 from tqdm import tqdm
+from transformers import ViTModel
 
+from label_anything.data import get_mean_std
 from label_anything.data.coco import LabelAnyThingOnlyImageDataset
-from label_anything.data.transforms import PromptsProcessor
 from label_anything.data.transforms import (
     CustomNormalize,
     CustomResize,
     Normalize,
+    PromptsProcessor,
     Resize,
 )
 from label_anything.models import model_registry
-import safetensors.torch as safetch
-from transformers import ViTModel
-from einops import rearrange
 from label_anything.utils.utils import ResultDict
 
 
@@ -110,10 +111,10 @@ def preprocess_images_to_embeddings(
     if compile:
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
-    preprocess_image = Compose(
-        [CustomResize(1024), ToTensor(), CustomNormalize(1024)]
-    ) if custom_preprocess else Compose(
-        [Resize(1024), ToTensor(), Normalize()]
+    preprocess_image = (
+        Compose([CustomResize(1024), ToTensor(), CustomNormalize(1024)])
+        if custom_preprocess
+        else Compose([Resize(1024), ToTensor(), Normalize()])
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image
@@ -215,6 +216,7 @@ def preprocess_images_to_embeddings_huggingface(
     compile=False,
     image_resolution=480,
     custom_preprocess=True,
+    mean_std="default",
 ):
     os.makedirs(outfolder, exist_ok=True)
     model = ViTModel.from_pretrained(model_name)
@@ -224,16 +226,19 @@ def preprocess_images_to_embeddings_huggingface(
     if compile:
         model = torch.compile(model, dynamic=True)
         print("Model compiled")
+    mean, std = get_mean_std(mean_std, mean_std)
     preprocess_image = (
         Compose(
             [
                 CustomResize(image_resolution),
                 ToTensor(),
-                CustomNormalize(image_resolution),
+                CustomNormalize(image_resolution, mean, std),
             ]
         )
         if custom_preprocess
-        else Compose([Resize((image_resolution, image_resolution)), ToTensor(), Normalize()])
+        else Compose(
+            [Resize((image_resolution, image_resolution)), ToTensor(), Normalize(mean, std)]
+        )
     )
     dataset = LabelAnyThingOnlyImageDataset(
         directory=directory, preprocess=preprocess_image

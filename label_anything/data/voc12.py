@@ -149,6 +149,7 @@ def create_annotation(ids, images, rle_masks, labels, annotations):
             annotation = {
                 "segmentation": rle_value,
                 "area": int(mask_utils.area(rle_value)),
+                "bbox": list(mask_utils.toBbox(rle_value)),
                 "image_id": id_,
                 "category_id": category_to_id[l],
                 "id": i,
