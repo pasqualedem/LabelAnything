@@ -506,6 +506,8 @@ class WandBLogger(AbstractLogger):
         id2classes,
         dataset_name,
     ):
+        if not log_every_n(batch_idx, self.prefix_frequency_dict["test"]):
+            return
         dims = input_dict["dims"]
         images = input_dict["images"][:, 0]
 

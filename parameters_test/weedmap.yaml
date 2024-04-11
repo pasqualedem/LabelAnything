@@ -144,6 +144,7 @@ logger:
     tmp_dir: tmp
     train_image_log_frequency: 100000
     val_image_log_frequency: 100
+    test_image_log_frequency: 75
     wandb:
       entity: cilabuniba
       offline: false
