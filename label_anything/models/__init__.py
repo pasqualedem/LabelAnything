@@ -50,6 +50,7 @@ def build_samfew(
     sam_params=None,
     fewshot_model="dcama",
     fewshot_params=None,
+    custom_preprocess=True,
 ):
     sam = model_registry[sam_model](**sam_params)
     fewshot = model_registry[fewshot_model](**fewshot_params)
