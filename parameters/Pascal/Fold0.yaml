@@ -15,12 +15,12 @@ parameters:
     train_image_log_frequency: [100000]
     val_image_log_frequency: [100]
     experiment_save_delta: [null] # save experiment every n seconds
-    tmp_dir: [/leonardo_work/IscrC_PENELOPE/tmp]
+    tmp_dir: [/leonardo_scratch/fast/IscrC_PENELOPE/tmp]
     wandb:
-      offline: [False]
+      offline: [True]
       entity: [cilabuniba]
       tags: [[SOTA]]
-      offline_directory: [/leonardo_work/IscrC_PENELOPE/offline]
+      offline_directory: [/leonardo_scratch/fast/IscrC_PENELOPE/offline]
 
   train_params:
     loss:
@@ -63,9 +63,8 @@ parameters:
     datasets:
       voc5i:
         name: [coco]
-        root: &root [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
+        img_dir: &img_dir [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012]
         instances_path: &instances_path [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/train_aug.txt]
-        mask_folder: &mask_folder [["/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClassAug","/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/SegmentationClass"]]
         emb_dir: &emb_dir [/leonardo_scratch/large/userexternal/pdemarin/pascal_embeddings_vit_b_sam/last_block_state]
         split: ["train"]
         val_fold_idx: [1]
@@ -74,9 +73,8 @@ parameters:
         all_example_categories: [False]
       val_voc5i_N1K1: &val_voc5i_N1K1
         name: [coco]
-        root: *root
+        img_dir: *img_dir
         instances_path: [/leonardo_scratch/large/userexternal/ecolonna/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/val_aug.txt]
-        mask_folder: *mask_folder
         emb_dir: *emb_dir
         split: ["val"]
         val_fold_idx: [1]
@@ -84,14 +82,12 @@ parameters:
         n_shots: [1]
         n_ways: [1]
         do_subsample: [False]
-        add_box_noise: [False]
       val_voc5i_N2K1:
         <<: *val_voc5i_N1K1
         n_ways: [2]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
-      add_box_noise: [True]
       max_points_annotations: [70]
       max_points_per_annotation: [10]
       load_gts: [False]
