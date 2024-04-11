@@ -4,6 +4,7 @@ import random
 import cv2
 from pycocotools import mask as mask_utils
 import xml.etree.ElementTree as ET
+from typing import Optional
 from PIL import Image
 from torch.nn.functional import one_hot
 import numpy as np
