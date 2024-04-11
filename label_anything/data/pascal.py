@@ -31,6 +31,9 @@ class VOC5i(Coco20iDataset):
         remove_small_annotations: bool = False,
         all_example_categories: bool = True,
         image_size: int = 1024,
+        max_points_annotations: int = 50,
+        max_points_per_annotation = 10,
+        
     ):
         super().__init__()
         self.root = root
