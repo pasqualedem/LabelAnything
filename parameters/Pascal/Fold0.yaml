@@ -89,6 +89,11 @@ parameters:
         n_ways: [2]
     common:
       remove_small_annotations: [True]
+      do_subsample: [False]
+      max_points_annotations: [70]
+      max_points_per_annotation: [10]
+      load_gts: [False]
+      image_size: *image_size
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
