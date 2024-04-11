@@ -42,7 +42,6 @@ parameters:
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
-    freeze_backbone: [True]
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
