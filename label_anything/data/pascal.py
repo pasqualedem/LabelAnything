@@ -3,7 +3,6 @@ import os
 import random
 import cv2
 from pycocotools import mask as mask_utils
-from typing import Optional
 import xml.etree.ElementTree as ET
 from PIL import Image
 from torch.nn.functional import one_hot
@@ -13,7 +12,7 @@ from scipy.ndimage import label, binary_dilation
 from label_anything.data.coco20i import Coco20iDataset
 from safetensors.torch import load_file
 
-from label_anything.data.utils import AnnFileKeys, BatchKeys, PromptType
+from label_anything.data.utils import AnnFileKeys, BatchKeys
 from label_anything.data.test import LabelAnythingTestDataset
 
 
@@ -25,18 +24,7 @@ class VOC5i(Coco20iDataset):
         annotations: str,
         mask_folders: list,
         preprocess=None,
-        emb_dir: Optional[str] = None,
-        load_gts: bool = False,
-        do_subsample: bool = True,
-        add_box_noise: bool = True,
-        remove_small_annotations: bool = False,
-        all_example_categories: bool = True,
-        image_size: int = 1024,
-        max_points_annotations: int = 50,
-        max_points_per_annotation = 10,
-        
     ):
-        super().__init__()
         self.root = root
         self.annotations = annotations
         self.mask_folders = mask_folders
