@@ -93,6 +93,11 @@ def validate(parameters, generate_json):
     is_flag=True,
     help="Whether to use custom resize and normalize",
 )
+@click.option(
+    "--mean_std",
+    default="default",
+    help="Mean and std for normalization (can be default or standard)",
+)
 def preprocess_huggingface(
         model_name,
         directory,
@@ -102,6 +107,7 @@ def preprocess_huggingface(
         compile,
         image_resolution,
         custom_preprocess,
+        mean_std,
 ):
     from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
     preprocess_images_to_embeddings_huggingface(
@@ -112,7 +118,8 @@ def preprocess_huggingface(
         outfolder=outfolder,
         compile=compile,
         image_resolution=image_resolution,
-        custom_preprocess=custom_preprocess
+        custom_preprocess=custom_preprocess,
+        mean_std=mean_std,
     )
 
 
