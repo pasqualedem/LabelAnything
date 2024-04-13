@@ -133,7 +133,7 @@ class Run:
         model_registry_params.pop("name")
 
         # get custom preprocess
-        custom_preprocess = params.get("common", {}).get("custom_preprocess", True)
+        custom_preprocess = params.get("dataset", {}).get("common", {}).get("custom_preprocess", True)
         self.model = model_registry[model_name](custom_preprocess=custom_preprocess, **model_registry_params)
         
         # load pretrained prompt encoder parameters
