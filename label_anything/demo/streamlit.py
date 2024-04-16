@@ -111,7 +111,7 @@ def get_data(_accelerator):
 
 @st.cache_resource
 def load_model(_accelerator: Accelerator, run_id):
-    folder = "latest"
+    folder = "best"
     model_file, config_file = load_from_wandb(run_id, folder)
     if config_file is not None:
         config = load_yaml(config_file)
