@@ -28,10 +28,12 @@ class Pascal(Dataset):
     def __init__(
         self,
         name: str,
-        instances_path: str, #trainval_aug.txt
-        img_dir: Optional[str] = None, #data/pascal/JPEGImages
-        emb_dir: Optional[str] = None, #data/pascal/vit_sam_embeddings
-        mask: Optional[str] = None, #data/pascal/SegmentationClass or data/pascal/SegmentationClassAug
+        instances_path: str,  # data/pascal/ImageSets/SegmentationAug/trainval_aug.txt
+        img_dir: Optional[str] = None,  # data/pascal/JPEGImages
+        emb_dir: Optional[str] = None,  # data/pascal/vit_sam_embeddings
+        mask: Optional[
+            str
+        ] = None,  # data/pascal/SegmentationClass or data/pascal/SegmentationClassAug
         load_embeddings: bool = None,
         load_gts: bool = False,
     ):
@@ -53,6 +55,13 @@ class Pascal(Dataset):
             logger.warning(
                 f"load_embeddings is not specified. Assuming load_embeddings={load_embeddings}."
             )
+        self.name = name
+        self.instances_path = instances_path
+
+        self.img_dir = img_dir
+        self.emb_dir = emb_dir
+        self.load_embeddings = load_embeddings
+        self.load_gts = load_gts
 
     def __len__(self):
         self.image_ids = []
