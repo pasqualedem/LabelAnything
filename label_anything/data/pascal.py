@@ -6,15 +6,126 @@ from pycocotools import mask as mask_utils
 import xml.etree.ElementTree as ET
 from typing import Optional
 from PIL import Image
+from torch.utils.data import Dataset
 from torch.nn.functional import one_hot
 import numpy as np
 import torch
 from scipy.ndimage import label, binary_dilation
 from label_anything.data.coco20i import Coco20iDataset
 from safetensors.torch import load_file
+from torchvision.transforms import PILToTensor, ToTensor
 
-from label_anything.data.utils import AnnFileKeys, BatchKeys
+from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys
 from label_anything.data.test import LabelAnythingTestDataset
+from label_anything.logger.text_logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class Pascal(Dataset):
+    """Pascal VOC dataset."""
+
+    def __init__(
+        self,
+        name: str,
+        instances_path: str,
+        img_dir: Optional[str] = None,
+        emb_dir: Optional[str] = None,
+        mask: Optional[str] = None,
+        load_embeddings: bool = None,
+        load_gts: bool = False,
+    ):
+        super().__init__()
+        print(f"Loading dataset annotations from {instances_path}...")
+
+        assert (
+            img_dir is not None or emb_dir is not None
+        ), "Either img_dir or emb_dir must be provided."
+        assert (
+            not load_gts or emb_dir is not None
+        ), "If load_gts is True, emb_dir must be provided."
+        assert (
+            not load_embeddings or emb_dir is not None
+        ), "If load_embeddings is True, emb_dir must be provided."
+
+        if load_embeddings is None:
+            load_embeddings = emb_dir is not None
+            logger.warning(
+                f"load_embeddings is not specified. Assuming load_embeddings={load_embeddings}."
+            )
+
+    def __len__(self):
+        self.image_ids = []
+        with open(self.instances_path) as f:
+            for line in f:
+                image_path, _ = line.rstrip().split(" ")
+                image_id = os.path.splitext(os.path.basename(image_path))[0]
+                self.image_ids.append(image_id)
+        return len(self.image_ids)
+
+    def _get_images_or_embeddings(
+        self, image_ids: list[int]
+    ) -> (torch.Tensor, str, Optional[torch.Tensor]):
+        """Load, stack and preprocess the images or the embeddings.
+
+        Args:
+            image_ids (list[int]): A list of image ids.
+
+        Returns:
+            (torch.Tensor, str, Optional[torch.Tensor]): Returns a tuple containing the images or the embeddings, the key of the returned tensor and the ground truths.
+        """
+        if self.load_embeddings:
+            embeddings_gts = [
+                self._load_safe(image_data)
+                for image_data in [self.images[image_id] for image_id in image_ids]
+            ]
+            embeddings, gts = zip(*embeddings_gts)
+            if not self.load_gts:
+                gts = None
+            return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
+        else:
+            images = [
+                self._load_and_preprocess_image(image_data)
+                for image_data in [self.images[image_id] for image_id in image_ids]
+            ]
+            gts = None
+            return torch.stack(images), BatchKeys.IMAGES, gts
+
+    def __getitem__(self, idx_metadata: tuple[int, int]) -> dict:
+        """Get an item from the dataset.
+
+        Args:
+            idx_metadata (tuple[int, dict]): A tuple containing the index of the image and the batch level metadata e.g. number of examples to be chosen and type of prompts.
+
+        Returns:
+            dict: A dictionary containing the data.
+        """
+        idx, batch_metadata = idx_metadata
+        num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
+        possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
+        if batch_metadata[BatchMetadataKeys.PROMPT_CHOICE_LEVEL] == "episode":
+            possible_prompt_types = random.choice(possible_prompt_types)
+        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
+
+        base_image_data = self.images[self.image_ids[idx]]
+        image_ids, aux_cat_ids = self._extract_examples(
+            base_image_data, num_examples, num_classes
+        )
+
+        # load, stack and preprocess the images
+        images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
+
+        data_dict = {
+            image_key: images,
+            BatchKeys.PROMPT_MASKS: masks,
+            BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            BatchKeys.DIMS: dims,
+            BatchKeys.CLASSES: classes,
+            BatchKeys.IMAGE_IDS: image_ids,
+            BatchKeys.GROUND_TRUTHS: ground_truths,
+        }
+        return data_dict
 
 
 class VOC5i(Coco20iDataset):
