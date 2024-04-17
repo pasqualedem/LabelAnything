@@ -28,10 +28,10 @@ class Pascal(Dataset):
     def __init__(
         self,
         name: str,
-        instances_path: str,
-        img_dir: Optional[str] = None,
-        emb_dir: Optional[str] = None,
-        mask: Optional[str] = None,
+        instances_path: str, #trainval_aug.txt
+        img_dir: Optional[str] = None, #data/pascal/JPEGImages
+        emb_dir: Optional[str] = None, #data/pascal/vit_sam_embeddings
+        mask: Optional[str] = None, #data/pascal/SegmentationClass or data/pascal/SegmentationClassAug
         load_embeddings: bool = None,
         load_gts: bool = False,
     ):
