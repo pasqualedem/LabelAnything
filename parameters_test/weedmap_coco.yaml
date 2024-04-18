@@ -96,29 +96,31 @@ dataset:
       max_points_annotations: 70
       max_points_per_annotation: 10
     datasets:
-      coco:
-        all_example_categories: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2017.json
-        name: coco
-        sample_function: uniform
-      val_coco:
-        add_box_noise: false
-        all_example_categories: false
-        do_subsample: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_val2017.json
-        name: coco
-        sample_function: uniform
+      test_weedmap:
+        train_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/000
+        test_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/003
+        prompt_images: [
+                # List of selected images from the training set
+                # "frame0009_2.png",
+                # "frame0021_2.png",
+                "frame0033_3.png",
+                # "frame0034_1.png",
+                # "frame0048_0.png",
+                # "frame0048_1.png",
+                "frame0049_0.png",
+                # "frame0073_3.png",
+                # "frame0183_1.png",
+                # "frame0157_3.png",
+                # "frame0197_0.png",
+            ]
+        remove_black_images: false
 experiment:
   desc: null
   value:
     continue_with_errors: false
     direction: null
     excluded_files: ''
-    group: COCO
+    group: DomainTests
     logger: null
     max_parallel_runs: 1
     n_trials: null
@@ -143,9 +145,7 @@ logger:
       entity: cilabuniba
       offline: false
       offline_directory: offline
-      tags:
-      - SOTA
-      run_id: kx1wd8dc
+      run_id: jjst1jqm
 model:
   desc: null
   value:
@@ -160,8 +160,11 @@ model:
     fusion_transformer: TwoWayTransformer
     image_embed_dim: 768
     image_size: 1024
-    name: lam_no_vit
+    name: lam_b
     spatial_convs: 3
+    checkpoint: checkpoints/sam_vit_b_01ec64.pth
+    use_sam_checkpoint: True
+    use_vit_sam_neck: False
 train_params:
   desc: null
   value:
