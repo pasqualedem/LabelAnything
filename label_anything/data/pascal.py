@@ -36,9 +36,8 @@ class PascalDataset(Dataset):
     def __init__(
         self,
         name: str,
-        filenames_path: str,  # data/pascal/ImageSets/Segmentation/train.txt
-        img_dir: Optional[str] = None,  # data/pascal/JPEGImages
-        masks_dir: Optional[str] = None,  # data/pascal/SegmentationClass
+        data_dir: str, # data/pascal
+        split: str,  # data/pascal/ImageSets/Segmentation/train.txt
         emb_dir: Optional[str] = None,  # data/pascal/vit_sam_embeddings
         n_ways: int = "max",
         preprocess=ToTensor(),
@@ -52,11 +51,9 @@ class PascalDataset(Dataset):
         custom_preprocess: bool = True,
     ):
         super().__init__()
-        print(f"Loading image filenames from {filenames_path}...")
+        print(f"Loading image filenames from {split}...")
 
-        assert (
-            img_dir is not None or emb_dir is not None
-        ), "Either img_dir or emb_dir must be provided."
+        
         assert (
             not load_gts or emb_dir is not None
         ), "If load_gts is True, emb_dir must be provided."
@@ -70,9 +67,10 @@ class PascalDataset(Dataset):
                 f"load_embeddings is not specified. Assuming load_embeddings={load_embeddings}."
             )
         self.name = name
-        self.filenames_path = filenames_path
-        self.img_dir = img_dir
-        self.masks_dir = masks_dir
+        self.split = split
+        self.data_dir = data_dir
+        self.img_dir = os.path.join(data_dir, "JPEGImages")
+        self.masks_dir = os.path.join(data_dir, "SegmentationClass")
         self.emb_dir = emb_dir
         self.n_ways = n_ways
         self.image_size = image_size
@@ -83,35 +81,56 @@ class PascalDataset(Dataset):
         self.remove_small_annotations = remove_small_annotations
         self.sample_function = sample_function
 
+
+        self.masks_dir_list = set(os.listdir(self.masks_dir))
+        self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
+
         # read the image names
         self.image_names = []
-        with open(filenames_path) as f:
-            for line in f:
-                image_name = line.rstrip()
-                self.image_names.append(image_name)
+        if split == "train":
+            filenames_path1 = os.path.join(
+                os.path.join(data_dir, "ImageSets/Segmentation/train.txt")
+            )
+            filenames_path2 = os.path.join(
+                os.path.join(data_dir, "ImageSets/Segmentation/trainaug.txt")
+            )
+            filenames_paths = [filenames_path1, filenames_path2]
+            for filenames_path in filenames_paths:
+                with open(filenames_path) as f:
+                    for line in f:
+                        image_name = line.rstrip()
+                        self.image_names.append(image_name)
+            # remove duplicates without changing the order
+            self.image_names = list(dict.fromkeys(self.image_names))
+        elif split == "val":
+            filenames_path = os.path.join(data_dir, "ImageSets/Segmentation/val.txt")
+            with open(filenames_path) as f:
+                for line in f:
+                    image_name = line.rstrip()
+                    self.image_names.append(image_name)
 
         # read the categories
         self.categories = {
-            1: "aeroplane",
-            2: "bicycle",
-            3: "bird",
-            4: "boat",
-            5: "bottle",
-            6: "bus",
-            7: "car",
-            8: "cat",
-            9: "chair",
-            10: "cow",
-            11: "diningtable",
-            12: "dog",
-            13: "horse",
-            14: "motorbike",
-            15: "person",
-            16: "pottedplant",
-            17: "sheep",
-            18: "sofa",
-            19: "train",
-            20: "tvmonitor",
+            1: {"name": "aeroplane"},
+            2: {"name": "bicycle"},
+            3: {"name": "bird"},
+            4: {"name": "boat"},
+            5: {"name": "bottle"},
+            6: {"name": "bus"},
+            7: {"name": "car"},
+            8: {"name": "cat"},
+            9: {"name": "chair"},
+            10: {"name": "cow"},
+            11: {"name": "diningtable"},
+            12: {"name": "dog"},
+            13: {"name": "horse"},
+            14: {"name": "motorbike"},
+            15: {"name": "person"},
+            16: {"name": "pottedplant"},
+            17: {"name": "sheep"},
+            18: {"name": "sofa"},
+            19: {"name": "train"},
+            20: {"name": "tvmonitor"},
         }
 
         self.img2cat, self.cat2img = self._load_annotation_dicts()
@@ -133,14 +152,36 @@ class PascalDataset(Dataset):
             custom_preprocess=custom_preprocess,
         )
 
+    def __get_seg(self, image_name: str, with_random_choice: bool = True):
+        seg = None
+        seg_aug = None
+        if image_name + ".png" in self.masks_dir_list:
+            seg_filename = os.path.join(self.masks_dir, image_name + ".png")
+            seg = Image.open(seg_filename)
+            seg = np.array(seg)
+        if self.split == "val":
+            return seg
+        if image_name + ".png" in self.aug_masks_dir_list:
+            seg_filename = os.path.join(self.masks_dir + "Aug", image_name + ".png")
+            seg_aug = Image.open(seg_filename)
+            seg_aug = np.array(seg_aug)
+        if seg is None and seg_aug is not None:
+            return seg_aug
+        elif seg is not None and seg_aug is None:
+            return seg
+        else:
+            # randomly choose between seg and seg_aug
+            if with_random_choice:
+                return seg if random.random() < 0.5 else seg_aug
+            else:
+                return seg
+
     def _load_annotation_dicts(self):
         img2cat = {}
         cat2img = {}
 
         for image_name in self.image_names:
-            seg_filename = os.path.join(self.masks_dir, image_name + ".png")
-            seg = Image.open(seg_filename)
-            seg = np.array(seg)
+            seg = self.__get_seg(image_name, with_random_choice=False)
             categories = np.unique(seg[(seg != 0) & (seg != 255)]).tolist()
             img2cat[image_name] = categories
             for cat in categories:
@@ -228,9 +269,11 @@ class PascalDataset(Dataset):
 
         classes = [[] for _ in range(len(image_names))]
         # it wont work if we have more than one example per image
-        segs = [Image.open(f"{self.masks_dir}/{image_name}.png") for image_name in image_names]
-        img_sizes = [image.size for image in segs]
-        img_sizes = [(size[1], size[0]) for size in img_sizes]
+        segs = [
+            self.__get_seg(image_name, with_random_choice=True)
+            for image_name in image_names
+        ]
+        img_sizes = [image.shape[-2:] for image in segs]
 
         # process annotations
         for i, (img_name, img_size) in enumerate(zip(image_names, img_sizes)):
@@ -241,8 +284,7 @@ class PascalDataset(Dataset):
                 classes[i].append(cat_id)
 
                 # get the annotation
-                seg = Image.open(f"{self.masks_dir}/{img_name}.png")
-                seg = np.array(seg)
+                seg = segs[i]
 
                 # create the binary mask where seg == cat_id
                 mask = np.zeros_like(seg)
@@ -274,7 +316,7 @@ class PascalDataset(Dataset):
         for i, image_name in enumerate(image_names):
             img_size = img_sizes[i]
             ground_truths.append(np.zeros(img_size, dtype=np.int64))
-            seg = Image.open(f"{self.masks_dir}/{image_name}.png")
+            seg = self.__get_seg(image_name, with_random_choice=True)
 
             for cat_id in cat_ids:
                 if cat_id not in self.img2cat[image_name]:
@@ -345,10 +387,18 @@ class PascalDataset(Dataset):
                 ground_truths[ground_truths_copy == cat_id] = i
 
         # make zeroes tensors for boxes, points and flags
-        prompt_bboxes = torch.zeros((len(image_names), len(cat_ids), 1, 4), dtype=torch.float32)
-        flag_bboxes = torch.zeros((len(image_names), len(cat_ids), 1), dtype=torch.uint8)
-        prompt_points = torch.zeros((len(image_names), len(cat_ids), 1, 2), dtype=torch.float32)
-        flag_points = torch.zeros((len(image_names), len(cat_ids), 1), dtype=torch.uint8)
+        prompt_bboxes = torch.zeros(
+            (len(image_names), len(cat_ids), 1, 4), dtype=torch.float32
+        )
+        flag_bboxes = torch.zeros(
+            (len(image_names), len(cat_ids), 1), dtype=torch.uint8
+        )
+        prompt_points = torch.zeros(
+            (len(image_names), len(cat_ids), 1, 2), dtype=torch.float32
+        )
+        flag_points = torch.zeros(
+            (len(image_names), len(cat_ids), 1), dtype=torch.uint8
+        )
 
         data_dict = {
             image_key: images,
