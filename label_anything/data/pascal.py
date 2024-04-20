@@ -1,9 +1,6 @@
 import json
 import os
 import random
-import cv2
-from pycocotools import mask as mask_utils
-import xml.etree.ElementTree as ET
 from typing import Optional
 from PIL import Image
 from torch.utils.data import Dataset
@@ -13,32 +10,49 @@ import torch
 from scipy.ndimage import label, binary_dilation
 from label_anything.data.coco20i import Coco20iDataset
 from safetensors.torch import load_file
+import itertools
 from torchvision.transforms import PILToTensor, ToTensor
 
-from label_anything.data.utils import AnnFileKeys, BatchKeys, BatchMetadataKeys
+import label_anything.data.utils as utils
+from label_anything.data.utils import (
+    AnnFileKeys,
+    BatchKeys,
+    BatchMetadataKeys,
+    PromptType,
+    flags_merge,
+)
+from label_anything.data.transforms import PromptsProcessor
 from label_anything.data.test import LabelAnythingTestDataset
+from label_anything.data.examples import build_example_generator, uniform_sampling
 from label_anything.logger.text_logger import get_logger
+import os
 
 logger = get_logger(__name__)
 
 
-class Pascal(Dataset):
+class PascalDataset(Dataset):
     """Pascal VOC dataset."""
 
     def __init__(
         self,
         name: str,
-        instances_path: str,  # data/pascal/ImageSets/SegmentationAug/trainval_aug.txt
+        filenames_path: str,  # data/pascal/ImageSets/Segmentation/train.txt
         img_dir: Optional[str] = None,  # data/pascal/JPEGImages
+        masks_dir: Optional[str] = None,  # data/pascal/SegmentationClass
         emb_dir: Optional[str] = None,  # data/pascal/vit_sam_embeddings
-        mask: Optional[
-            str
-        ] = None,  # data/pascal/SegmentationClass or data/pascal/SegmentationClassAug
+        n_ways: int = "max",
+        preprocess=ToTensor(),
+        image_size: int = 1024,
         load_embeddings: bool = None,
         load_gts: bool = False,
+        do_subsample: bool = True,
+        remove_small_annotations: bool = False,
+        all_example_categories: bool = True,
+        sample_function: str = "power_law",
+        custom_preprocess: bool = True,
     ):
         super().__init__()
-        print(f"Loading dataset annotations from {instances_path}...")
+        print(f"Loading image filenames from {filenames_path}...")
 
         assert (
             img_dir is not None or emb_dir is not None
@@ -56,24 +70,119 @@ class Pascal(Dataset):
                 f"load_embeddings is not specified. Assuming load_embeddings={load_embeddings}."
             )
         self.name = name
-        self.instances_path = instances_path
-
+        self.filenames_path = filenames_path
         self.img_dir = img_dir
+        self.masks_dir = masks_dir
         self.emb_dir = emb_dir
+        self.n_ways = n_ways
+        self.image_size = image_size
         self.load_embeddings = load_embeddings
+        self.all_example_categories = all_example_categories
         self.load_gts = load_gts
+        self.do_subsample = do_subsample
+        self.remove_small_annotations = remove_small_annotations
+        self.sample_function = sample_function
+
+        # read the image names
+        self.image_names = []
+        with open(filenames_path) as f:
+            for line in f:
+                image_name = line.rstrip()
+                self.image_names.append(image_name)
+
+        # read the categories
+        self.categories = {
+            1: "aeroplane",
+            2: "bicycle",
+            3: "bird",
+            4: "boat",
+            5: "bottle",
+            6: "bus",
+            7: "car",
+            8: "cat",
+            9: "chair",
+            10: "cow",
+            11: "diningtable",
+            12: "dog",
+            13: "horse",
+            14: "motorbike",
+            15: "person",
+            16: "pottedplant",
+            17: "sheep",
+            18: "sofa",
+            19: "train",
+            20: "tvmonitor",
+        }
+
+        self.img2cat, self.cat2img = self._load_annotation_dicts()
+
+        # example generator/selector
+        self.example_generator = build_example_generator(
+            n_ways=self.n_ways,
+            n_shots=None,
+            images_to_categories=self.img2cat,
+            categories_to_imgs=self.cat2img,
+            sample_function=self.sample_function,
+        )
+
+        # processing
+        self.preprocess = preprocess
+        self.prompts_processor = PromptsProcessor(
+            long_side_length=self.image_size,
+            masks_side_length=256,
+            custom_preprocess=custom_preprocess,
+        )
+
+    def _load_annotation_dicts(self):
+        img2cat = {}
+        cat2img = {}
+
+        for image_name in self.image_names:
+            seg_filename = os.path.join(self.masks_dir, image_name + ".png")
+            seg = Image.open(seg_filename)
+            seg = np.array(seg)
+            categories = np.unique(seg[(seg != 0) & (seg != 255)]).tolist()
+            img2cat[image_name] = categories
+            for cat in categories:
+                if cat not in cat2img:
+                    cat2img[cat] = set()
+                cat2img[cat].add(image_name)
+
+        return img2cat, cat2img
 
     def __len__(self):
-        self.image_ids = []
-        with open(self.instances_path) as f:
-            for line in f:
-                image_path, _ = line.rstrip().split(" ")
-                image_id = os.path.splitext(os.path.basename(image_path))[0]
-                self.image_ids.append(image_id)
-        return len(self.image_ids)
+        return len(self.image_names)
+
+    def _extract_examples(
+        self, image_name: str, num_examples: int, num_classes: int
+    ) -> (list[int], list[int]):
+        """Chooses examples (and categories) for the query image.
+
+        Args:
+            img_data (dict): A dictionary containing the image data, as in the coco dataset.
+            num_examples (int): The number of examples to be chosen.
+
+        Returns:
+            (list, list): Returns two lists:
+                1. examples: A list of image ids of the examples.
+                2. cats: A list of sets of category ids of the examples.
+        """
+        img_cats = torch.tensor(list(self.img2cat[image_name]))
+        sampled_classes = (
+            self.example_generator.sample_classes_from_query(img_cats, uniform_sampling)
+            if self.do_subsample
+            else img_cats
+        )
+        return self.example_generator.generate_examples(
+            query_image_id=image_name,
+            image_classes=img_cats,
+            sampled_classes=torch.tensor(sampled_classes),
+            num_examples=num_examples,
+            num_classes=num_classes,
+        )
 
     def _get_images_or_embeddings(
-        self, image_ids: list[int]
+        self, image_names: list[str]
     ) -> (torch.Tensor, str, Optional[torch.Tensor]):
         """Load, stack and preprocess the images or the embeddings.
 
@@ -94,11 +203,86 @@ class Pascal(Dataset):
             return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
         else:
             images = [
-                self._load_and_preprocess_image(image_data)
-                for image_data in [self.images[image_id] for image_id in image_ids]
+                Image.open(f"{self.img_dir}/{image_name}.jpg")
+                for image_name in image_names
             ]
+            if self.preprocess is not None:
+                images = [self.preprocess(image) for image in images]
             gts = None
             return torch.stack(images), BatchKeys.IMAGES, gts
+
+    def _get_prompts(
+        self, image_names: list, cat_ids: list
+    ) -> (list, list, list, list, list):
+        """Get the annotations for the chosen examples.
+
+        Args:
+            image_names (list): A list of image ids of the examples.
+            cat_ids (list): A list of sets of category ids of the examples.
+
+        Returns:
+            (list, list, list, list, list): Returns five lists:
+                2. masks: A list of dictionaries mapping category ids to masks.
+        """
+        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_names]
+
+        classes = [[] for _ in range(len(image_names))]
+        # it wont work if we have more than one example per image
+        segs = [Image.open(f"{self.masks_dir}/{image_name}.png") for image_name in image_names]
+        img_sizes = [image.size for image in segs]
+        img_sizes = [(size[1], size[0]) for size in img_sizes]
+
+        # process annotations
+        for i, (img_name, img_size) in enumerate(zip(image_names, img_sizes)):
+            for cat_id in cat_ids:
+                # for each pair (image img_id and category cat_id)
+                if cat_id not in self.img2cat[img_name]:
+                    continue
+                classes[i].append(cat_id)
+
+                # get the annotation
+                seg = Image.open(f"{self.masks_dir}/{img_name}.png")
+                seg = np.array(seg)
+
+                # create the binary mask where seg == cat_id
+                mask = np.zeros_like(seg)
+                mask[seg == cat_id] = 1
+
+                masks[i][cat_id].append(mask)
+
+        # convert the lists of prompts to arrays
+        for i in range(len(image_names)):
+            for cat_id in cat_ids:
+                masks[i][cat_id] = np.array((masks[i][cat_id]))
+        return masks, classes, img_sizes
+
+    def compute_ground_truths(
+        self, image_names: list[str], img_sizes, cat_ids: list[int]
+    ) -> list[torch.Tensor]:
+        """Compute the ground truths for the given image ids and category ids.
+
+        Args:
+            image_ids (list[int]): Image ids.
+            cat_ids (list[int]): Category ids.
+
+        Returns:
+            list[torch.Tensor]: A list of tensors containing the ground truths (per image).
+        """
+        ground_truths = []
+
+        # generate masks
+        for i, image_name in enumerate(image_names):
+            img_size = img_sizes[i]
+            ground_truths.append(np.zeros(img_size, dtype=np.int64))
+            seg = Image.open(f"{self.masks_dir}/{image_name}.png")
+
+            for cat_id in cat_ids:
+                if cat_id not in self.img2cat[image_name]:
+                    continue
+                mask = np.array(seg) == cat_id
+                ground_truths[-1][mask] = cat_id
+
+        return [torch.tensor(x) for x in ground_truths]
 
     def __getitem__(self, idx_metadata: tuple[int, int]) -> dict:
         """Get an item from the dataset.
@@ -110,265 +294,74 @@ class Pascal(Dataset):
             dict: A dictionary containing the data.
         """
         idx, batch_metadata = idx_metadata
+
         num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
         possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
         if batch_metadata[BatchMetadataKeys.PROMPT_CHOICE_LEVEL] == "episode":
             possible_prompt_types = random.choice(possible_prompt_types)
         num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
 
-        base_image_data = self.images[self.image_ids[idx]]
-        image_ids, aux_cat_ids = self._extract_examples(
-            base_image_data, num_examples, num_classes
+        image_name = self.image_names[idx]
+        image_names, aux_cat_ids = self._extract_examples(
+            image_name, num_examples, num_classes
         )
 
+        if self.all_example_categories:
+            aux_cat_ids = [aux_cat_ids[0]] + [
+                set(self.img2cat[img]) for img in image_names[1:]
+            ]  # check if self.images must be called before
+
+        cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
+        cat_ids.insert(0, -1)
+
         # load, stack and preprocess the images
-        images, image_key, ground_truths = self._get_images_or_embeddings(image_ids)
+        images, image_key, ground_truths = self._get_images_or_embeddings(image_names)
+
+        masks, classes, img_sizes = self._get_prompts(image_names, cat_ids)
+
+        masks, flag_masks = utils.annotations_to_tensor(
+            self.prompts_processor, masks, img_sizes, PromptType.MASK
+        )
+
+        if ground_truths is None:
+            ground_truths = self.compute_ground_truths(image_names, img_sizes, cat_ids)
+
+        # stack ground truths
+        dims = torch.tensor(img_sizes)
+        max_dims = torch.max(dims, 0).values.tolist()
+        ground_truths = torch.stack(
+            [utils.collate_gts(x, max_dims) for x in ground_truths]
+        )
+
+        if self.load_gts:
+            # convert the ground truths to the right format
+            # by assigning 0 to n-1 to the classes
+            ground_truths_copy = ground_truths.clone()
+            # set ground_truths to all 0s
+            ground_truths = torch.zeros_like(ground_truths)
+            for i, cat_id in enumerate(cat_ids):
+                if cat_id == -1:
+                    continue
+                ground_truths[ground_truths_copy == cat_id] = i
+
+        # make zeroes tensors for boxes, points and flags
+        prompt_bboxes = torch.zeros((len(image_names), len(cat_ids), 1, 4), dtype=torch.float32)
+        flag_bboxes = torch.zeros((len(image_names), len(cat_ids), 1), dtype=torch.uint8)
+        prompt_points = torch.zeros((len(image_names), len(cat_ids), 1, 2), dtype=torch.float32)
+        flag_points = torch.zeros((len(image_names), len(cat_ids), 1), dtype=torch.uint8)
 
         data_dict = {
             image_key: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
-            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            BatchKeys.FLAG_EXAMPLES: flag_masks,
+            BatchKeys.PROMPT_BBOXES: prompt_bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.PROMPT_POINTS: prompt_points,
+            BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.DIMS: dims,
             BatchKeys.CLASSES: classes,
-            BatchKeys.IMAGE_IDS: image_ids,
+            BatchKeys.IMAGE_IDS: image_names,
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }
         return data_dict
-
-
-class VOC5i(Coco20iDataset):
-    def _load_safe(self, img_data: dict) -> (torch.Tensor, Optional[torch.Tensor]):
-        """Open a safetensors file and load the embedding and the ground truth.
-
-        Args:
-            img_data (dict): A dictionary containing the image data, as in the coco dataset.
-
-        Returns:
-            (torch.Tensor, Optional[torch.Tensor]): Returns a tuple containing the embedding and the ground truth.
-        """
-        assert self.emb_dir is not None, "emb_dir must be provided."
-        gt = None
-
-        f = load_file(f"{self.emb_dir}/{str(img_data[AnnFileKeys.ID])}.safetensors")
-        embedding = f["embedding"]
-        if self.load_gts:
-            gt = f[f"{self.name}_gt"]
-        return embedding, gt
-
-
-class PascalTestDataset(LabelAnythingTestDataset):
-    num_classes = 20
-
-    def __init__(
-        self,
-        root: str,
-        instances_path: str,
-        mask_folder: list,
-        preprocess=None,
-    ):
-        super().__init__()
-        self.root = root
-        self.instances_path = instances_path
-        self.mask_folder = mask_folder
-        self.preprocess = preprocess
-
-    def __len__(self):
-        self.ids = []
-        with open(self.instances_path) as f:
-            for line in f:
-                image_path, _ = line.rstrip().split(" ")
-                image_id = os.path.splitext(os.path.basename(image_path))[0]
-                self.ids.append(image_id)
-        return len(self.ids)
-
-    def _get_label(self, image_id):
-        annotation_file = os.path.join(self.root, "Annotations", image_id + ".xml")
-        objects = ET.parse(annotation_file).findall("object")
-        labels = []
-
-        for object in objects:
-            class_name = object.find("name").text.lower().strip()
-            labels.append(class_name)
-
-        return np.array(labels)
-
-    def _get_images(self, image_id):
-        image = Image.open(os.path.join(self.root, "JPEGImages", image_id + ".jpg"))
-        size = image.size
-        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB), torch.tensor(size).unsqueeze(0)
-
-    def _get_masks(self, image_id):
-        mask_dir = random.sample(
-            [
-                os.path.join(self.root, "SegmentationClass"),
-                os.path.join(self.root, "SegmentationClassAug"),
-            ],
-            2,
-        )
-        for dir in mask_dir:
-            mask_path = os.path.join(dir, image_id + ".png")
-            if os.path.isfile(mask_path):
-                break
-            else:
-                continue
-
-        mask_array = np.array(Image.open(mask_path))
-        unique_values = np.unique(mask_array)
-        masks = {}
-
-        for value in unique_values:
-            if value not in [0, 255]:
-                # Apply binary dilation before finding connected components
-                dilated_mask = binary_dilation(mask_array == value)
-                labeled_array, num_features = label(dilated_mask)
-                for i in range(1, num_features + 1):
-                    for i in range(1, num_features + 1):
-                        mask = np.where(labeled_array == i, 1, 0)
-                        rle = mask_utils.encode(
-                            np.asfortranarray(mask.astype(np.uint8))
-                        )
-                        rle["counts"] = rle["counts"].decode(
-                            "utf-8"
-                        )  # Convert bytes to string
-                        rle_mask_key = f"{value}_{i}"
-                        masks[rle_mask_key] = rle
-
-        return masks
-
-    def __getitem__(self, idx):
-        image, size = self._get_images(self.img_folder, self.ids[idx])
-        gt = self._get_masks(self.mask_folder, self.ids[idx])
-
-        if self.preprocess:
-            gt = torch.from_numpy(gt).long()
-
-        return {
-            BatchKeys.IMAGES: image,
-            BatchKeys.DIMS: size,
-        }, gt
-
-
-if __name__ == "__main__":
-    from label_anything.data.transforms import CustomNormalize, CustomResize
-    from torchvision import transforms
-
-    root = "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012"
-    mask_folders = [
-        "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/SegmentationClass",
-        "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/SegmentationClassAug",
-    ]
-    instances_path = "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012/ImageSets/SegmentationAug/trainval_aug.txt"
-
-    preprocess = transforms.Compose(
-        [
-            CustomResize(1024),
-            transforms.PILToTensor(),
-            CustomNormalize(),
-        ]
-    )
-    dataset = VOC5i(instances_path, mask_folders, preprocess=preprocess)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
-    print(len(dataset))
-    print(next(iter(dataloader)))
-
-
-class PascalVOCTestDataset(LabelAnythingTestDataset):
-    num_classes = 20
-
-    def __init__(
-        self,
-        instances_path: str,
-        img_dir: str,
-        preprocess=None,
-    ):
-        super().__init__()
-        with open(instances_path, "r") as f:
-            instances_path = json.load(f)
-        self.instances_path = instances_path
-        self.img_dir = img_dir  # data/raw/VOCdevkit/VOC2012
-        self.preprocess = preprocess
-        self.image_to_category = self._image_to_category()
-
-    def _image_to_category(self):
-        image_to_category = {}
-        for annotation in self.instances_path["annotations"]:
-            image_id = annotation["image_id"]
-            category_id = annotation["category_id"]
-            image_to_category[image_id] = category_id
-        return image_to_category
-
-    def __len__(self):
-        return len(self.instances_path["images"])
-
-    def _get_image(self, image_info):
-        image_path = os.path.join(self.img_dir, image_info["coco_url"])
-        img = Image.open(image_path)
-        size = img.size
-        if self.preprocess:
-            img = self.preprocess(img)  # 3 x h x w
-        return img, torch.tensor(size).unsqueeze(0)
-
-    def _get_gt(self, annotation_info):
-        gt = mask_utils.decode(annotation_info["segmentation"])
-        if self.preprocess:
-            gt = torch.from_numpy(gt)
-        return gt.long()
-
-    def __getitem__(self, idx):
-        image_info = self.instances_path["images"][idx]
-        annotation_info = self.instances_path["annotations"][idx]
-        image, size = self._get_image(image_info)
-        gt = self._get_gt(annotation_info)
-        return {
-            BatchKeys.IMAGES: image,
-            BatchKeys.DIMS: size,
-        }, gt
-
-
-def extract_prompts(self):
-    cat_images = [img for img, cat_id in self.image_to_category.items() if cat_id == 1]
-    selected_images = random.sample(cat_images, min(5, len(cat_images)))
-
-    # Get image data
-    image_data = [self._get_image_by_id(image_id) for image_id in selected_images]
-    masks = [self._get_gt_by_id(image_id) for image_id in selected_images]
-    images, sizes = zip(*image_data)
-    images = torch.stack(images)
-    sizes = torch.stack(sizes)
-    masks = torch.stack(masks)
-
-    # Create flag masks
-    backflag = torch.zeros(masks.shape[0])
-    contain_tumor = (masks == 1).sum(dim=(1, 2)) > 0
-    flag_masks = torch.stack([backflag, contain_tumor]).T
-    masks = one_hot(masks.long(), 2).permute(0, 3, 1, 2).float()
-
-    prompt_dict = {
-        BatchKeys.IMAGES: images,
-        BatchKeys.PROMPT_MASKS: masks,
-        BatchKeys.FLAG_MASKS: flag_masks,
-        BatchKeys.DIMS: sizes,
-    }
-    return prompt_dict
-
-
-# if __name__ == "__main__":
-#     from label_anything.data.transforms import CustomNormalize, CustomResize
-#     from torchvision import transforms
-
-#     instances_path = (
-#         "/home/emanuele/LabelAnything/data/annotations/instances_voc12.json"
-#     )
-#     img_dir = "/home/emanuele/LabelAnything/data/raw/VOCdevkit/VOC2012"
-#     preprocess = transforms.Compose(
-#         [
-#             CustomResize(1024),
-#             transforms.PILToTensor(),
-#             CustomNormalize(),
-#         ]
-#     )
-#     dataset = PascalVOCTestDataset(instances_path, img_dir, preprocess=preprocess)
-#     dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True)
-#     print(len(dataset))
-#     print(next(iter(dataloader)))
