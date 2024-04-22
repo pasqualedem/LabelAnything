@@ -350,7 +350,7 @@ class PascalDataset(Dataset):
                 if cat_id not in self.img2cat[image_name]:
                     continue
                 mask = seg == cat_id
-                ground_truths[-1][mask] = cat_id
+                ground_truths[-1][mask] = cat_ids.index(cat_id)
 
         return [torch.tensor(x) for x in ground_truths]
 
