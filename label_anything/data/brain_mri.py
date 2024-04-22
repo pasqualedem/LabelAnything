@@ -96,8 +96,6 @@ class BrainTestDataset(LabelAnythingTestDataset):
     def _get_gt(self, mask_path):
         gt = Image.open(mask_path)
         gt = torchvision.transforms.PILToTensor()(gt)[0]
-        if self.preprocess:
-            gt = torch.from_numpy(gt)
         return gt.long()
 
     def __getitem__(self, idx):
