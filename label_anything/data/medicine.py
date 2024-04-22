@@ -1,6 +1,8 @@
 import json
 import os
 import glob
+import random
+import shutil
 import numpy as np
 from datetime import datetime
 from PIL import Image
@@ -116,6 +118,58 @@ def generate_annotations(images, masks, annotations):
     return annotations
 
 
+def split_train_test(input_folder, train_ratio=0.8):
+    # Controlla se il percorso di output esiste, altrimenti lo crea
+    train_folder = os.path.join(input_folder, "train")
+    test_folder = os.path.join(input_folder, "test")
+    if not os.path.exists(train_folder):
+        os.makedirs(train_folder)
+    if not os.path.exists(test_folder):
+        os.makedirs(test_folder)
+
+    # Itera su tutte le sottocartelle nell'input_folder
+    for root, dirs, files in os.walk(input_folder):
+        # Escludi la cartella di output
+        if root == train_folder or root == test_folder:
+            continue
+
+        # Crea la corrispondente struttura di cartelle nell'output_folder
+        relative_path = os.path.relpath(root, input_folder)
+        train_path = os.path.join(train_folder, relative_path)
+        test_path = os.path.join(test_folder, relative_path)
+        if not os.path.exists(train_path):
+            os.makedirs(train_path)
+        if not os.path.exists(test_path):
+            os.makedirs(test_path)
+
+        # Ottieni la lista dei file nella cartella corrente
+        files = [f for f in files if not f.startswith(".")]  # Escludi i file nascosti
+
+        # Scegli casualmente i file per il set di allenamento e test
+        num_train = int(len(files) * train_ratio)
+        train_files = random.sample(files, num_train)
+        test_files = [f for f in files if f not in train_files]
+
+        # Copia i file nella rispettiva cartella di train e test
+        for file in train_files:
+            shutil.copy(os.path.join(root, file), os.path.join(train_path, file))
+        for file in test_files:
+            shutil.copy(os.path.join(root, file), os.path.join(test_path, file))
+
+
+def read_files_in_folder(folder_path):
+    file_list = []
+
+    # Itera su tutte le sottocartelle e i file nella cartella
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            # Crea il percorso completo del file e aggiungilo alla lista
+            file_path = os.path.join(root, file)
+            file_list.append(file_path)
+    print(len(file_list))
+    
+
+
 if __name__ == "__main__":
     if os.path.exists("data/raw/lgg-mri-segmentation"):
         print("Dataset already downloaded and extracted")
@@ -124,8 +178,11 @@ if __name__ == "__main__":
 
     path = "data/raw/lgg-mri-segmentation/kaggle_3m/"
     images, masks = generate_data(path)
-    data_dict = generate_annotations(images, masks, data_dict)
-    with open("data/annotations/brain_mri.json", "w") as f:
-        json.dump(data_dict, f)
+    # data_dict = generate_annotations(images, masks, data_dict)
+    # with open("data/annotations/brain_mri.json", "w") as f:
+    #     json.dump(data_dict, f)
 
+    # Usa la funzione per suddividere la tua struttura di cartelle
+    # split_train_test(path, train_ratio=0.8)
+    read_files_in_folder(os.path.join(path, 'train'))
     print("Done!")
