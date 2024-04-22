@@ -97,8 +97,8 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_weedmap:
-        train_root: /home/emanuele/LabelAnything/data/brain/train
-        test_root: /home/emanuele/LabelAnything/data/brain/test
+        train_root: /leonardo_scratch/large/userexternal/ecolonna/braintrain
+        test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
         # prompt_images: [
         #         # List of selected images from the training set
         #         # "frame0009_2.png",
