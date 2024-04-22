@@ -40,7 +40,6 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def _read_files_in_folder(self, folder_path):
         self.file_list = []
-
         for root, dirs, files in os.walk(folder_path):
             for file in files:
                 if not file.endswith("_mask.tif") and file.endswith(".tif"):
@@ -89,9 +88,10 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def _get_image(self, image_path):
         img = Image.open(image_path)
+        size = img.size
         if self.preprocess:
             img = self.preprocess(img)  # 3 x h x w
-        return img, torch.tensor(img.size)
+        return img, torch.tensor(size)
 
     def _get_gt(self, mask_path):
         gt = Image.open(mask_path)
