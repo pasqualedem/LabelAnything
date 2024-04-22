@@ -97,7 +97,7 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_brain:
-        train_root: /leonardo_scratch/large/userexternal/ecolonna/braintrain
+        train_root: /leonardo_scratch/large/userexternal/ecolonna/brain/train
         test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
         # prompt_images: [
         #         # List of selected images from the training set
