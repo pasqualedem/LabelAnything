@@ -64,7 +64,7 @@ parameters:
       pascal5i:
         name: [pascal]
         data_dir: [data/pascal]
-        emb_dir: &emb_dir [data/pascal/vit_b_sam_embeddings/last_block_state]
+        emb_dir: &emb_dir [data/pascal/pascal_embeddings_vit_b_sam/last_block_state]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
