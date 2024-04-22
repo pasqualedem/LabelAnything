@@ -50,7 +50,7 @@ class BrainTestDataset(LabelAnythingTestDataset):
     def __len__(self):
         return len(self.file_list)
 
-    def extract_prompts(self, idx):
+    def extract_prompts(self):
         images, sizes = [
             self._get_image(os.path.join(self.train_root, filename))
             for filename in self.prompt_images
