@@ -63,7 +63,6 @@ class BrainTestDataset(LabelAnythingTestDataset):
             for filename in self.prompt_images
         ]
         images = torch.stack(images)
-        sizes = torch.stack(sizes)
         masks = torch.stack(masks)
 
         # Create flag masks
