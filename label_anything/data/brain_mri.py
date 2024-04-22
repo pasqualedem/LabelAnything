@@ -50,10 +50,11 @@ class BrainTestDataset(LabelAnythingTestDataset):
         return len(self.file_list)
 
     def extract_prompts(self):
-        images, sizes = [
+        images = [
             self._get_image(os.path.join(self.train_root, filename))
             for filename in self.prompt_images
         ]
+        sizes = torch.stack([torch.tensor(image.shape[1:]) for image in images])
         images = [self._transform(image) for image in images]
         masks = [
             self._get_gt(
@@ -88,10 +89,9 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def _get_image(self, image_path):
         img = Image.open(image_path)
-        size = img.size
         if self.preprocess:
             img = self.preprocess(img)  # 3 x h x w
-        return img, torch.tensor(size)
+        return img
 
     def _get_gt(self, mask_path):
         gt = Image.open(mask_path)
@@ -102,7 +102,8 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def __getitem__(self, idx):
         image_path = self.file_list[idx]
-        image, size = self._get_image(image_path)
+        image = self._get_image(image_path)
+        size = torch.tensor(image.shape[1:])
         image = self._transform(image)
         gt = self._get_gt(image_path.replace(".tif", "_mask.tif"))
         return {
