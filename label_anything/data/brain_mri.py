@@ -28,11 +28,11 @@ class BrainTestDataset(LabelAnythingTestDataset):
         self.preprocess = preprocess
         if prompt_images is None:
             prompt_images = [
-                "TCGA_CS_4944_20010208/TCGA_CS_4944_20010208_7.tif",
-                "TCGA_CS_4944_20010208/TCGA_CS_4944_20010208_8.tif",
-                "TCGA_CS_4942_19970222/TCGA_CS_4942_19970222_12.tif",
-                "TCGA_CS_4943_20000902/TCGA_CS_4943_20000902_16.tif",
-                "TCGA_CS_4943_20000902/TCGA_CS_4943_20000902_17.tif",
+                "TCGA_CS_4944_20010208_7.tif",
+                "TCGA_CS_4944_20010208_8.tif",
+                "TCGA_CS_4942_19970222_12.tif",
+                "TCGA_CS_4943_20000902_16.tif",
+                "TCGA_CS_4943_20000902_17.tif",
             ]
         self.prompt_images = prompt_images
         self.train_images = self._read_files_in_folder(self.train_root)
@@ -69,7 +69,8 @@ class BrainTestDataset(LabelAnythingTestDataset):
         backflag = torch.zeros(masks.shape[0])
         contain_tumor = (masks == 1).sum(dim=(1, 2)) > 0
         flag_masks = torch.stack([backflag, contain_tumor]).T
-        masks = one_hot(masks.long(), 2).permute(0, 3, 1, 2).float()
+        print(torch.unique(masks))
+        masks = one_hot(masks.long(), self.num_classes).float()
         flag_examples = flag_masks.clone().bool()
 
         prompt_dict = {
@@ -95,6 +96,7 @@ class BrainTestDataset(LabelAnythingTestDataset):
     def _get_gt(self, mask_path):
         gt = Image.open(mask_path)
         gt = torchvision.transforms.PILToTensor()(gt)[0]
+        gt[gt == 255] = 1
         return gt.long()
 
     def __getitem__(self, idx):
