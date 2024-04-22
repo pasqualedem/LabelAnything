@@ -113,7 +113,7 @@ dataset:
         #         # "frame0157_3.png",
         #         # "frame0197_0.png",
         #     ]
-        remove_black_images: false
+        # remove_black_images: false
 experiment:
   desc: null
   value:
