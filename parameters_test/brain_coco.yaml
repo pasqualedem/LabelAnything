@@ -96,7 +96,7 @@ dataset:
       max_points_annotations: 70
       max_points_per_annotation: 10
     datasets:
-      test_weedmap:
+      test_brain:
         train_root: /leonardo_scratch/large/userexternal/ecolonna/braintrain
         test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
         # prompt_images: [
@@ -143,7 +143,7 @@ logger:
     val_image_log_frequency: 100
     wandb:
       entity: cilabuniba
-      offline: false
+      offline: true
       offline_directory: offline
       run_id: jjst1jqm
 model:
