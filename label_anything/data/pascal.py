@@ -181,6 +181,7 @@ class PascalDataset(Dataset):
         for image_name in self.image_names:
             seg = self.__get_seg(image_name, with_random_choice=False)
             categories = np.unique(seg[(seg != 0) & (seg != 255)]).tolist()
+            categories = [cat for cat in categories if cat in self.categories]
             img2cat[image_name] = categories
             for cat in categories:
                 if cat not in cat2img:
