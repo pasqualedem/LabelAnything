@@ -156,13 +156,13 @@ class PascalDataset(Dataset):
         if image_name + ".png" in self.masks_dir_list:
             seg_filename = os.path.join(self.masks_dir, image_name + ".png")
             seg = Image.open(seg_filename)
-            seg = np.array(seg)
+            seg = np.array(seg, dtype=np.int64)
         if self.split == "val":
             return seg
         if image_name + ".png" in self.aug_masks_dir_list:
             seg_filename = os.path.join(self.masks_dir + "Aug", image_name + ".png")
             seg_aug = Image.open(seg_filename)
-            seg_aug = np.array(seg_aug)
+            seg_aug = np.array(seg_aug, dtype=np.int64)
         if seg is None and seg_aug is not None:
             return seg_aug
         elif seg is not None and seg_aug is None:
@@ -349,7 +349,7 @@ class PascalDataset(Dataset):
             for cat_id in cat_ids:
                 if cat_id not in self.img2cat[image_name]:
                     continue
-                mask = np.array(seg) == cat_id
+                mask = seg == cat_id
                 ground_truths[-1][mask] = cat_id
 
         return [torch.tensor(x) for x in ground_truths]
