@@ -36,7 +36,7 @@ class PascalDataset(Dataset):
     def __init__(
         self,
         name: str,
-        data_dir: str, # data/pascal
+        data_dir: str,  # data/pascal
         split: str,  # data/pascal/ImageSets/Segmentation/train.txt
         emb_dir: Optional[str] = None,  # data/pascal/vit_sam_embeddings
         n_ways: int = "max",
@@ -53,7 +53,6 @@ class PascalDataset(Dataset):
         super().__init__()
         print(f"Loading image filenames from {split}...")
 
-        
         assert (
             not load_gts or emb_dir is not None
         ), "If load_gts is True, emb_dir must be provided."
@@ -80,7 +79,6 @@ class PascalDataset(Dataset):
         self.do_subsample = do_subsample
         self.remove_small_annotations = remove_small_annotations
         self.sample_function = sample_function
-
 
         self.masks_dir_list = set(os.listdir(self.masks_dir))
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
@@ -193,6 +191,15 @@ class PascalDataset(Dataset):
 
     def __len__(self):
         return len(self.image_names)
+    
+    def load_and_preprocess_images(self, image_names: list[str]) -> torch.Tensor:
+        images = [
+            Image.open(f"{self.img_dir}/{image_name}.jpg")
+            for image_name in image_names
+        ]
+        if self.preprocess is not None:
+            images = [self.preprocess(image) for image in images]
+        return images
 
     def _extract_examples(
         self, image_name: str, num_examples: int, num_classes: int
@@ -222,6 +229,26 @@ class PascalDataset(Dataset):
             num_classes=num_classes,
         )
 
+    def _load_safe(self, img_name: str) -> (torch.Tensor, Optional[torch.Tensor]):
+        """Open a safetensors file and load the embedding and the ground truth.
+
+        Args:
+            img_data (dict): A dictionary containing the image data, as in the coco dataset.
+
+        Returns:
+            (torch.Tensor, Optional[torch.Tensor]): Returns a tuple containing the embedding and the ground truth.
+        """
+        assert self.emb_dir is not None, "emb_dir must be provided."
+        gt = None
+
+        f = load_file(
+            f"{self.emb_dir}/{img_name}.safetensors"
+        )
+        embedding = f["embedding"]
+        if self.load_gts:
+            gt = f[f"{self.name}_gt"]
+        return embedding, gt
+
     def _get_images_or_embeddings(
         self, image_names: list[str]
     ) -> (torch.Tensor, str, Optional[torch.Tensor]):
@@ -235,8 +262,8 @@ class PascalDataset(Dataset):
         """
         if self.load_embeddings:
             embeddings_gts = [
-                self._load_safe(image_data)
-                for image_data in [self.images[image_id] for image_id in image_ids]
+                self._load_safe(image_name)
+                for image_name in image_names
             ]
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
