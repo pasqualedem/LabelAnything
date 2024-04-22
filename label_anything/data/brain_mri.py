@@ -52,12 +52,14 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def extract_prompts(self):
         images, sizes = [
-            self._get_image(self.train_images, filename)
+            self._get_image(os.path.join(self.train_images, filename))
             for filename in self.prompt_images
         ]
         images = [self._transform(image) for image in images]
         masks = [
-            self._get_gt(self.train_images, filename.replace(".tif", "_mask.tif"))
+            self._get_gt(
+                os.path.join(self.train_images, filename.replace(".tif", "_mask.tif"))
+            )
             for filename in self.prompt_images
         ]
         images = torch.stack(images)
