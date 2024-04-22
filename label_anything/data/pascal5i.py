@@ -156,4 +156,9 @@ class Pascal5iDataset(PascalDataset):
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }
         return data_dict
-            
+    
+    def __len__(self):
+        if self.split == Pascal5iSplit.TRAIN:
+            return super().__len__()
+        elif self.split == Pascal5iSplit.VAL:
+            return self.val_num_samples

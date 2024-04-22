@@ -9,6 +9,7 @@ import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.coco20i import Coco20iDataset
 from label_anything.data.pascal import PascalDataset
+from label_anything.data.pascal5i import Pascal5iDataset
 from label_anything.logger.text_logger import get_logger
 
 logger = get_logger(__name__)
@@ -21,6 +22,8 @@ datasets = {
     "val_coco20i": Coco20iDataset,
     "lvis": CocoLVISDataset,
     "pascal": PascalDataset,
+    "pascal5i": Pascal5iDataset,
+    "val_pascal5i": Pascal5iDataset,
     "val_lvis": CocoLVISDataset,
 }
 
