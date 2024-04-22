@@ -52,13 +52,13 @@ class BrainTestDataset(LabelAnythingTestDataset):
 
     def extract_prompts(self, idx):
         images, sizes = [
-            self._get_image(os.path.join(self.train_images[idx], filename))
+            self._get_image(os.path.join(self.train_root, filename))
             for filename in self.prompt_images
         ]
         images = [self._transform(image) for image in images]
         masks = [
             self._get_gt(
-                os.path.join(self.train_images[idx], filename.replace(".tif", "_mask.tif"))
+                os.path.join(self.train_root, filename.replace(".tif", "_mask.tif"))
             )
             for filename in self.prompt_images
         ]
