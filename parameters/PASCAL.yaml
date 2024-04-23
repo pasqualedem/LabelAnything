@@ -80,16 +80,16 @@ parameters:
         n_shots: [1]
         n_ways: [1]
         do_subsample: [False]
-      val_pascal5i_N1K5:
-        <<: *val_pascal5i_N1K1
-        n_shots: [5]
+      # val_pascal5i_N1K5:
+      #   <<: *val_pascal5i_N1K1
+      #   n_shots: [5]
       val_pascal5i_N2K1:
         <<: *val_pascal5i_N1K1
         n_ways: [2]
-      val_pascal5i_N2K5:
-        <<: *val_pascal5i_N1K1
-        n_ways: [2]
-        n_shots: [5]
+      # val_pascal5i_N2K5:
+      #   <<: *val_pascal5i_N1K1
+      #   n_ways: [2]
+      #   n_shots: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
