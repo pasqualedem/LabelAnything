@@ -50,8 +50,8 @@ class Pascal5iDataset(PascalDataset):
     def __prepare_benchmark(self):
         n_categories = len(self.categories)
         idxs_val = [
-            self.val_fold_idx + i * self.n_folds
-            for i in range(self.val_num_samples // self.n_folds)
+            self.val_fold_idx * (n_categories // self.n_folds) + i
+            for i in range((n_categories // self.n_folds))
         ]
         idxs_train = [i for i in range(n_categories) if i not in idxs_val]
 
@@ -97,6 +97,7 @@ class Pascal5iDataset(PascalDataset):
                     cat_image_names = list(self.cat2img[cat_id])
                     cat_image_names = random.sample(cat_image_names, self.n_shots)
                     image_names += cat_image_names
+                cat_ids = [-1] + sorted(cat_ids)
 
             images, image_key, ground_truths = self._get_images_or_embeddings(image_names)
 
