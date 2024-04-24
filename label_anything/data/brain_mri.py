@@ -4,6 +4,7 @@ from label_anything.data.test import LabelAnythingTestDataset
 from label_anything.data.utils import BatchKeys
 from PIL import Image
 import torchvision
+import numpy as np
 import json
 import torch
 from torchvision import transforms
@@ -49,6 +50,36 @@ class BrainTestDataset(LabelAnythingTestDataset):
     def __len__(self):
         return len(self.file_list)
 
+    def _transform(self, image):
+        image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
+        image = self.preprocess(image)
+        return image
+
+    def _get_image(self, image_path):
+        image = Image.open(image_path)
+        image = torchvision.transforms.PILToTensor()(image)
+        return image
+
+    def _get_gt(self, mask_path):
+        gt = Image.open(mask_path)
+        gt = torchvision.transforms.PILToTensor()(gt)[0]
+        gt[gt == 255] = 1
+        return gt.long()
+
+    def __getitem__(self, idx):
+        if self.file_list[idx] in self.test_images:
+            image_path = os.path.join(self.test_root, self.file_list[idx])
+        else:
+            image_path = os.path.join(self.train_root, self.file_list[idx])
+        image = self._get_image(image_path)
+        size = torch.tensor(image.shape[1:])
+        gt = self._get_gt(image_path.replace(".tif", "_mask.tif"))
+        image = self._transform(image)
+        return {
+            BatchKeys.IMAGES: image.unsqueeze(0),
+            BatchKeys.DIMS: size,
+        }, gt
+
     def extract_prompts(self):
         images = [
             self._get_image(os.path.join(self.train_root, filename))
@@ -69,46 +100,21 @@ class BrainTestDataset(LabelAnythingTestDataset):
         backflag = torch.zeros(masks.shape[0])
         contain_tumor = (masks == 1).sum(dim=(1, 2)) > 0
         flag_masks = torch.stack([backflag, contain_tumor]).T
-        print(torch.unique(masks))
-        masks = one_hot(masks.long(), self.num_classes).float()
+        masks = one_hot(masks.long(), self.num_classes).permute(0, 3, 1, 2).float()
         flag_examples = flag_masks.clone().bool()
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.PROMPT_BBOXES: torch.zeros(*flag_examples.shape, 0, 4),
+            BatchKeys.FLAG_BBOXES: torch.zeros(*flag_examples.shape, 0),
+            BatchKeys.PROMPT_POINTS: torch.zeros(*flag_examples.shape, 0, 2),
+            BatchKeys.FLAG_POINTS: torch.zeros(*flag_examples.shape, 0),
             BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
-
-    def _transform(self, image):
-        image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
-        image = self.preprocess(image)
-        return image
-
-    def _get_image(self, image_path):
-        img = Image.open(image_path)
-        if self.preprocess:
-            img = self.preprocess(img)  # 3 x h x w
-        return img
-
-    def _get_gt(self, mask_path):
-        gt = Image.open(mask_path)
-        gt = torchvision.transforms.PILToTensor()(gt)[0]
-        gt[gt == 255] = 1
-        return gt.long()
-
-    def __getitem__(self, idx):
-        image_path = self.file_list[idx]
-        image = self._get_image(image_path)
-        size = torch.tensor(image.shape[1:])
-        image = self._transform(image)
-        gt = self._get_gt(image_path.replace(".tif", "_mask.tif"))
-        return {
-            BatchKeys.IMAGES: image.unsqueeze(0),
-            BatchKeys.DIMS: size,
-        }, gt
 
 
 class BrainMriTestDataset(LabelAnythingTestDataset):
