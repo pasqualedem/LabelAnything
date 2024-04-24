@@ -36,7 +36,7 @@ parameters:
     initial_lr: [0.00005]
     optimizer: [AdamW]
     scheduler:
-    - type: cosine
+    - type: constant_with_warmup
       step_moment: batch
       num_warmup_steps: 1000
     substitute: [False]
