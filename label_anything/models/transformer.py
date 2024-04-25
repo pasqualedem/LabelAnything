@@ -4,7 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-from einops import repeat
+from einops import rearrange, repeat
 from torch import Tensor, nn
 
 from typing import Tuple, Type
@@ -12,6 +12,15 @@ from typing import Tuple, Type
 from label_anything.models.common import Attention
 
 from .common import AttentionMLPBlock, MLPBlock
+
+
+class IdentityTransformer(nn.Module):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__()
+        
+    def forward(self, image_embedding: Tensor, image_pe: Tensor, token_embedding: Tensor) -> Tensor:
+        image_embedding = rearrange(image_embedding, "b c h w -> b (h w) c")
+        return token_embedding, image_embedding
 
 
 class OneWayTransformer(nn.Module):

@@ -11,7 +11,7 @@ from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
 from .mask_decoder import MaskDecoder, MaskDecoderLam
 from .prompt_encoder import PromptEncoder, PromptImageEncoder, RandomMatrixEncoder
-from .transformer import OneWayTransformer, TwoWayTransformer
+from .transformer import IdentityTransformer, OneWayTransformer, TwoWayTransformer
 from .build_sam import build_sam_vit_b, build_sam_vit_h, build_sam_vit_l, build_asam_vit_b
 from .build_lam import build_lam_vit_b, build_lam_vit_h, build_lam_vit_l, build_lam, build_lam_no_vit, build_lam_vit_mae_b, build_multilevel_lam, build_lam_vit_b_imagenet_i21k
 from .build_encoder import ENCODERS, build_vit_b, build_vit_h, build_vit_l
