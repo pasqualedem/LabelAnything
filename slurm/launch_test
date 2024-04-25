@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -A IscrC_PENELOPE
+#SBATCH -A IscrC_DIANA
 #SBATCH -p boost_usr_prod
 #SBATCH --qos boost_qos_dbg
 #SBATCH --time 00:30:00
