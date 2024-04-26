@@ -31,7 +31,7 @@ parameters:
           weight: [1.0]
     seed: &seed [42] # random seed to set
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [50]
+    max_epochs: [200, 500]
     compile: [False]
     initial_lr: [0.00005]
     optimizer: [AdamW]
