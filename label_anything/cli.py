@@ -52,78 +52,7 @@ def validate(parameters, generate_json):
     validate_fn(param_path=parameters, generate_json=generate_json)
 
 
-@main.command("preprocess_huggingface")
-@click.option(
-    "--model_name",
-    default="facebook/vit-mae-base",
-    help="Select model to use",
-)
-@click.option(
-    "--compile",
-    is_flag=True,
-    help="Select if the model should be compiled",
-)
-@click.option(
-    "--directory",
-    default="/leonardo_scratch/large/userexternal/nfanelli/train_val_2017",
-    help="Select the file to use as checkpoint",
-)
-@click.option(
-    "--batch_size",
-    default=16,
-    help="Batch size for the dataloader",
-)
-@click.option(
-    "--num_workers",
-    default=8,
-    help="Number of workers for the dataloader",
-)
-@click.option(
-    "--outfolder",
-    default="/leonardo_scratch/large/userexternal/rscaring/vit_embeddings",
-    help="Folder to save the embeddings",
-)
-@click.option(
-    "--image_resolution",
-    default=480,
-    help='Image resolution for ViT',
-)
-@click.option(
-    "--custom_preprocess",
-    is_flag=True,
-    help="Whether to use custom resize and normalize",
-)
-@click.option(
-    "--mean_std",
-    default="default",
-    help="Mean and std for normalization (can be default or standard)",
-)
-def preprocess_huggingface(
-        model_name,
-        directory,
-        batch_size,
-        num_workers,
-        outfolder,
-        compile,
-        image_resolution,
-        custom_preprocess,
-        mean_std,
-):
-    from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
-    preprocess_images_to_embeddings_huggingface(
-        model_name=model_name,
-        directory=directory,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        outfolder=outfolder,
-        compile=compile,
-        image_resolution=image_resolution,
-        custom_preprocess=custom_preprocess,
-        mean_std=mean_std,
-    )
-
-
-@main.command("preprocess")
+@main.command("generate_embeddings")
 @click.option(
     "--encoder",
     default="vit_h",
@@ -174,7 +103,27 @@ def preprocess_huggingface(
     is_flag=True,
     help="Whether to use custom resize and normalize",
 )
-def preprocess(
+@click.option(
+    "--huggingface",
+    is_flag=True,
+    help="Whether to use huggingface models",
+)
+@click.option(
+    "--model_name",
+    default="facebook/vit-mae-base",
+    help="Select model to use (Only for huggingface models)",
+)
+@click.option(
+    "--image_resolution",
+    default=480,
+    help='Image resolution for ViT (Only for huggingface models)',
+)
+@click.option(
+    "--mean_std",
+    default="default",
+    help="Mean and std for normalization (can be default or standard) (Only for huggingface models)",
+)
+def generate_embeddings(
     encoder,
     checkpoint,
     use_sam_checkpoint,
@@ -185,21 +134,39 @@ def preprocess(
     outfolder,
     last_block_dir,
     custom_preprocess,
+    huggingface,
+    model_name,
+    image_resolution,
+    mean_std,
 ):
-    from label_anything.preprocess import preprocess_images_to_embeddings
 
-    preprocess_images_to_embeddings(
-        encoder_name=encoder,
-        checkpoint=checkpoint,
-        use_sam_checkpoint=use_sam_checkpoint,
-        directory=directory,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        outfolder=outfolder,
-        last_block_dir=last_block_dir,
-        compile=compile,
-        custom_preprocess=custom_preprocess,
-    )
+    if huggingface:
+        from label_anything.preprocess import preprocess_images_to_embeddings_huggingface
+        preprocess_images_to_embeddings_huggingface(
+            model_name=model_name,
+            directory=directory,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            outfolder=outfolder,
+            compile=compile,
+            image_resolution=image_resolution,
+            custom_preprocess=custom_preprocess,
+            mean_std=mean_std,
+        )
+    else:
+        from label_anything.preprocess import preprocess_images_to_embeddings
+        preprocess_images_to_embeddings(
+            encoder_name=encoder,
+            checkpoint=checkpoint,
+            use_sam_checkpoint=use_sam_checkpoint,
+            directory=directory,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            outfolder=outfolder,
+            last_block_dir=last_block_dir,
+            compile=compile,
+            custom_preprocess=custom_preprocess,
+        )
 
 
 @main.command("generate_gt")

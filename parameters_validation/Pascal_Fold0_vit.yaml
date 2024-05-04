@@ -1,0 +1,192 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    python_version: 3.11.0
+    cli_version: 0.16.3
+    framework: huggingface
+    huggingface_version: 4.37.2
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1709757737.027401
+    t:
+      1:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      2:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      3:
+      - 2
+      - 3
+      - 4
+      - 7
+      - 15
+      - 18
+      - 23
+      - 37
+      - 42
+      4: 3.11.0
+      5: 0.16.3
+      6: 4.37.2
+      8:
+      - 5
+      13: linux-x86_64
+    m:
+    - 1: train/step
+      6:
+      - 3
+    - 1: validate/step
+      6:
+      - 3
+dataloader:
+  desc: null
+  value:
+    num_workers: 0
+    possible_batch_example_nums:
+    - - 2
+      - 1
+      - 4
+    - - 2
+      - 4
+      - 2
+    - - 2
+      - 1
+      - 2
+    - - 4
+      - 2
+      - 2
+    - - 4
+      - 4
+      - 1
+    - - 16
+      - 1
+      - 1
+    prompt_choice_level:
+    - episode
+    prompt_types:
+    - point
+    - bbox
+    - mask
+    val_possible_batch_example_nums:
+    - - 1
+      - 1
+    val_prompt_types:
+    - mask
+dataset:
+  desc: null
+  value:
+    common:
+      do_subsample: false
+      image_size: 1024
+      load_gts: false
+      load_embeddings: false
+      remove_small_annotations: true
+    datasets:
+      val_pascal5i_N1K1: &val_pascal5i_N1K1
+        name: pascal
+        data_dir: &instance_dir data/pascal
+        split: "val"
+        val_fold_idx: 0
+        n_folds: 4
+        n_shots: 1
+        n_ways: 1
+        do_subsample: False
+      val_pascal5i_N1K5:
+        <<: *val_pascal5i_N1K1
+        n_shots: 5
+      val_pascal5i_N2K1:
+        <<: *val_pascal5i_N1K1
+        n_ways: 2
+      val_pascal5i_N2K5:
+        <<: *val_pascal5i_N1K1
+        n_ways: 2
+        n_shots: 5
+experiment:
+  desc: null
+  value:
+    continue_with_errors: false
+    direction: null
+    excluded_files: ''
+    group: Pascal
+    logger: null
+    max_parallel_runs: 1
+    n_trials: null
+    name: LabelAnything
+    resume: false
+    resume_last: false
+    search: grid
+    start_from_grid: 0
+    start_from_run: 0
+    timestamp: '20240306_213939'
+    tracking_dir: ''
+    uuid: 10d0a697
+logger:
+  desc: null
+  value:
+    experiment_save_delta: null
+    log_frequency: 10
+    tmp_dir: tmp
+    train_image_log_frequency: null
+    val_image_log_frequency: 100
+    wandb:
+      entity: cilabuniba
+      offline: false
+      offline_directory: offline
+      run_id: n9623ye5
+model:
+  desc: null
+  value:
+    class_attention: false
+    class_encoder:
+      bank_size: 100
+      embed_dim: 512
+      name: RandomMatrixEncoder
+    embed_dim: 512
+    example_attention: true
+    example_class_attention: false
+    fusion_transformer: TwoWayTransformer
+    image_embed_dim: 768
+    image_size: 1024
+    name: lam_b
+    checkpoint: checkpoints/sam_vit_b_01ec64.pth
+    use_sam_checkpoint: True
+    use_vit_sam_neck: False
+    spatial_convs: 3
+train_params:
+  desc: null
+  value:
+    accumulate_substitution: false
+    check_nan: 1
+    compile: false
+    initial_lr: 5.0e-05
+    loss:
+      class_weighting: true
+      components:
+        focal:
+          weight: 1.0
+    max_epochs: 200
+    num_points: 1
+    optimizer: AdamW
+    scheduler:
+      num_warmup_steps: 1000
+      step_moment: batch
+      type: cosine
+    seed: 42
+    substitute: false
+    val_frequency: 4
+    validation_reruns: 5
+    watch_metric: miou
