@@ -2,6 +2,7 @@ import torch
 
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor
+from label_anything.data.kvasir import KvarisTestDataset
 from label_anything.data.transforms import Normalize, Resize
 
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
@@ -20,6 +21,7 @@ TEST_DATASETS = {
     "test_weedmap": WeedMapTestDataset,
     "test_dram": DramTestDataset,
     "test_brain": BrainTestDataset,
+    "test_kvaris": KvarisTestDataset,
     "test_pascal": PascalVOCTestDataset,
 }
 
