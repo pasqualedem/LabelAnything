@@ -80,7 +80,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 2
+    - - 1
       - 1
     val_prompt_types:
     - mask
