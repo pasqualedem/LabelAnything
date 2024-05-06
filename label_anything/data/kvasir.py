@@ -36,11 +36,15 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         self.preprocess = preprocess
         if prompt_images is None:
             prompt_images = [
-                "cju0qkwl35piu0993l0dewei2.jpg",
-                "cju0t4oil7vzk099370nun5h9.jpg",
+                # "cju0qx73cjw570799j4n5cjze.jpg",
+                "cju175facms5f0993a5tjikvt.jpg",
                 "cju323ypb1fbb0988gx5rzudb.jpg",
-                # "cju1cj3f0qi5n0993ut8f49rj.jpg",
-                # "cju772304yw5t0818vbw8kkjf.jpg",
+                "cju0ue769mxii08019zqgdbxn.jpg",
+                "cju1euuc65wm00799m4sjdnnn.jpg",
+                "cju1hirfi7ekp0855q0vgm9qq.jpg",
+                # "cju2i03ptvkiu0799xbbd4det.jpg",
+                # "cju1gv7106qd008784gk603mg.jpg",
+                # "cju2txjfzv60w098839dcimys.jpg",
             ]
         self.prompt_images = prompt_images
         self.filenames = os.listdir(os.path.join(self.test_root, "images"))
@@ -115,16 +119,22 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         contain_polyp = (masks == 1).sum(dim=(1, 2)) > 0
         flag_masks = torch.stack([backflag, contain_polyp]).T
         masks = one_hot(masks.long(), self.num_classes).permute(0, 3, 1, 2).float()
-        flag_examples = flag_masks.clone().bool()
+
+        prompt_bboxes = torch.zeros(*flag_masks.shape, 1, 4)
+        flag_bboxes = torch.zeros(*flag_masks.shape, 1)
+        prompt_points = torch.zeros(*flag_masks.shape, 0, 2)
+        flag_points = torch.zeros(*flag_masks.shape, 0)
+
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
-            BatchKeys.PROMPT_BBOXES: torch.zeros(*flag_examples.shape, 0, 4),
-            BatchKeys.FLAG_BBOXES: torch.zeros(*flag_examples.shape, 0),
-            BatchKeys.PROMPT_POINTS: torch.zeros(*flag_examples.shape, 0, 2),
-            BatchKeys.FLAG_POINTS: torch.zeros(*flag_examples.shape, 0),
+            BatchKeys.PROMPT_BBOXES: prompt_bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.PROMPT_POINTS: prompt_points,
+            BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.DIMS: sizes,
         }
