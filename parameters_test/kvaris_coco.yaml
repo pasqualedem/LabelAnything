@@ -96,9 +96,7 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_kvaris: 
-        img_dir: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/images
-        mask_dir: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/masks
-        annotations: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/annotations.json
+        root: /leonardo_scratch/large/userexternal/ecolonna/kvaris
         prompt_images: [
               "cju0qkwl35piu0993l0dewei2.jpg",
               "cju0t4oil7vzk099370nun5h9.jpg",
