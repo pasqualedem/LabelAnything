@@ -80,7 +80,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 1
+    - - 2
       - 1
     val_prompt_types:
     - mask
@@ -96,23 +96,7 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_kvaris: 
-        img_dir: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/images
-        mask_dir: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/masks
-        annotations: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/annotations.json
-        # prompt_images: [
-        #         # List of selected images from the training set
-        #         # "frame0009_2.png",
-        #         # "frame0021_2.png",
-        #         "frame0033_3.png",
-        #         # "frame0034_1.png",
-        #         # "frame0048_0.png",
-        #         # "frame0048_1.png",
-        #         "frame0049_0.png",
-        #         # "frame0073_3.png",
-        #         # "frame0183_1.png",
-        #         # "frame0157_3.png",
-        #         # "frame0197_0.png",
-        #     ]
+        root: /home/emanuele/LabelAnything/data/kvasir
 experiment:
   desc: null
   value:

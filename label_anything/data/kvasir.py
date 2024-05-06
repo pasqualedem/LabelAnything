@@ -18,30 +18,29 @@ class KvarisTestDataset(LabelAnythingTestDataset):
 
     def __init__(
         self,
-        img_dir: str,
-        mask_dir: str,
-        annotations: str,
+        root: str,
         preprocess=None,
         prompt_images=None,
     ):
         super().__init__()
-        self.img_dir = img_dir
-        self.mask_dir = mask_dir
-        self.annotations = annotations
+        self.root = root
+        self.test_root = os.path.join(self.root, "test")
+        self.train_root = os.path.join(self.root, "train")
+        self.annotations = os.path.join(self.root, "Kvasir-SEG", "kavsir_bboxes.json")
         self.preprocess = preprocess
         if prompt_images is None:
             prompt_images = [
                 "cju0qkwl35piu0993l0dewei2.jpg",
-                "cjyzl833ndne80838pzuq6ila.jpg",
+                "cju0t4oil7vzk099370nun5h9.jpg",
                 "cju323ypb1fbb0988gx5rzudb.jpg",
-                "cju88itqbny720987hxizbj5y.jpg",
-                "cju87kbcen2av0987usezo8kn.jpg",
+                # "cju1cj3f0qi5n0993ut8f49rj.jpg",
+                # "cju772304yw5t0818vbw8kkjf.jpg",
             ]
         self.prompt_images = prompt_images
-        self.filenames = os.listdir(self.img_dir)
+        self.filenames = os.listdir(os.path.join(self.test_root, "images"))
 
     def __len__(self):
-        return len(os.listdir(self.img_dir))
+        return len(os.listdir(os.path.join(self.test_root, "images")))
 
     def _transform_image(self, image):
         image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
@@ -49,10 +48,12 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         return image
 
     def _get_image(self, filename: str):
-        return torchvision.io.read_image(os.path.join(self.img_dir, filename))
+        return torchvision.io.read_image(
+            os.path.join(self.test_root, "images", filename)
+        )
 
     def _get_gt(self, filename: str):
-        mask = Image.open(os.path.join(self.mask_dir, filename))
+        mask = Image.open(os.path.join(self.test_root, "masks", filename))
         mask = torchvision.transforms.PILToTensor()(mask)[0]
         mask[mask <= 245] = 0
         mask[mask >= 245] = 1
@@ -67,13 +68,13 @@ class KvarisTestDataset(LabelAnythingTestDataset):
 
     def extract_prompts(self):
         images = [
-            self._get_image(os.path.join(self.img_dir, filename))
+            self._get_image(os.path.join(self.train_root, "images", filename))
             for filename in self.prompt_images
         ]
         images = [self._transform_image(image) for image in images]
         sizes = torch.stack([torch.tensor(image.shape[1:]) for image in images])
         masks = [
-            self._get_gt(os.path.join(self.mask_dir, filename))
+            self._get_gt(os.path.join(self.train_root, "masks", filename))
             for filename in self.prompt_images
         ]
         masks = [self._pad_mask(mask) for mask in masks]
