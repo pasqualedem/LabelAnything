@@ -1,4 +1,4 @@
-from label_anything.data.utils import StrEnum
+from label_anything.data.utils import StrEnum, flags_merge
 import torch
 import label_anything.data.utils as utils
 from label_anything.data.utils import BatchKeys, PromptType
@@ -141,12 +141,14 @@ class Pascal5iDataset(PascalDataset):
         flag_points = torch.zeros(
             (len(image_names), len(cat_ids), 1), dtype=torch.uint8
         )
+        
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         data_dict = {
             image_key: images,
             BatchKeys.PROMPT_MASKS: masks,
             BatchKeys.FLAG_MASKS: flag_masks,
-            BatchKeys.FLAG_EXAMPLES: flag_masks,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.PROMPT_BBOXES: prompt_bboxes,
             BatchKeys.FLAG_BBOXES: flag_bboxes,
             BatchKeys.PROMPT_POINTS: prompt_points,

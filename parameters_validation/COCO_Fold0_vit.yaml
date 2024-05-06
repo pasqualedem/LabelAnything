@@ -74,7 +74,6 @@ dataloader:
     - - 16
       - 1
       - 1
-    prefetch_factor: 2
     prompt_choice_level:
     - episode
     prompt_types:
@@ -100,7 +99,6 @@ dataset:
     datasets:
       coco20i:
         all_example_categories: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
@@ -111,7 +109,6 @@ dataset:
       val_coco20i_N1K1:
         add_box_noise: false
         do_subsample: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
@@ -123,7 +120,6 @@ dataset:
       val_coco20i_N1K5:
         add_box_noise: false
         do_subsample: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
@@ -135,7 +131,6 @@ dataset:
       val_coco20i_N2K1:
         add_box_noise: false
         do_subsample: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
@@ -147,7 +142,6 @@ dataset:
       val_coco20i_N2K5:
         add_box_noise: false
         do_subsample: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
