@@ -96,9 +96,9 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_kvaris: 
-        img_dir: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/images
-        mask_dir: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/masks
-        annotations: /home/emanuele/LabelAnything/data/kvasir/Kvasir-SEG/annotations.json
+        img_dir: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/images
+        mask_dir: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/masks
+        annotations: /leonardo_scratch/large/userexternal/ecolonna/Kvasir-SEG/annotations.json
         # prompt_images: [
         #         # List of selected images from the training set
         #         # "frame0009_2.png",
