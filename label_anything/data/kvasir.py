@@ -63,7 +63,7 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         size = torch.tensor(image.shape[1:])
         gt = self._get_gt(self.filenames[idx])
         image = self._transform_image(image)
-        return {BatchKeys.IMAGES: image, BatchKeys.DIMS: size}, gt
+        return {BatchKeys.IMAGES: image.unsqueeze(0), BatchKeys.DIMS: size}, gt
 
     def extract_prompts(self):
         images = [
@@ -76,6 +76,7 @@ class KvarisTestDataset(LabelAnythingTestDataset):
             self._get_gt(os.path.join(self.mask_dir, filename))
             for filename in self.prompt_images
         ]
+        masks = [self._pad_mask(mask) for mask in masks]
         images = torch.stack(images)
         masks = torch.stack(masks)
 
@@ -98,3 +99,6 @@ class KvarisTestDataset(LabelAnythingTestDataset):
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
+
+    def _pad_mask(self, mask):
+        return F.pad(mask, (0, 1024 - mask.shape[1], 0, 1024 - mask.shape[0]))
