@@ -1,5 +1,10 @@
 from label_anything.data.test import LabelAnythingTestDataset
-from label_anything.data.utils import BatchKeys
+from label_anything.data.utils import (
+    BatchKeys,
+    PromptType,
+    flags_merge,
+    annotations_to_tensor,
+)
 import os
 from PIL import Image
 import torchvision
@@ -9,6 +14,7 @@ import torch
 from torchvision import transforms
 from pycocotools import mask as mask_utils
 from torch.nn.functional import one_hot
+
 import torch.nn.functional as F
 
 
@@ -26,7 +32,7 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         self.root = root
         self.test_root = os.path.join(self.root, "test")
         self.train_root = os.path.join(self.root, "train")
-        self.annotations = os.path.join(self.root, "Kvasir-SEG", "kavsir_bboxes.json")
+        self.annotations = self._read_bbox()
         self.preprocess = preprocess
         if prompt_images is None:
             prompt_images = [
@@ -41,6 +47,23 @@ class KvarisTestDataset(LabelAnythingTestDataset):
 
     def __len__(self):
         return len(os.listdir(os.path.join(self.test_root, "images")))
+
+    def _read_bbox(self):
+        with open(os.path.join(self.root, "kavsir_bboxes.json")) as f:
+            data = json.load(f)
+        return data
+
+    def _get_bbox(self, json_data, filename: str):
+        for k, v in json_data.items():
+            if k == filename.split(".")[0]:
+                return torch.tensor(
+                    [
+                        v.get("bbox")[0].get("xmin"),
+                        v.get("bbox")[0].get("ymin"),
+                        v.get("bbox")[0].get("xmax"),
+                        v.get("bbox")[0].get("ymax"),
+                    ]
+                )
 
     def _transform_image(self, image):
         image = Image.fromarray(image.permute(1, 2, 0).numpy().astype("uint8"))
@@ -71,6 +94,10 @@ class KvarisTestDataset(LabelAnythingTestDataset):
             self._get_image(os.path.join(self.train_root, "images", filename))
             for filename in self.prompt_images
         ]
+        bboxes = [
+            self._get_bbox(self.annotations, filename)
+            for filename in self.prompt_images
+        ]
         images = [self._transform_image(image) for image in images]
         sizes = torch.stack([torch.tensor(image.shape[1:]) for image in images])
         masks = [
@@ -78,6 +105,8 @@ class KvarisTestDataset(LabelAnythingTestDataset):
             for filename in self.prompt_images
         ]
         masks = [self._pad_mask(mask) for mask in masks]
+
+        bboxes = torch.stack(bboxes)
         images = torch.stack(images)
         masks = torch.stack(masks)
 

@@ -128,6 +128,7 @@ logger:
       entity: cilabuniba
       offline: true
       offline_directory: offline
+      run_id: jjst1jqm
 model:
   desc: null
   value:
