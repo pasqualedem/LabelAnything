@@ -9,7 +9,7 @@ _wandb:
     huggingface_version: 4.37.2
     is_jupyter_run: false
     is_kaggle_kernel: false
-    start_time: 1709751048.98676
+    start_time: 1709757737.027401
     t:
       1:
       - 1
@@ -30,6 +30,7 @@ _wandb:
       - 63
       - 71
       3:
+      - 2
       - 3
       - 4
       - 7
@@ -54,7 +55,7 @@ _wandb:
 dataloader:
   desc: null
   value:
-    num_workers: 32
+    num_workers: 0
     possible_batch_example_nums:
     - - 2
       - 1
@@ -81,7 +82,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 2
+    - - 1
       - 1
     val_prompt_types:
     - mask
@@ -89,74 +90,38 @@ dataset:
   desc: null
   value:
     common:
-      add_box_noise: true
       do_subsample: false
       image_size: 1024
       load_gts: false
-      max_points_annotations: 70
-      max_points_per_annotation: 10
+      load_embeddings: false
       remove_small_annotations: true
     datasets:
-      coco20i:
-        all_example_categories: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        name: coco
-        sample_function: uniform
-        split: train
+      val_pascal5i_N1K1: &val_pascal5i_N1K1
+        name: pascal
+        data_dir: &instance_dir data/pascal
+        split: "val"
         val_fold_idx: 0
-      val_coco20i_N1K1:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
         n_folds: 4
         n_shots: 1
         n_ways: 1
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N1K5:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
+        do_subsample: False
+      val_pascal5i_N1K5:
+        <<: *val_pascal5i_N1K1
         n_shots: 5
-        n_ways: 1
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N2K1:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        n_shots: 1
+      val_pascal5i_N2K1:
+        <<: *val_pascal5i_N1K1
         n_ways: 2
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N2K5:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
+      val_pascal5i_N2K5:
+        <<: *val_pascal5i_N1K1
+        n_ways: 2
         n_shots: 5
-        n_ways: 2
-        name: coco
-        split: val
-        val_fold_idx: 0
 experiment:
   desc: null
   value:
     continue_with_errors: false
     direction: null
     excluded_files: ''
-    group: Ablations
+    group: Pascal
     logger: null
     max_parallel_runs: 1
     n_trials: null
@@ -166,9 +131,9 @@ experiment:
     search: grid
     start_from_grid: 0
     start_from_run: 0
-    timestamp: '20240306_193652'
+    timestamp: '20240306_213939'
     tracking_dir: ''
-    uuid: 0baade85
+    uuid: 10d0a697
 logger:
   desc: null
   value:
@@ -176,14 +141,12 @@ logger:
     log_frequency: 10
     tmp_dir: tmp
     train_image_log_frequency: null
-    val_image_log_frequency: null
+    val_image_log_frequency: 100
     wandb:
       entity: cilabuniba
       offline: false
       offline_directory: offline
       run_id: n9623ye5
-      tags:
-      - Ablations
 model:
   desc: null
   value:
@@ -199,10 +162,10 @@ model:
     image_embed_dim: 768
     image_size: 1024
     name: lam_b
-    spatial_convs: 3
     checkpoint: checkpoints/sam_vit_b_01ec64.pth
     use_sam_checkpoint: True
     use_vit_sam_neck: False
+    spatial_convs: 3
 train_params:
   desc: null
   value:
@@ -215,7 +178,7 @@ train_params:
       components:
         focal:
           weight: 1.0
-    max_epochs: 50
+    max_epochs: 200
     num_points: 1
     optimizer: AdamW
     scheduler:
@@ -224,5 +187,6 @@ train_params:
       type: cosine
     seed: 42
     substitute: false
+    val_frequency: 4
     validation_reruns: 5
     watch_metric: miou

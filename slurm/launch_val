@@ -9,7 +9,7 @@
 #SBATCH --mem=0
 #SBATCH --gres=gpu:4
 #SBATCH --job-name=test_model
-#SBATCH --out=test.out
-#SBATCH --err=test.out
+#SBATCH --out=val.out
+#SBATCH --err=val.out
 
-srun ./slurm/launch_test_exe $@
+srun ./slurm/launch_val_exe $@

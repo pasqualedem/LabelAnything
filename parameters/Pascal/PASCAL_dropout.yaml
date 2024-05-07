@@ -1,0 +1,145 @@
+
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: LabelAnything # name of the logger platform experiment
+  group: pascal5i # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+
+  logger:
+    log_frequency: [10]
+    train_image_log_frequency: [100000]
+    val_image_log_frequency: [100]
+    experiment_save_delta: [null] # save experiment every n seconds
+    tmp_dir: [tmp]
+    wandb:
+      offline: [False]
+      entity: [cilabuniba]
+      tags: [[Dropout]]
+      offline_directory: [offline]
+
+  train_params:
+    loss:
+      class_weighting: [True]
+      components:
+        focal:
+          weight: [1.0]
+    seed: &seed [42] # random seed to set
+    num_points: [1] # number of points for class after the substitution
+    max_epochs: [25]
+    compile: [False]
+    initial_lr: [0.00005]
+    optimizer: [AdamW]
+    scheduler:
+    - type: constant_with_warmup
+      step_moment: batch
+      num_warmup_steps: 1000
+    substitute: [False]
+    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
+    validation_reruns: [5]
+    watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
+    check_nan: [1] # check for nan every n batches
+  model:
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    spatial_convs: [3]
+    class_attention: [False]
+    example_attention: [True]
+    example_class_attention: [False]
+    fusion_transformer: [TwoWayTransformer]
+    image_embed_dim: [768]
+    embed_dim: &embed_dim [512]
+    image_size: &image_size [1024]
+    dropout: [0.2, 0.5]
+    class_encoder:
+      name: [RandomMatrixEncoder]
+      bank_size: [100]
+      embed_dim: *embed_dim
+
+  dataset: # parameters depending on the class you defined for the dataset
+    datasets:
+      pascal5i:
+        name: [pascal]
+        data_dir: [data/pascal]
+        emb_dir: &emb_dir [data/pascal/pascal_embeddings_vit_b_sam/last_block_state]
+        split: ["train"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        sample_function: [uniform]
+        all_example_categories: [False]
+      val_pascal5i_N1K1: &val_pascal5i_N1K1
+        name: [pascal]
+        data_dir: &instance_dir [data/pascal]
+        emb_dir: *emb_dir
+        split: ["val"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        n_shots: [1]
+        n_ways: [1]
+        do_subsample: [False]
+      # val_pascal5i_N1K5:
+      #   <<: *val_pascal5i_N1K1
+      #   n_shots: [5]
+      val_pascal5i_N2K1:
+        <<: *val_pascal5i_N1K1
+        n_ways: [2]
+      # val_pascal5i_N2K5:
+      #   <<: *val_pascal5i_N1K1
+      #   n_ways: [2]
+      #   n_shots: [5]
+    common:
+      remove_small_annotations: [True]
+      do_subsample: [False]
+      load_embeddings: [True]
+      load_gts: [False]
+      image_size: *image_size
+  dataloader:
+    num_workers: [32]
+    prefetch_factor: [2]
+    possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
+    val_possible_batch_example_nums: [[[2, 1]]] 
+    prompt_types: [["mask"]]
+    prompt_choice_level: [["episode"]]
+    val_prompt_types: [["mask"]]
+
+other_grids:
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       pascal5i:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [1]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       pascal5i:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [2]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       pascal5i:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [3]

@@ -105,6 +105,8 @@ def preprocess_images_to_embeddings(
     model = model_registry[encoder_name](
         checkpoint=checkpoint, use_sam_checkpoint=use_sam_checkpoint
     )
+    if last_block_dir is not None:
+        os.makedirs(last_block_dir, exist_ok=True)
     print("Model loaded")
     model = model.to(device)
     print("Model moved to device")
