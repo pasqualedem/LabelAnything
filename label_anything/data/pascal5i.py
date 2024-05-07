@@ -101,14 +101,14 @@ class Pascal5iDataset(PascalDataset):
 
             images, image_key, ground_truths = self._get_images_or_embeddings(image_names)
 
-            masks, classes, img_sizes = self._get_prompts(image_names, cat_ids)
+            masks, classes, img_sizes = self._get_prompts(image_names, cat_ids, with_random_choice=False)
 
         masks, flag_masks = utils.annotations_to_tensor(
             self.prompts_processor, masks, img_sizes, PromptType.MASK
         )
 
         if ground_truths is None:
-            ground_truths = self.compute_ground_truths(image_names, img_sizes, cat_ids)
+            ground_truths = self.compute_ground_truths(image_names, img_sizes, cat_ids, with_random_choice=False)
 
         # stack ground truths
         dims = torch.tensor(img_sizes)

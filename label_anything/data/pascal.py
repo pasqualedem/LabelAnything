@@ -163,6 +163,21 @@ class PascalDataset(Dataset):
             seg_filename = os.path.join(self.masks_dir + "Aug", image_name + ".png")
             seg_aug = Image.open(seg_filename)
             seg_aug = np.array(seg_aug, dtype=np.int64)
+
+        if self.remove_small_annotations:
+            if seg is not None:
+                for cat_id in np.unique(seg):
+                    # count number of pixels of cat_id
+                    mask = seg == cat_id
+                    if np.sum(mask) < 2 * 32 * 32:
+                        seg[mask] = 0
+            if seg_aug is not None:
+                for cat_id in np.unique(seg_aug):
+                    # count number of pixels of cat_id
+                    mask = seg_aug == cat_id
+                    if np.sum(mask) < 2 * 32 * 32:
+                        seg_aug[mask] = 0
+
         if seg is None and seg_aug is not None:
             return seg_aug
         elif seg is not None and seg_aug is None:
@@ -281,7 +296,7 @@ class PascalDataset(Dataset):
             return torch.stack(images), BatchKeys.IMAGES, gts
 
     def _get_prompts(
-        self, image_names: list, cat_ids: list
+        self, image_names: list, cat_ids: list, with_random_choice: bool = True
     ) -> (list, list, list, list, list):
         """Get the annotations for the chosen examples.
 
@@ -298,7 +313,7 @@ class PascalDataset(Dataset):
         classes = [[] for _ in range(len(image_names))]
         # it wont work if we have more than one example per image
         segs = [
-            self.__get_seg(image_name, with_random_choice=True)
+            self.__get_seg(image_name, with_random_choice=with_random_choice)
             for image_name in image_names
         ]
         img_sizes = [image.shape[-2:] for image in segs]
@@ -327,7 +342,7 @@ class PascalDataset(Dataset):
         return masks, classes, img_sizes
 
     def compute_ground_truths(
-        self, image_names: list[str], img_sizes, cat_ids: list[int]
+        self, image_names: list[str], img_sizes, cat_ids: list[int], with_random_choice: bool = True
     ) -> list[torch.Tensor]:
         """Compute the ground truths for the given image ids and category ids.
 
@@ -344,7 +359,7 @@ class PascalDataset(Dataset):
         for i, image_name in enumerate(image_names):
             img_size = img_sizes[i]
             ground_truths.append(np.zeros(img_size, dtype=np.int64))
-            seg = self.__get_seg(image_name, with_random_choice=True)
+            seg = self.__get_seg(image_name, with_random_choice=with_random_choice)
 
             for cat_id in cat_ids:
                 if cat_id not in self.img2cat[image_name]:
