@@ -1,6 +1,8 @@
 import json
 import os
 import glob
+import random
+import shutil
 import numpy as np
 from datetime import datetime
 from PIL import Image
@@ -116,6 +118,41 @@ def generate_annotations(images, masks, annotations):
     return annotations
 
 
+def read_files_in_folder(folder_path):
+    file_list = []
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if not file.endswith("_mask.tif") and file.endswith(".tif"):
+                file_list.append(os.path.join(root, file))
+    return file_list
+
+
+def create_dict_image_mask(data_dir):
+    files = read_files_in_folder(data_dir)
+    image_mask = {}
+    for f in files:
+        mask_file = f[:-4] + "_mask.tif"
+        image_mask[f] = mask_file
+    return image_mask
+
+
+def split_train_test(data_dir, train_dir, test_dir, test_ratio):
+    image_mask_dict = create_dict_image_mask(data_dir)
+    items = list(image_mask_dict.items())
+    np.random.shuffle(items)
+    num_test = int(len(items) * test_ratio)
+    test_items = items[:num_test]
+    train_items = items[num_test:]
+    
+    for image_file, mask_file in test_items:
+        shutil.move(image_file, os.path.join(test_dir, os.path.basename(image_file)))
+        shutil.move(mask_file, os.path.join(test_dir, os.path.basename(mask_file)))
+
+    for image_file, mask_file in train_items:
+        shutil.move(image_file, os.path.join(train_dir, os.path.basename(image_file)))
+        shutil.move(mask_file, os.path.join(train_dir, os.path.basename(mask_file)))
+
+
 if __name__ == "__main__":
     if os.path.exists("data/raw/lgg-mri-segmentation"):
         print("Dataset already downloaded and extracted")
@@ -124,8 +161,13 @@ if __name__ == "__main__":
 
     path = "data/raw/lgg-mri-segmentation/kaggle_3m/"
     images, masks = generate_data(path)
-    data_dict = generate_annotations(images, masks, data_dict)
-    with open("data/annotations/brain_mri.json", "w") as f:
-        json.dump(data_dict, f)
+    # data_dict = generate_annotations(images, masks, data_dict)
+    # with open("data/annotations/brain_mri.json", "w") as f:
+    #     json.dump(data_dict, f)
 
+    # Usa la funzione per suddividere la tua struttura di cartelle    
+    data_dir = "/home/emanuele/LabelAnything/data/raw/lgg-mri-segmentation/kaggle_3m"
+    train_dir = "/home/emanuele/LabelAnything/data/brain/train"
+    test_dir = "/home/emanuele/LabelAnything/data/brain/test"
+    split_train_test(data_dir, train_dir, test_dir, 0.2)
     print("Done!")
