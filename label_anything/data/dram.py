@@ -60,6 +60,21 @@ class DramTestDataset(LabelAnythingTestDataset):
         11: "sheep",
     }
 
+    HIERARCHY_ID2ID = {
+        0: 0,  # BACKGROUND
+        1: 1,  # BIRD -> ANIMAL
+        2: 2,  # BOAT
+        3: 3,  # BOTTLE
+        4: 1,  # CAT -> ANIMAL
+        5: 4,  # CHAIR
+        6: 1,  # COW -> ANIMAL
+        7: 1,  # DOG -> ANIMAL
+        8: 1,  # HORSE -> ANIMAL
+        9: 5,  # PERSON
+        10: 6,  # POTTEDPLANT
+        11: 1,  # SHEEP -> ANIMAL
+    }
+
     def __init__(
         self,
         image_dir: str,
@@ -71,6 +86,7 @@ class DramTestDataset(LabelAnythingTestDataset):
         prompt_mask_size: int = 256,
         preprocess: Union[Compose, ToTensor] = ToTensor(),
         custom_preprocess=True,
+        hierachy: bool = False,
     ):
         super().__init__()
         self.image_dir = image_dir
@@ -87,8 +103,11 @@ class DramTestDataset(LabelAnythingTestDataset):
         self.example_split = example_split
         self.example_data = _get_data(self.example_image_dir, self.example_split)
 
+        self.hierachy = hierachy
         self.example_img2cat, self.example_cat2img = self._get_support_dict()
-        self.prompt_processor = PromptsProcessor(masks_side_length=prompt_mask_size, custom_preprocess=custom_preprocess)
+        self.prompt_processor = PromptsProcessor(
+            masks_side_length=prompt_mask_size, custom_preprocess=custom_preprocess
+        )
 
     def _get_support_dict(self):
         img2cat = {}
@@ -117,6 +136,8 @@ class DramTestDataset(LabelAnythingTestDataset):
         copy_gt = torch.zeros_like(gt)
         for k, v in DramTestDataset.ID2TRAIN_ID.items():
             copy_gt[gt == k] = v
+            if self.hierachy:
+                copy_gt[copy_gt == v] = DramTestDataset.HIERARCHY_ID2ID[v]
         return copy_gt.int().squeeze()
 
     def __getitem__(self, item):
