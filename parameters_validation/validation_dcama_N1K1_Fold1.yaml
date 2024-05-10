@@ -14,20 +14,18 @@ dataloader:
   - mask
 dataset:
   common:
-    add_box_noise: true
-    do_subsample: true
+    add_box_noise: false
+    do_subsample: false
     max_points_annotations: 50
     max_points_per_annotation: 10
     image_size: &image_size 384
     custom_preprocess: false
+    remove_small_annotations: true
     preprocess:
       mean: [0.485, 0.456, 0.406]
       std: [0.229, 0.224, 0.225]
   datasets:
     val_coco20i_N1K1:
-      remove_small_annotations: true
-      add_box_noise: false
-      do_subsample: false
       img_dir: data/coco/train_val_2017
       instances_path: data/coco/annotations/instances_val2014.json
       n_folds: 4
@@ -35,7 +33,16 @@ dataset:
       n_ways: 1
       name: coco
       split: val
-      val_fold_idx: 0
+      val_fold_idx: 1
+    val_coco20i_N2K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 2
+        name: coco
+        split: val
+        val_fold_idx: 1
 experiment:
   continue_with_errors: false
   direction: null
@@ -68,7 +75,7 @@ model:
   name: dcama
   backbone: swin
   backbone_checkpoint: checkpoints/swin_base_patch4_window12_384.pth
-  model_checkpoint: checkpoints/swin_fold0.pt
+  model_checkpoint: checkpoints/swin_fold1.pt
   image_size: *image_size
 
 train_params:
