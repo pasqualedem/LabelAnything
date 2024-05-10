@@ -35,7 +35,7 @@ from label_anything.demo.utils import (
 )
 from label_anything.experiment.substitution import Substitutor
 from label_anything.models.build_encoder import build_vit_b
-from label_anything.utils.utils import ResultDict, load_yaml
+from label_anything.utils.utils import ResultDict, load_yaml, torch_dict_load
 from label_anything.models import model_registry
 
 lt.monkey_patch()
@@ -111,7 +111,7 @@ def get_data(_accelerator):
 
 @st.cache_resource
 def load_model(_accelerator: Accelerator, run_id):
-    folder = "latest"
+    folder = "best"
     model_file, config_file = load_from_wandb(run_id, folder)
     if config_file is not None:
         config = load_yaml(config_file)
@@ -125,7 +125,7 @@ def load_model(_accelerator: Accelerator, run_id):
         )
     model = model_registry[name](**model_params)
     model = WrapperModule(model, None)
-    model_state_dict = torch.load(model_file)
+    model_state_dict = torch_dict_load(model_file)
     unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
     model = _accelerator.prepare(model)
     if unmatched_keys.missing_keys:

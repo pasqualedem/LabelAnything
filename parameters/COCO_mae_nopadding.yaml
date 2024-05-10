@@ -64,7 +64,7 @@ parameters:
       coco20i:
         name: [coco]
         instances_path: [data/coco/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [data/coco/vit_base_path16_224_in21k_embeddings]
+        emb_dir: &emb_dir [data/coco/vit_mae_base_nopadding]
         img_dir: &img_dir [data/coco/train_val_2017]
         split: ["train"]
         val_fold_idx: [0]

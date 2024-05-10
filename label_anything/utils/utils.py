@@ -10,6 +10,8 @@ import collections.abc
 from typing import Mapping
 import yaml
 from label_anything.data.utils import StrEnum
+from safetensors import safe_open
+from safetensors.torch import save_file
 
 # from label_anything.models.lam import Lam 
 
@@ -84,6 +86,26 @@ def write_yaml(data: dict, file_path: str = None, file=None):
         print(f"File '{file_path}' not found.")
     except yaml.YAMLError as e:
         print(f"Error parsing YAML file: {e}")
+        
+
+def torch_dict_load(file_path):
+    if file_path.endswith(".pth") or file_path.endswith(".pt") or file_path.endswith(".bin"):
+        return torch.load(file_path)
+    if file_path.endswith(".safetensors"):
+        with safe_open(file_path, framework="pt") as f:
+            d = {}
+            for k in f.keys():
+                d[k] = f.get_tensor(k)
+        return d
+    raise ValueError("File extension not supported")
+        
+def torch_dict_save(data, file_path):
+    if file_path.endswith(".pth") or file_path.endswith(".pt") or file_path.endswith(".bin"):
+        torch.save(data, file_path)
+    elif file_path.endswith(".safetensors"):
+        save_file(data, file_path)
+    else:
+        raise ValueError("File extension not supported")
 
 
 # def unwrap_model_from_parallel(model, return_was_wrapped=False):

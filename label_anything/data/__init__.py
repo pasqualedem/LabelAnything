@@ -10,7 +10,7 @@ from label_anything.data.dram import DramTestDataset, collate_fn as dram_collate
 from label_anything.data.transforms import CustomNormalize, CustomResize
 from label_anything.data.utils import get_mean_std
 from label_anything.data.weedmap import WeedMapTestDataset
-from label_anything.data.brain_mri import BrainMriTestDataset
+from label_anything.data.brain_mri import BrainMriTestDataset, BrainTestDataset
 
 
 TEST_DATASETS = {
@@ -18,7 +18,7 @@ TEST_DATASETS = {
     "test_lvis": CocoLVISTestDataset,
     "test_weedmap": WeedMapTestDataset,
     "test_dram": DramTestDataset,
-    "test_brain": BrainMriTestDataset,
+    "test_brain": BrainTestDataset,
 }
 
 

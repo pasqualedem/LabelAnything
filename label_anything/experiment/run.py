@@ -33,6 +33,8 @@ from label_anything.utils.utils import (
     ResultDict,
     RunningAverage,
     get_timestamp,
+    torch_dict_load,
+    torch_dict_save,
     write_yaml,
 )
 
@@ -95,7 +97,7 @@ class Run:
         pe_params = deepcopy(self.prompt_encoder_params)
         pe_params["params"]["prompt_encoder"] = self.model.prompt_encoder
         contrastive_prompt_encoder = ContrastivePromptEncoder(**pe_params["params"])
-        state_dict = torch.load(self.prompt_encoder_params["checkpoint"])
+        state_dict = torch_dict_load(self.prompt_encoder_params["checkpoint"])
         contrastive_prompt_encoder.load_state_dict(state_dict)
         self.model.prompt_encoder.load_state_dict(
             contrastive_prompt_encoder.prompt_encoder.state_dict()
@@ -200,12 +202,13 @@ class Run:
                     model = self.model.module.model
                 else:
                     model = self.model.model
+                model_filename = "pytorch_model.bin" if "pytorch_model.bin" in os.listdir(self.plat_logger.accelerator_state_dir) else "model.safetensors"
                 shutil.copyfile(
-                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
-                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin.bak",
+                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
+                    self.plat_logger.accelerator_state_dir + f"/{model_filename}.bak",
                 )
-                state_dict = torch.load(
-                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin"
+                state_dict = torch_dict_load(
+                    self.plat_logger.accelerator_state_dir + f"/{model_filename}"
                 )
                 state_dict = {
                     **{
@@ -214,9 +217,9 @@ class Run:
                     },
                     **state_dict,
                 }
-                torch.save(
+                torch_dict_save(
                     state_dict,
-                    self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
                 )
                 overwritten = True
 
@@ -231,12 +234,12 @@ class Run:
                 ):
                     shutil.copyfile(
                         self.plat_logger.accelerator_state_dir
-                        + "/pytorch_model.bin.bak",
-                        self.plat_logger.accelerator_state_dir + "/pytorch_model.bin",
+                        + f"/{model_filename}.bak",
+                        self.plat_logger.accelerator_state_dir + f"/{model_filename}",
                     )
                     os.remove(
                         self.plat_logger.accelerator_state_dir
-                        + "/pytorch_model.bin.bak"
+                        + f"/{model_filename}.bak"
                     )
 
     def launch(self):

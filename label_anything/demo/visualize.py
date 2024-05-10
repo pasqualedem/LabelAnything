@@ -261,7 +261,7 @@ def load_from_wandb(run_id, wandb_folder):
         # Extract name from path
         file_name = file.name.split("/")[-1]
         if "model" in file.name and wandb_folder in file.name:
-            if file_name == "pytorch_model.bin":
+            if file_name == "pytorch_model.bin" or file_name == "model.safetensors":
                 model_file = file.download(replace=True, root="streamlit")
         if file_name == "config.yaml":
             config_file = file.download(replace=True, root="streamlit")
