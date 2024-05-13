@@ -113,17 +113,16 @@ class DramTestDataset(LabelAnythingTestDataset):
         self.prompt_images = prompt_images
 
     def get_id2class(self):
-        return (
-            {
+        if not self.hierachy:
+            return {
                 k: [DramTestDataset.TRAIN_ID2NAME[x] for x in v]
                 for (k, v) in self.example_img2cat.items()
             }
-            if not self.hierachy
-            else {
-                k: [DramTestDataset.HIERARCHY_ID2ID[x] for x in v]
-                for (k, v) in self.example_img2cat.items()
-            }
-        )
+        rev_map = {v: k for k, v in DramTestDataset.HIERARCHY_ID2ID.items()}
+        return {
+            k: [DramTestDataset.TRAIN_ID2NAME[rev_map[x]] for x in v]
+            for (k, v) in self.example_img2cat.items()
+        }
 
     def _get_support_dict(self):
         img2cat = {}
