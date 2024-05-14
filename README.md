@@ -89,6 +89,8 @@ For ViT-MAE
 
 ```bash
 python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 32 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_1024/ --model_name facebook/vit-mae-base --image_resolution 1024 --mean_std default --huggingface
+
+python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_320 --model_name facebook/vit-mae-base --image_resolution 320 --mean_std default --huggingface
 ```
 
 For PASCAL
