@@ -749,24 +749,23 @@ class Run:
                 self.test_dataset(dataset_name=name, dataloader=dataloader)
 
     def merge_dicts(self, prompts, imgs):
+        merge_prompts = deepcopy(prompts)
         out = {}
-        for k in set(list(imgs.keys()) + list(prompts.keys())):
+        for k in set(list(imgs.keys()) + list(merge_prompts.keys())):
             if k in imgs and prompts:
-                dim=0
+                dim = 0
                 if k == BatchKeys.IMAGES:
-                    prompts[k] = prompts[k].unsqueeze(dim=0)
-                    dim=1
-                out[k] = torch.cat([imgs[k].cpu(), prompts[k].cpu()], dim=dim).to(
+                    merge_prompts[k] = merge_prompts[k].unsqueeze(dim=0)
+                    dim = 1
+                out[k] = torch.cat([imgs[k].cpu(), merge_prompts[k].cpu()], dim=dim).to(
                     self.accelerator.device
                 )
+                if k == BatchKeys.DIMS:
+                    out[k] = out[k].unsqueeze(dim=0).to(self.accelerator.device)
             elif k in imgs:
                 out[k] = imgs[k].to(self.accelerator.device)
             else:
-                out[k] = prompts[k].to(self.accelerator.device)
-        import lovely_tensors as lt
-        lt.monkey_patch()
-        print(out)
-        input()
+                out[k] = merge_prompts[k].unsqueeze(dim=0).to(self.accelerator.device)
         return out
 
     def test_dataset(self, dataset_name, dataloader):
@@ -812,8 +811,6 @@ class Run:
             desc=f"Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-        print(self.model.model)
-        input()
         self.plat_logger.create_image_sequence(dataset_name)
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
@@ -821,7 +818,9 @@ class Run:
                 outputs = (
                     self.model.predict(image_dict)
                     if generate_class_embeddings
-                    else self.model(self.merge_dicts(prompts=examples, imgs=image_dict))
+                    else self.model(
+                        self.merge_dicts(prompts=examples, imgs=image_dict)
+                    )[ResultDict.LOGITS]
                 )
                 # self.plat_logger.log_test_prediction(
                 #     batch_idx=batch_idx,
@@ -833,6 +832,9 @@ class Run:
                 #     dataset_name=dataset_name,
                 # )
                 outputs = torch.argmax(outputs, dim=1)
+                if not generate_class_embeddings:
+                    dims = image_dict[BatchKeys.DIMS][0].tolist()
+                    outputs = outputs[:, :dims[0], :dims[1]]
                 metrics.update(outputs, gt)
             metrics_values = metrics.compute()
 
