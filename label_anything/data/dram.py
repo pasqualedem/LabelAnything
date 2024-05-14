@@ -288,7 +288,7 @@ class DramTestDataset(LabelAnythingTestDataset):
 
     @property
     def num_classes(self):
-        return len(self.TRAIN_ID2NAME.keys())
+        return len(self.TRAIN_ID2NAME.keys()) if not self.hierachy else len(set(list(DramTestDataset.HIERARCHY_ID2ID.values())))
 
 
 if __name__ == "__main__":
