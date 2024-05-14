@@ -101,6 +101,7 @@ dataset:
         gt_dir: ./data/raw/DRAM_processed/labels
         example_image_dir: ./data/raw/DRAM_processed/test
         example_gt_dir: ./data/raw/DRAM_processed/labels
+        split: dram
         hierachy: True
         prompt_images: [
           realism/constant-troyon/on-the-way-to-the-market-1859,
