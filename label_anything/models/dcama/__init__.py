@@ -14,6 +14,7 @@ def build_dcama(
     backbone_checkpoint: str = "checkpoints/backbone.pth",
     model_checkpoint: str = "checkpoints/dcama.pth",
     image_size: int = 384,
+    custom_preprocess: bool = False,
 ):
     model = DCAMAMultiClass(
         backbone, backbone_checkpoint, use_original_imgsize=False, image_size=image_size
