@@ -101,6 +101,11 @@ def build_vit_b_imagenet_i21k(project_last_hidden=False):
     return vit_b_imagenet_i21k
 
 
+def build_vit_dino_b8(project_last_hidden=False):
+    vit_dino_b8 = ViTModelWrapper.from_pretrained("facebook/dino-vitb8")
+    return vit_dino_b8
+
+
 def build_encoder(name, **kwargs):
     if name in ENCODERS:
         return ENCODERS[name](**kwargs)
