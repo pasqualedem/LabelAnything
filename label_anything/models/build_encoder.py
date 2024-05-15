@@ -117,4 +117,5 @@ ENCODERS = {
     "vit_l": build_vit_l,
     "vit_b": build_vit_b,
     "vit_b_mae": build_vit_b_mae,
+    "vit_dino_b8": build_vit_dino_b8,
 }
