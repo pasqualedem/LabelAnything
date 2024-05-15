@@ -120,13 +120,13 @@ logger:
   desc: null
   value:
     experiment_save_delta: null
-    log_frequency: 10
+    log_frequency: 1
     tmp_dir: tmp
-    train_image_log_frequency: 100000
-    val_image_log_frequency: 100
+    train_image_log_frequency: 10000
+    val_image_log_frequency: 10
     wandb:
       entity: cilabuniba
-      offline: true
+      offline: false
       offline_directory: offline
       run_id: jjst1jqm
 model:
