@@ -4,7 +4,6 @@ import os
 import contextlib
 from copy import deepcopy
 
-import comet_ml
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger

@@ -11,6 +11,8 @@ dataloader:
   - - 1
     - 1
   val_prompt_types:
+  - bbox
+  - point
   - mask
 dataset:
   common:
@@ -24,31 +26,27 @@ dataset:
       mean: [0.485, 0.456, 0.406]
       std: [0.229, 0.224, 0.225]
   datasets:
-    coco20i:
-      img_dir: data/images/train2017
-      instances_path: data/annotations/instances_train2014.json
-      n_folds: 4
-      name: coco
-      remove_small_annotations: true
-      split: train
-      val_fold_idx: 0
-    val_coco20i:
-      remove_small_annotations: true
-      add_box_noise: false
-      do_subsample: false
-      img_dir: data/images/train2017
-      instances_path: data/annotations/instances_val2014.json
-      n_folds: 4
-      n_shots: 1
-      n_ways: 1
-      name: coco
-      split: val
-      val_fold_idx: 0
+    test_dram:
+      image_dir: ./data/raw/DRAM_processed/test
+      gt_dir: ./data/raw/DRAM_processed/labels
+      example_image_dir: ./data/raw/DRAM_processed/test
+      example_gt_dir: ./data/raw/DRAM_processed/labels
+      custom_preprocess: False
+      split: dram
+      hierachy: True
+      prompt_images: [
+        realism/constant-troyon/on-the-way-to-the-market-1859,
+        realism/elin-danielson-gambogi/elin-danielson-gambogi-sailing-c1890-1,
+        impressionism/claude-monet/1863_212386,
+        post_impressionism/vincent-van-gogh/1888_206452, 
+        realism/giovanni-boldini/the-actress-rejane-and-her-dog,
+        realism/gustave-courbet/191719
+      ]
 experiment:
   continue_with_errors: false
   direction: null
   excluded_files: ''
-  group: Competitors
+  group: Test
   logger: null
   max_parallel_runs: 1
   n_trials: null
@@ -78,7 +76,6 @@ model:
   backbone_checkpoint: checkpoints/swin_base_patch4_window12_384.pth
   model_checkpoint: checkpoints/swin_fold0.pt
   image_size: *image_size
-
 train_params:
   accumulate_substitution: false
   check_nan: 1
@@ -103,3 +100,4 @@ train_params:
   substitute: false
   validation_reruns: 5
   watch_metric: loss
+generate_class_embeddings: False

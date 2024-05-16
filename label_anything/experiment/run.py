@@ -135,9 +135,13 @@ class Run:
         model_registry_params.pop("name")
 
         # get custom preprocess
-        custom_preprocess = params.get("dataset", {}).get("common", {}).get("custom_preprocess", True)
-        self.model = model_registry[model_name](custom_preprocess=custom_preprocess, **model_registry_params)
-        
+        custom_preprocess = (
+            params.get("dataset", {}).get("common", {}).get("custom_preprocess", True)
+        )
+        self.model = model_registry[model_name](
+            custom_preprocess=custom_preprocess, **model_registry_params
+        )
+
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
@@ -202,7 +206,12 @@ class Run:
                     model = self.model.module.model
                 else:
                     model = self.model.model
-                model_filename = "pytorch_model.bin" if "pytorch_model.bin" in os.listdir(self.plat_logger.accelerator_state_dir) else "model.safetensors"
+                model_filename = (
+                    "pytorch_model.bin"
+                    if "pytorch_model.bin"
+                    in os.listdir(self.plat_logger.accelerator_state_dir)
+                    else "model.safetensors"
+                )
                 shutil.copyfile(
                     self.plat_logger.accelerator_state_dir + f"/{model_filename}",
                     self.plat_logger.accelerator_state_dir + f"/{model_filename}.bak",
@@ -257,7 +266,10 @@ class Run:
                 self.train_epoch(epoch)
 
                 metrics = None
-                if self.val_loaders and epoch % self.train_params.get("val_frequency", 1) == 0:
+                if (
+                    self.val_loaders
+                    and epoch % self.train_params.get("val_frequency", 1) == 0
+                ):
                     with self.plat_logger.validate():
                         logger.info(f"Running Model Validation")
                         metrics = self.validate(epoch)
@@ -439,7 +451,9 @@ class Run:
             long_side_length=self.dataset_params.get("common", {}).get(
                 "image_size", SIZE
             ),
-            custom_preprocess=self.dataset_params.get("common", {}).get("custom_preprocess", True)
+            custom_preprocess=self.dataset_params.get("common", {}).get(
+                "custom_preprocess", True
+            ),
         )
         # allocate_memory(model, accelerator, optimizer, criterion, dataloader)
 
@@ -734,6 +748,26 @@ class Run:
                 dataloader = self.accelerator.prepare(dataloader)
                 self.test_dataset(dataset_name=name, dataloader=dataloader)
 
+    def merge_dicts(self, prompts, imgs):
+        merge_prompts = deepcopy(prompts)
+        out = {}
+        for k in set(list(imgs.keys()) + list(merge_prompts.keys())):
+            if k in imgs and prompts:
+                dim = 0
+                if k == BatchKeys.IMAGES:
+                    merge_prompts[k] = merge_prompts[k].unsqueeze(dim=0)
+                    dim = 1
+                out[k] = torch.cat([imgs[k].cpu(), merge_prompts[k].cpu()], dim=dim).to(
+                    self.accelerator.device
+                )
+                if k == BatchKeys.DIMS:
+                    out[k] = out[k].unsqueeze(dim=0).to(self.accelerator.device)
+            elif k in imgs:
+                out[k] = imgs[k].to(self.accelerator.device)
+            else:
+                out[k] = merge_prompts[k].unsqueeze(dim=0).to(self.accelerator.device)
+        return out
+
     def test_dataset(self, dataset_name, dataloader):
         self.model.eval()
         metrics = MetricCollection(
@@ -748,18 +782,27 @@ class Run:
                 self.accelerator.prepare(
                     DistributedBinaryJaccardIndex(ignore_index=-100)
                 ),
-                self.accelerator.prepare(F1Score(task="multiclass", num_classes=dataloader.dataset.num_classes, average="macro")),
+                self.accelerator.prepare(
+                    F1Score(
+                        task="multiclass",
+                        num_classes=dataloader.dataset.num_classes,
+                        average="macro",
+                    )
+                ),
             ]
         )
-        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            self.model.generate_class_embeddings = (
-                self.model.module.generate_class_embeddings
-            )
-            self.model.predict = self.model.module.predict
-
         examples = dataloader.dataset.extract_prompts()
-        self.model = set_class_embeddings(self.accelerator, self.model, examples)
-        self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
+        generate_class_embeddings = self.params.get("generate_class_embeddings", True)
+        if generate_class_embeddings:  # no dcama
+            if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                self.model.generate_class_embeddings = (
+                    self.model.module.generate_class_embeddings
+                )
+                self.model.predict = self.model.module.predict
+            self.model = set_class_embeddings(self.accelerator, self.model, examples)
+        else:
+            self.model = self.model.model
+        # self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
 
         bar = tqdm(
             enumerate(dataloader),
@@ -772,17 +815,26 @@ class Run:
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
-                outputs = self.model.predict(image_dict)
-                self.plat_logger.log_test_prediction(
-                    batch_idx=batch_idx,
-                    input_dict=image_dict,
-                    gt=gt,
-                    pred=outputs,
-                    input_shape=self.input_image_size,
-                    id2classes=dataloader.dataset.id2class,
-                    dataset_name=dataset_name,
+                outputs = (
+                    self.model.predict(image_dict)
+                    if generate_class_embeddings
+                    else self.model(
+                        self.merge_dicts(prompts=examples, imgs=image_dict)
+                    )[ResultDict.LOGITS]
                 )
+                # self.plat_logger.log_test_prediction(
+                #     batch_idx=batch_idx,
+                #     input_dict=image_dict,
+                #     gt=gt,
+                #     pred=outputs,
+                #     input_shape=self.input_image_size,
+                #     id2classes=dataloader.dataset.id2class,
+                #     dataset_name=dataset_name,
+                # )
                 outputs = torch.argmax(outputs, dim=1)
+                if not generate_class_embeddings:
+                    dims = image_dict[BatchKeys.DIMS][0].tolist()
+                    outputs = outputs[:, :dims[0], :dims[1]]
                 metrics.update(outputs, gt)
             metrics_values = metrics.compute()
 

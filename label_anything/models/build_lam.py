@@ -20,6 +20,7 @@ from . import (
     PromptImageEncoder,
     Lam,
     BinaryLam,
+    IdentityTransformer,
     OneWayTransformer,
     TwoWayTransformer,
     RandomMatrixEncoder,
@@ -31,6 +32,7 @@ from .build_encoder import (
     build_vit_l,
     build_vit_b_mae,
     build_vit_b_imagenet_i21k,
+    build_vit_dino_b8,
 )
 
 
@@ -75,6 +77,11 @@ def build_lam_no_vit(**kwargs):
         **kwargs,
     )
 
+def build_lam_dino_b8(**kwargs):
+    return _build_lam(
+        build_vit_dino_b8,
+        **kwargs,
+    )
 
 def _build_lam(
     build_vit,
@@ -95,7 +102,7 @@ def _build_lam(
     decoder_attention_downsample_rate: int = 2,
     classification_layer_downsample_rate: int = 8,
     use_support_features_in_prompt_encoder: bool = True,
-    fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer"
+    fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer" or "IdentityTransformer"
     few_type="Prototype",  # "Prototype" or "Affinity" or "PrototypeAffinity"
     class_fusion="sum",
     transformer_keys_are_images=True,

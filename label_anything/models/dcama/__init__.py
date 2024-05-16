@@ -14,6 +14,7 @@ def build_dcama(
     backbone_checkpoint: str = "checkpoints/backbone.pth",
     model_checkpoint: str = "checkpoints/dcama.pth",
     image_size: int = 384,
+    custom_preprocess: bool = False,
 ):
     model = DCAMAMultiClass(
         backbone, backbone_checkpoint, use_original_imgsize=False, image_size=image_size
@@ -47,18 +48,18 @@ class DCAMAMultiClass(DCAMA):
         masks = rearrange(masks, "b n c h w -> (b n c) h w")
 
         # Remove padding from masks
-        pad_dims = [get_preprocess_shape(h, w, mask_size) for h, w in repeated_dims]
-        masks = [mask[:h, :w] for mask, (h, w) in zip(masks, pad_dims)]
-        masks = torch.cat(
-            [
-                F.interpolate(
-                    torch.unsqueeze(mask, 0).unsqueeze(0),
-                    size=(self.image_size, self.image_size),
-                    mode="nearest",
-                )[0]
-                for mask in masks
-            ]
-        )
+        # pad_dims = [get_preprocess_shape(h, w, mask_size) for h, w in repeated_dims]
+        # masks = [mask[:h, :w] for mask, (h, w) in zip(masks, pad_dims)]
+        # masks = torch.cat(
+        #     [
+        #         F.interpolate(
+        #             torch.unsqueeze(mask, 0).unsqueeze(0),
+        #             size=(self.image_size, self.image_size),
+        #             mode="nearest",
+        #         )[0]
+        #         for mask in masks
+        #     ]
+        # )
         return rearrange(masks, "(b n c) h w -> b n c h w", b=B, n=N)
 
     def forward(self, x):

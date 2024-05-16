@@ -3,13 +3,13 @@ wandb_version: 1
 _wandb:
   desc: null
   value:
-    python_version: 3.11.0
-    cli_version: 0.16.3
+    python_version: 3.11.6
+    cli_version: 0.16.4
     framework: huggingface
-    huggingface_version: 4.37.2
+    huggingface_version: 4.38.2
     is_jupyter_run: false
     is_kaggle_kernel: false
-    start_time: 1709751048.98676
+    start_time: 1712851736.0
     t:
       1:
       - 1
@@ -36,11 +36,10 @@ _wandb:
       - 15
       - 18
       - 23
-      - 37
       - 42
-      4: 3.11.0
-      5: 0.16.3
-      6: 4.37.2
+      4: 3.11.6
+      5: 0.16.4
+      6: 4.38.2
       8:
       - 5
       13: linux-x86_64
@@ -74,6 +73,7 @@ dataloader:
     - - 16
       - 1
       - 1
+    prefetch_factor: 2
     prompt_choice_level:
     - episode
     prompt_types:
@@ -95,68 +95,29 @@ dataset:
       load_gts: false
       max_points_annotations: 70
       max_points_per_annotation: 10
-      remove_small_annotations: true
     datasets:
-      coco20i:
-        all_example_categories: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        name: coco
-        sample_function: uniform
-        split: train
-        val_fold_idx: 0
-      val_coco20i_N1K1:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        n_shots: 1
-        n_ways: 1
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N1K5:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        n_shots: 5
-        n_ways: 1
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N2K1:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        n_shots: 1
-        n_ways: 2
-        name: coco
-        split: val
-        val_fold_idx: 0
-      val_coco20i_N2K5:
-        add_box_noise: false
-        do_subsample: false
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        n_shots: 5
-        n_ways: 2
-        name: coco
-        split: val
-        val_fold_idx: 0
+      test_dram:
+        image_dir: ./data/raw/DRAM_processed/test
+        gt_dir: ./data/raw/DRAM_processed/labels
+        example_image_dir: ./data/raw/DRAM_processed/test
+        example_gt_dir: ./data/raw/DRAM_processed/labels
+        split: dram
+        hierachy: True
+        prompt_images: [
+          realism/constant-troyon/on-the-way-to-the-market-1859,
+          realism/elin-danielson-gambogi/elin-danielson-gambogi-sailing-c1890-1,
+          impressionism/claude-monet/1863_212386,
+          post_impressionism/vincent-van-gogh/1888_206452, 
+          realism/giovanni-boldini/the-actress-rejane-and-her-dog,
+          realism/gustave-courbet/191719
+        ]
 experiment:
   desc: null
   value:
     continue_with_errors: false
     direction: null
     excluded_files: ''
-    group: Ablations
+    group: DomainTests
     logger: null
     max_parallel_runs: 1
     n_trials: null
@@ -166,24 +127,22 @@ experiment:
     search: grid
     start_from_grid: 0
     start_from_run: 0
-    timestamp: '20240306_193652'
+    timestamp: '20240411_175659'
     tracking_dir: ''
-    uuid: 0baade85
+    uuid: 5edd1951
 logger:
   desc: null
   value:
     experiment_save_delta: null
     log_frequency: 10
     tmp_dir: tmp
-    train_image_log_frequency: null
-    val_image_log_frequency: null
+    train_image_log_frequency: 100000
+    val_image_log_frequency: 100
     wandb:
       entity: cilabuniba
       offline: false
       offline_directory: offline
-      run_id: n9623ye5
-      tags:
-      - Ablations
+      run_id: jjst1jqm
 model:
   desc: null
   value:
@@ -224,5 +183,4 @@ train_params:
       type: cosine
     seed: 42
     substitute: false
-    validation_reruns: 5
     watch_metric: miou

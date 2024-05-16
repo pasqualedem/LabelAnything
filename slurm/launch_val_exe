@@ -1,0 +1,5 @@
+#!/bin/bash
+
+source .venv/bin/activate
+export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
+python main.py validate $@

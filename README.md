@@ -82,7 +82,21 @@ wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
 ```bash
 mkdir -p data/coco/vit_sam_embeddings/last_hidden_state
 mkdir data/coco/vit_sam_embeddings/last_block_state
-python main.py preprocess --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/coco/train_val_2017 --batch_size 16 --num_workers=8 --outfolder data/coco/vit_sam_embeddings/last_hidden_state --last_block_dir data/coco/vit_sam_embeddings/last_block_state
+python main.py generate_embeddings --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/coco/train_val_2017 --batch_size 16 --num_workers=8 --outfolder data/coco/vit_sam_embeddings/last_hidden_state --last_block_dir data/coco/vit_sam_embeddings/last_block_state --custom_preprocess
+```
+
+For ViT-MAE
+
+```bash
+python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 32 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_1024/ --model_name facebook/vit-mae-base --image_resolution 1024 --mean_std default --huggingface
+```
+
+For PASCAL
+
+```bash
+mkdir -p data/pascal/vit_sam_embeddings/last_hidden_state
+mkdir data/pascal/vit_sam_embeddings/last_block_state
+python main.py generate_embeddings --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/pascal/JPEGImages --batch_size 16 --num_workers=8 --outfolder data/pascal/pascal_embeddings_vit_b_sam/last_hidden_state --last_block_dir data/pascal/pascal_embeddings_vit_b_sam/last_block_state --custom_preprocess
 ```
 
 ## Train and Test

@@ -4,11 +4,12 @@ import itertools
 
 from typing import Any, Dict, List, Tuple
 from torch.utils.data import Dataset, BatchSampler
-from label_anything.data.pascal import VOC5i
 
 import label_anything.data.utils as utils
 from label_anything.data.coco import CocoLVISDataset
 from label_anything.data.coco20i import Coco20iDataset
+from label_anything.data.pascal import PascalDataset
+from label_anything.data.pascal5i import Pascal5iDataset
 from label_anything.logger.text_logger import get_logger
 
 logger = get_logger(__name__)
@@ -20,10 +21,9 @@ datasets = {
     "coco20i": Coco20iDataset,
     "val_coco20i": Coco20iDataset,
     "lvis": CocoLVISDataset,
-    # "voc": PascalVOCDataset,
-    # "val_voc": PascalVOCDataset,
-    "voc5i": VOC5i,
-    "val_voc5i": VOC5i,
+    "pascal": PascalDataset,
+    "pascal5i": Pascal5iDataset,
+    "val_pascal5i": Pascal5iDataset,
     "val_lvis": CocoLVISDataset,
 }
 

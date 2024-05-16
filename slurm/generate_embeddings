@@ -9,8 +9,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=123000
-#SBATCH --job-name=run
-#SBATCH --out=out/run.log
-#SBATCH --err=out/run.log
+#SBATCH --job-name=generate_embeddings
+#SBATCH --out=generate_embeddings.out
+#SBATCH --err=generate_embeddings.out
 
-srun ./slurm/launch_run_single_exe $1
+srun ./slurm/generate_embeddings_exe $@

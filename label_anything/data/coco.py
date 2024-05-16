@@ -59,7 +59,6 @@ class CocoLVISDataset(Dataset):
         remove_small_annotations: bool = False,
         all_example_categories: bool = True,
         sample_function: str = "power_law",
-        dtype=torch.float32,
         custom_preprocess: bool = True,
     ):
         """Initialize the dataset.
