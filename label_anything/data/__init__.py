@@ -21,7 +21,6 @@ TEST_DATASETS = {
     "test_dram": DramTestDataset,
     "test_brain": BrainTestDataset,
     "test_kvaris": KvarisTestDataset,
-    "test_pascal": PascalVOCTestDataset,
 }
 
 

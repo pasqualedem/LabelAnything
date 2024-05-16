@@ -96,7 +96,7 @@ dataset:
       max_points_per_annotation: 10
     datasets:
       test_kvaris: 
-        root: /home/emanuele/LabelAnything/data/kvasir
+        root: /home/emanuele/LabelAnything/data/kvasir #funziona solo con path assoluti non mi va di fixare sta cazzata
 experiment:
   desc: null
   value:
