@@ -201,7 +201,7 @@ class Run:
             if (
                 "checkpoint" in self.model_params
                 and self.params["model"]["name"] != "lam_no_vit"
-            ):
+            ) or self.params["model"]["name"] == "lam_mae_b":
                 if hasattr(self.model, "module"):
                     model = self.model.module.model
                 else:
@@ -834,7 +834,7 @@ class Run:
                 outputs = torch.argmax(outputs, dim=1)
                 if not generate_class_embeddings:
                     dims = image_dict[BatchKeys.DIMS][0].tolist()
-                    outputs = outputs[:, :dims[0], :dims[1]]
+                    outputs = outputs[:, : dims[0], : dims[1]]
                 metrics.update(outputs, gt)
             metrics_values = metrics.compute()
 
