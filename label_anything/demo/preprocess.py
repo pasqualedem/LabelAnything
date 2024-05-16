@@ -120,10 +120,9 @@ def extract_prompts_from_canvas(canvas, source_shape, target_shape):
     return prompts
 
 
-def preprocess_to_batch(query_image, support_set, classes, custom_preprocess=True):
+def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_preprocess=True):
     classes = [-1] + classes
     prompts_processor = PromptsProcessor(custom_preprocess=custom_preprocess)
-    size = 1024
     transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
 
     if not support_set:

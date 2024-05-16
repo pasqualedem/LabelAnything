@@ -34,7 +34,7 @@ from label_anything.demo.utils import (
     debug_write,
 )
 from label_anything.experiment.substitution import Substitutor
-from label_anything.models.build_encoder import build_vit_b
+from label_anything.models.build_encoder import build_vit_b, build_vit_b_mae
 from label_anything.utils.utils import ResultDict, load_yaml, torch_dict_load
 from label_anything.models import model_registry
 
@@ -147,6 +147,8 @@ def load_image_encoder(image_encoder):
         return None
     if image_encoder == "None":
         return None
+    elif image_encoder == "vit_mae_b":
+        return build_vit_b_mae().cuda()
     return build_vit_b(
         checkpoint=checkpoint,
         use_sam_checkpoint=True,
@@ -345,7 +347,7 @@ def main():
         # load model
         run_id = st.text_input("Run ID", "3ndl7had")
         model = load_model(accelerator, run_id).model  # WrapperModule
-        image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b"])
+        image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b", "vit_mae_b"])
         image_encoder = load_image_encoder(image_encoder)
         st.divider()
         st.json(st.session_state, expanded=False)
