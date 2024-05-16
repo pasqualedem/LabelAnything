@@ -22,7 +22,8 @@ dataset:
     max_points_annotations: 50
     max_points_per_annotation: 10
     image_size: &image_size 384
-    custom_preprocess:
+    custom_preprocess: false
+    preprocess:
       mean: [0.485, 0.456, 0.406]
       std: [0.229, 0.224, 0.225]
   datasets:
@@ -48,7 +49,7 @@ experiment:
   continue_with_errors: false
   direction: null
   excluded_files: ''
-  group: Test
+  group: DomainTests
   logger: null
   max_parallel_runs: 1
   n_trials: null

@@ -90,7 +90,7 @@ dataset:
   value:
     common:
       image_size: 480
-      custom_preprocess: False
+      custom_preprocess: false
       preprocess:
         mean: default
         std: default
@@ -140,6 +140,7 @@ logger:
     tmp_dir: tmp
     train_image_log_frequency: 100000
     val_image_log_frequency: 100
+    test_image_log_frequency: 50
     wandb:
       entity: cilabuniba
       offline: false
