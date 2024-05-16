@@ -37,11 +37,11 @@ class KvarisTestDataset(LabelAnythingTestDataset):
         if prompt_images is None:
             prompt_images = [
                 # "cju0qx73cjw570799j4n5cjze.jpg",
-                "cju175facms5f0993a5tjikvt.jpg",
-                "cju323ypb1fbb0988gx5rzudb.jpg",
-                "cju0ue769mxii08019zqgdbxn.jpg",
-                "cju1euuc65wm00799m4sjdnnn.jpg",
-                "cju1hirfi7ekp0855q0vgm9qq.jpg",
+                # "cju175facms5f0993a5tjikvt.jpg",
+                # "cju323ypb1fbb0988gx5rzudb.jpg", 
+                # "cju0ue769mxii08019zqgdbxn.jpg",
+                "cju1euuc65wm00799m4sjdnnn.jpg", # o questo
+                # "cju1hirfi7ekp0855q0vgm9qq.jpg",
                 # "cju2i03ptvkiu0799xbbd4det.jpg",
                 # "cju1gv7106qd008784gk603mg.jpg",
                 # "cju2txjfzv60w098839dcimys.jpg",
@@ -108,7 +108,7 @@ class KvarisTestDataset(LabelAnythingTestDataset):
             self._get_gt(os.path.join(self.train_root, "masks", filename))
             for filename in self.prompt_images
         ]
-        masks = [self._pad_mask(mask) for mask in masks]
+        masks = [self._resize_mask(mask) for mask in masks]
 
         bboxes = torch.stack(bboxes)
         images = torch.stack(images)
@@ -142,3 +142,9 @@ class KvarisTestDataset(LabelAnythingTestDataset):
 
     def _pad_mask(self, mask):
         return F.pad(mask, (0, 1024 - mask.shape[1], 0, 1024 - mask.shape[0]))
+
+    def _resize_mask(self, mask):
+        mask = mask.unsqueeze(0).unsqueeze(0).float()
+        mask = F.interpolate(mask, size=(256, 256), mode="nearest")
+        mask = mask.squeeze(0).squeeze(0)
+        return mask
