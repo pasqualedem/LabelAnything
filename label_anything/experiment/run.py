@@ -802,7 +802,7 @@ class Run:
             self.model = set_class_embeddings(self.accelerator, self.model, examples)
         else:
             self.model = self.model.model
-        # self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
+        self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
 
         bar = tqdm(
             enumerate(dataloader),
@@ -822,15 +822,15 @@ class Run:
                         self.merge_dicts(prompts=examples, imgs=image_dict)
                     )[ResultDict.LOGITS]
                 )
-                # self.plat_logger.log_test_prediction(
-                #     batch_idx=batch_idx,
-                #     input_dict=image_dict,
-                #     gt=gt,
-                #     pred=outputs,
-                #     input_shape=self.input_image_size,
-                #     id2classes=dataloader.dataset.id2class,
-                #     dataset_name=dataset_name,
-                # )
+                self.plat_logger.log_test_prediction(
+                    batch_idx=batch_idx,
+                    input_dict=image_dict,
+                    gt=gt,
+                    pred=outputs,
+                    input_shape=self.input_image_size,
+                    id2classes=dataloader.dataset.id2class,
+                    dataset_name=dataset_name,
+                )
                 outputs = torch.argmax(outputs, dim=1)
                 if not generate_class_embeddings:
                     dims = image_dict[BatchKeys.DIMS][0].tolist()
