@@ -1,0 +1,30 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_PENELOPE
+#SBATCH -p boost_usr_prod
+#SBATCH --qos normal
+#SBATCH --time=00:10:00
+#SBATCH --nodes 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:4
+#SBATCH --mem=0
+#SBATCH --exclusive
+#SBATCH --job-name=run
+#SBATCH --out=out/run.log
+#SBATCH --err=out/run.log
+
+GPUS_PER_NODE=4
+export MASTER_ADDR=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)
+export MASTER_PORT=29500
+export WORLD_SIZE=$(($GPUS_PER_NODE*$SLURM_NNODES))
+echo "Master address: $MASTER_ADDR"
+echo "Nodes:"
+scontrol show hostnames $SLURM_JOB_NODELIST
+
+SRUN_ARGS=" \
+    --wait=60 \
+    --kill-on-bad-exit=1 \
+    "
+
+srun $SRUN_ARGS slurm/launch_run_multinode_exe $@

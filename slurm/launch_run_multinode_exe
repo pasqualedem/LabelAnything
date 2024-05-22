@@ -1,0 +1,25 @@
+#!/bin/bash
+
+source .venv/bin/activate
+export TMPDIR=./tmp
+
+
+CMD=" \
+    main.py run $@
+    "
+
+LAUNCHER="accelerate launch \
+    --multi_gpu \
+    --num_machines $SLURM_NNODES \
+    --num_processes $WORLD_SIZE \
+    --main_process_ip $MASTER_ADDR \
+    --main_process_port $MASTER_PORT \
+    --machine_rank $SLURM_PROCID \
+    --rdzv_conf rdzv_backend=c10d \
+    --max_restarts 0 \
+"
+
+echo "Running $CMD"
+echo "Using launcher: $LAUNCHER"
+
+$LAUNCHER $CMD
