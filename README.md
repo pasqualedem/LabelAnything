@@ -93,6 +93,12 @@ python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/tra
 python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_320 --model_name facebook/vit-mae-base --image_resolution 320 --mean_std default --huggingface
 ```
 
+For Dino
+
+```bash
+sbatch slurm/generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
+```
+
 For PASCAL
 
 ```bash
