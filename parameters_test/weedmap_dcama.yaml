@@ -1,0 +1,106 @@
+dataloader:
+  num_workers: 0
+  possible_batch_example_nums:
+  - - 1
+    - 4
+  prompt_types:
+  - point
+  - bbox
+  - mask
+  val_possible_batch_example_nums:
+  - - 1
+    - 1
+  val_prompt_types:
+  - bbox
+  - point
+  - mask
+dataset:
+  common:
+    add_box_noise: true
+    do_subsample: true
+    image_size: 384
+    max_points_annotations: 50
+    max_points_per_annotation: 10
+    image_size: &image_size 384
+    custom_preprocess: false
+    preprocess:
+      mean: [0.485, 0.456, 0.406]
+      std: [0.229, 0.224, 0.225]
+  datasets:
+    test_weedmap:
+      train_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/000
+      test_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/003
+      prompt_images: [
+              # List of selected images from the training set
+              # "frame0009_2.png",
+              # "frame0021_2.png",
+              "frame0033_3.png",
+              # "frame0034_1.png",
+              # "frame0048_0.png",
+              # "frame0048_1.png",
+              "frame0049_0.png",
+              # "frame0073_3.png",
+              # "frame0183_1.png",
+              # "frame0157_3.png",
+              # "frame0197_0.png",
+          ]
+      remove_black_images: false
+experiment:
+  continue_with_errors: false
+  direction: null
+  excluded_files: ''
+  group: DomainTests
+  logger: null
+  max_parallel_runs: 1
+  n_trials: null
+  name: LabelAnything
+  resume: false
+  resume_last: false
+  search: grid
+  start_from_grid: 0
+  start_from_run: 0
+  timestamp: '20240224_125600'
+  tracking_dir: ''
+  uuid: null
+logger:
+  experiment_save_delta: null
+  log_frequency: 1
+  tags:
+  - Test
+  tmp_dir: tmp
+  train_image_log_frequency: 5
+  val_image_log_frequency: 5
+  wandb:
+    entity: cilabuniba
+    offline: false
+model:
+  name: dcama
+  backbone: swin
+  backbone_checkpoint: checkpoints/swin_base_patch4_window12_384.pth
+  model_checkpoint: checkpoints/swin_fold0.pt
+  image_size: *image_size
+train_params:
+  accumulate_substitution: false
+  check_nan: 1
+  compile: false
+  freeze_backbone: true
+  initial_lr: 1.0e-05
+  loss:
+    class_weighting: true
+    components:
+      dice:
+        weight: 0.025
+      focal:
+        weight: 0.5
+  max_epochs: 4
+  num_points: 1
+  optimizer: AdamW
+  scheduler:
+    num_warmup_steps: 1000
+    step_moment: batch
+    type: cosine
+  seed: 42
+  substitute: false
+  validation_reruns: 5
+  watch_metric: loss
+generate_class_embeddings: False

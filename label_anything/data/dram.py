@@ -60,6 +60,21 @@ class DramTestDataset(LabelAnythingTestDataset):
         11: "sheep",
     }
 
+    HIERARCHY_ID2ID = {
+        0: 0,  # BACKGROUND
+        1: 1,  # BIRD -> ANIMAL
+        2: 2,  # BOAT
+        3: 3,  # BOTTLE
+        4: 1,  # CAT -> ANIMAL
+        5: 4,  # CHAIR
+        6: 1,  # COW -> ANIMAL
+        7: 1,  # DOG -> ANIMAL
+        8: 1,  # HORSE -> ANIMAL
+        9: 5,  # PERSON
+        10: 6,  # POTTEDPLANT
+        11: 1,  # SHEEP -> ANIMAL
+    }
+
     def __init__(
         self,
         image_dir: str,
@@ -71,6 +86,8 @@ class DramTestDataset(LabelAnythingTestDataset):
         prompt_mask_size: int = 256,
         preprocess: Union[Compose, ToTensor] = ToTensor(),
         custom_preprocess=True,
+        hierachy: bool = False,
+        prompt_images: list = [],
     ):
         super().__init__()
         self.image_dir = image_dir
@@ -87,8 +104,25 @@ class DramTestDataset(LabelAnythingTestDataset):
         self.example_split = example_split
         self.example_data = _get_data(self.example_image_dir, self.example_split)
 
+        self.hierachy = hierachy
         self.example_img2cat, self.example_cat2img = self._get_support_dict()
-        self.prompt_processor = PromptsProcessor(masks_side_length=prompt_mask_size, custom_preprocess=custom_preprocess)
+        self.prompt_processor = PromptsProcessor(
+            masks_side_length=prompt_mask_size, custom_preprocess=custom_preprocess
+        )
+        self.id2class = self.get_id2class()
+        self.prompt_images = prompt_images
+
+    def get_id2class(self):
+        if not self.hierachy:
+            return {
+                k: [DramTestDataset.TRAIN_ID2NAME[x] for x in v]
+                for (k, v) in self.example_img2cat.items()
+            }
+        rev_map = {v: k for k, v in DramTestDataset.HIERARCHY_ID2ID.items()}
+        return {
+            k: [DramTestDataset.TRAIN_ID2NAME[rev_map[x]] for x in v]
+            for (k, v) in self.example_img2cat.items()
+        }
 
     def _get_support_dict(self):
         img2cat = {}
@@ -117,6 +151,8 @@ class DramTestDataset(LabelAnythingTestDataset):
         copy_gt = torch.zeros_like(gt)
         for k, v in DramTestDataset.ID2TRAIN_ID.items():
             copy_gt[gt == k] = v
+            if self.hierachy:
+                copy_gt[copy_gt == v] = DramTestDataset.HIERARCHY_ID2ID[v]
         return copy_gt.int().squeeze()
 
     def __getitem__(self, item):
@@ -164,12 +200,17 @@ class DramTestDataset(LabelAnythingTestDataset):
         return mask_tensor, flag_tensor
 
     def _get_prompt_masks(self, image_ids, images_fname):
-        cat_ids = sorted(list(DramTestDataset.TRAIN_ID2NAME.keys()))
+        cat_ids = (
+            sorted(list(set(DramTestDataset.HIERARCHY_ID2ID.values())))
+            if self.hierachy
+            else sorted(list(DramTestDataset.TRAIN_ID2NAME.keys()))
+        )
         masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_ids]
         for idx, img in enumerate(image_ids):
             mask = self._load_gt(images_fname[idx])
             for cat_id in cat_ids:
-                if cat_id not in self.example_img2cat[img]:
+                img_cat = self.example_img2cat[img]
+                if cat_id not in img_cat:
                     continue
                 masks[idx][cat_id].append((mask == cat_id).int().numpy())
 
@@ -177,6 +218,9 @@ class DramTestDataset(LabelAnythingTestDataset):
         return self._masks_to_tensor(masks, cat_ids)
 
     def extract_prompts(self):
+        if self.prompt_images:
+            return self.extract_prompts_from_list()
+
         image_ids = self._extract_examples()
         prompt_images_fnames = [self.example_data[x] for x in image_ids]
 
@@ -195,16 +239,56 @@ class DramTestDataset(LabelAnythingTestDataset):
 
         prompt_dict = {
             BatchKeys.IMAGES: images,
-            BatchKeys.FLAG_EXAMPLES: flag_examples[:, 1:],
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             BatchKeys.PROMPT_MASKS: masks[:, 1:],
             BatchKeys.FLAG_MASKS: flag_masks[:, 1:],
             BatchKeys.DIMS: sizes,
         }
         return prompt_dict
 
+    def extract_prompts_from_list(self):
+        images_sizes = [
+            self._load_image(f"{self.example_image_dir}/{fname}.jpg")
+            for fname in self.prompt_images
+        ]
+        images = torch.stack([x[0] for x in images_sizes])
+        sizes = torch.stack([x[1] for x in images_sizes])
+
+        masks_fnames = [f"{self.example_gt_dir}/{x}.png" for x in self.prompt_images]
+        image_ids = [self.example_data.index(x) for x in self.prompt_images]
+        masks, flag_masks = self._get_prompt_masks(image_ids, masks_fnames)
+
+        masks, flag_masks = masks[:, 1:], flag_masks[:, 1:]
+
+        # getting flag examples
+        num_cat = (
+            len(list(set(DramTestDataset.HIERARCHY_ID2ID.values()))) - 1
+            if self.hierachy
+            else len(list(self.example_cat2img.keys())) - 1
+        )
+        prompt_bboxes = torch.zeros((len(images), num_cat, 1, 4), dtype=torch.float32)
+        flag_bboxes = torch.zeros((len(images), num_cat, 1), dtype=torch.uint8)
+        prompt_points = torch.zeros((len(images), num_cat, 1, 2), dtype=torch.float32)
+        flag_points = torch.zeros((len(images), num_cat, 1), dtype=torch.uint8)
+
+        flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
+
+        prompt_dict = {
+            BatchKeys.IMAGES: images,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            BatchKeys.PROMPT_MASKS: masks,
+            BatchKeys.FLAG_MASKS: flag_masks,
+            BatchKeys.PROMPT_BBOXES: prompt_bboxes,
+            BatchKeys.FLAG_BBOXES: flag_bboxes,
+            BatchKeys.PROMPT_POINTS: prompt_points,
+            BatchKeys.FLAG_POINTS: flag_points,
+            BatchKeys.DIMS: sizes,
+        }
+        return prompt_dict
+
     @property
     def num_classes(self):
-        return len(self.TRAIN_ID2NAME.keys())
+        return len(self.TRAIN_ID2NAME.keys()) if not self.hierachy else len(set(list(DramTestDataset.HIERARCHY_ID2ID.values())))
 
 
 if __name__ == "__main__":

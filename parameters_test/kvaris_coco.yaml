@@ -77,11 +77,10 @@ dataloader:
     prompt_choice_level:
     - episode
     prompt_types:
-    - point
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 1
+    - - 2
       - 1
     val_prompt_types:
     - mask
@@ -96,24 +95,15 @@ dataset:
       max_points_annotations: 70
       max_points_per_annotation: 10
     datasets:
-      test_brain:
-        train_root: /leonardo_scratch/large/userexternal/ecolonna/brain/train
-        test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
-        # prompt_images: [
-        #         # List of selected images from the training set
-        #         # "frame0009_2.png",
-        #         # "frame0021_2.png",
-        #         "frame0033_3.png",
-        #         # "frame0034_1.png",
-        #         # "frame0048_0.png",
-        #         # "frame0048_1.png",
-        #         "frame0049_0.png",
-        #         # "frame0073_3.png",
-        #         # "frame0183_1.png",
-        #         # "frame0157_3.png",
-        #         # "frame0197_0.png",
-        #     ]
-        # remove_black_images: false
+      test_kvaris: 
+        root: /leonardo_scratch/large/userexternal/ecolonna/kvaris #funziona solo con path assoluti non mi va di fixare sta cazzata
+        prompt_images: [
+              "cju0qkwl35piu0993l0dewei2.jpg",
+              "cju0t4oil7vzk099370nun5h9.jpg",
+              "cju323ypb1fbb0988gx5rzudb.jpg",
+              "cju885ikhnmkn09878s2lqtuh.jpg",
+              "cju773hsyyosz0817pk1e7sjq.jpg",
+            ]
 experiment:
   desc: null
   value:

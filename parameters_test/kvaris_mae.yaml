@@ -81,7 +81,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 1
+    - - 2
       - 1
     val_prompt_types:
     - mask
@@ -89,31 +89,14 @@ dataset:
   desc: null
   value:
     common:
-      add_box_noise: true
-      do_subsample: false
-      image_size: 1024
-      load_gts: false
-      max_points_annotations: 70
-      max_points_per_annotation: 10
+      image_size: 480
+      custom_preprocess: False
+      preprocess:
+        mean: default
+        std: default
     datasets:
-      test_brain:
-        train_root: /leonardo_scratch/large/userexternal/ecolonna/brain/train
-        test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
-        # prompt_images: [
-        #         # List of selected images from the training set
-        #         # "frame0009_2.png",
-        #         # "frame0021_2.png",
-        #         "frame0033_3.png",
-        #         # "frame0034_1.png",
-        #         # "frame0048_0.png",
-        #         # "frame0048_1.png",
-        #         "frame0049_0.png",
-        #         # "frame0073_3.png",
-        #         # "frame0183_1.png",
-        #         # "frame0157_3.png",
-        #         # "frame0197_0.png",
-        #     ]
-        # remove_black_images: false
+      test_kvaris: 
+        root: /home/emanuele/LabelAnything/data/kvasir 
 experiment:
   desc: null
   value:
@@ -143,9 +126,9 @@ logger:
     val_image_log_frequency: 100
     wandb:
       entity: cilabuniba
-      offline: true
+      offline: false
       offline_directory: offline
-      run_id: jjst1jqm
+      run_id: t1fsb2p4
 model:
   desc: null
   value:
@@ -159,12 +142,9 @@ model:
     example_class_attention: false
     fusion_transformer: TwoWayTransformer
     image_embed_dim: 768
-    image_size: 1024
-    name: lam_b
+    image_size: 480
+    name: lam_mae_b
     spatial_convs: 3
-    checkpoint: checkpoints/sam_vit_b_01ec64.pth
-    use_sam_checkpoint: True
-    use_vit_sam_neck: False
 train_params:
   desc: null
   value:

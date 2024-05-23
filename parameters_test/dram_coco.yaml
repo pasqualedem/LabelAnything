@@ -81,7 +81,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 1
+    - - 2
       - 1
     val_prompt_types:
     - mask
@@ -96,24 +96,21 @@ dataset:
       max_points_annotations: 70
       max_points_per_annotation: 10
     datasets:
-      test_brain:
-        train_root: /leonardo_scratch/large/userexternal/ecolonna/brain/train
-        test_root: /leonardo_scratch/large/userexternal/ecolonna/brain/test
-        # prompt_images: [
-        #         # List of selected images from the training set
-        #         # "frame0009_2.png",
-        #         # "frame0021_2.png",
-        #         "frame0033_3.png",
-        #         # "frame0034_1.png",
-        #         # "frame0048_0.png",
-        #         # "frame0048_1.png",
-        #         "frame0049_0.png",
-        #         # "frame0073_3.png",
-        #         # "frame0183_1.png",
-        #         # "frame0157_3.png",
-        #         # "frame0197_0.png",
-        #     ]
-        # remove_black_images: false
+      test_dram:
+        image_dir: ./data/raw/DRAM_processed/test
+        gt_dir: ./data/raw/DRAM_processed/labels
+        example_image_dir: ./data/raw/DRAM_processed/test
+        example_gt_dir: ./data/raw/DRAM_processed/labels
+        split: dram
+        hierachy: True
+        prompt_images: [
+          realism/constant-troyon/on-the-way-to-the-market-1859,
+          realism/elin-danielson-gambogi/elin-danielson-gambogi-sailing-c1890-1,
+          impressionism/claude-monet/1863_212386,
+          post_impressionism/vincent-van-gogh/1888_206452, 
+          realism/giovanni-boldini/the-actress-rejane-and-her-dog,
+          realism/gustave-courbet/191719
+        ]
 experiment:
   desc: null
   value:
@@ -143,7 +140,7 @@ logger:
     val_image_log_frequency: 100
     wandb:
       entity: cilabuniba
-      offline: true
+      offline: false
       offline_directory: offline
       run_id: jjst1jqm
 model:
