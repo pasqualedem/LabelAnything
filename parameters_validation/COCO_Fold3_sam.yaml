@@ -9,7 +9,7 @@ _wandb:
     huggingface_version: 4.37.2
     is_jupyter_run: false
     is_kaggle_kernel: false
-    start_time: 1709751048.98676
+    start_time: 1709757736.74711
     t:
       1:
       - 1
@@ -82,7 +82,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 2
+    - - 4
       - 1
     val_prompt_types:
     - mask
@@ -98,16 +98,6 @@ dataset:
       max_points_per_annotation: 10
       remove_small_annotations: true
     datasets:
-      coco20i:
-        all_example_categories: false
-        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
-        img_dir: data/coco/train_val_2017
-        instances_path: data/coco/annotations/instances_train2014.json
-        n_folds: 4
-        name: coco
-        sample_function: uniform
-        split: train
-        val_fold_idx: 0
       val_coco20i_N1K1:
         add_box_noise: false
         do_subsample: false
@@ -119,7 +109,7 @@ dataset:
         n_ways: 1
         name: coco
         split: val
-        val_fold_idx: 0
+        val_fold_idx: 3
       val_coco20i_N1K5:
         add_box_noise: false
         do_subsample: false
@@ -131,7 +121,7 @@ dataset:
         n_ways: 1
         name: coco
         split: val
-        val_fold_idx: 0
+        val_fold_idx: 3
       val_coco20i_N2K1:
         add_box_noise: false
         do_subsample: false
@@ -143,7 +133,7 @@ dataset:
         n_ways: 2
         name: coco
         split: val
-        val_fold_idx: 0
+        val_fold_idx: 3
       val_coco20i_N2K5:
         add_box_noise: false
         do_subsample: false
@@ -155,14 +145,86 @@ dataset:
         n_ways: 2
         name: coco
         split: val
-        val_fold_idx: 0
+        val_fold_idx: 3
+      val_coco20i_N3K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 3
+        name: coco
+        split: val
+        val_fold_idx: 3
+      val_coco20i_N4K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 4
+        name: coco
+        split: val
+        val_fold_idx: 3
+      val_coco20i_N5K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 5
+        name: coco
+        split: val
+        val_fold_idx: 3
+      val_coco20i_N10K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 10
+        name: coco
+        split: val
+        val_fold_idx: 3
+      val_coco20i_N15K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 15
+        name: coco
+        split: val
+        val_fold_idx: 3
+      val_coco20i_N20K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_b_sam_embeddings/last_block_state
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 20
+        name: coco
+        split: val
+        val_fold_idx: 3
 experiment:
   desc: null
   value:
     continue_with_errors: false
     direction: null
     excluded_files: ''
-    group: Ablations
+    group: Validations
     logger: null
     max_parallel_runs: 1
     n_trials: null
@@ -172,24 +234,24 @@ experiment:
     search: grid
     start_from_grid: 0
     start_from_run: 0
-    timestamp: '20240306_193652'
+    timestamp: '20240306_213850'
     tracking_dir: ''
-    uuid: 0baade85
+    uuid: dd953167
 logger:
   desc: null
   value:
     experiment_save_delta: null
     log_frequency: 10
-    tmp_dir: tmp
+    tmp_dir: /leonardo_work/IscrC_PENELOPE/tmp
     train_image_log_frequency: null
     val_image_log_frequency: null
     wandb:
       entity: cilabuniba
       offline: false
-      offline_directory: offline
-      run_id: n9623ye5
+      offline_directory: /leonardo_work/IscrC_PENELOPE/offline
+      run_id: cwrjbktc
       tags:
-      - Ablations
+      - SOTA
 model:
   desc: null
   value:

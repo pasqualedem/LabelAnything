@@ -83,7 +83,7 @@ dataloader:
     - bbox
     - mask
     val_possible_batch_example_nums:
-    - - 2
+    - - 1
       - 1
     val_prompt_types:
     - mask
@@ -114,7 +114,7 @@ dataset:
         n_ways: 3
         name: coco
         split: val
-        val_fold_idx: 2
+        val_fold_idx: 1
       val_coco20i_N4K1:
         add_box_noise: false
         do_subsample: false
@@ -126,7 +126,7 @@ dataset:
         n_ways: 4
         name: coco
         split: val
-        val_fold_idx: 2
+        val_fold_idx: 1
       val_coco20i_N5K1:
         add_box_noise: false
         do_subsample: false
@@ -138,7 +138,43 @@ dataset:
         n_ways: 5
         name: coco
         split: val
-        val_fold_idx: 2
+        val_fold_idx: 1
+      val_coco20i_N10K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_mae_base_nopadding
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 10
+        name: coco
+        split: val
+        val_fold_idx: 1
+      val_coco20i_N15K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_mae_base_nopadding
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 15
+        name: coco
+        split: val
+        val_fold_idx: 1
+      val_coco20i_N20K1:
+        add_box_noise: false
+        do_subsample: false
+        emb_dir: data/coco/vit_mae_base_nopadding
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_val2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 20
+        name: coco
+        split: val
+        val_fold_idx: 1
 experiment:
   desc: null
   value:
@@ -170,9 +206,10 @@ logger:
       entity: cilabuniba
       offline: false
       offline_directory: offline
-      run_id: 3bij5hyh
+      run_id: bv6z94cw
       tags:
       - ImageNet21k
+      - Validations
 model:
   desc: null
   value:

@@ -33,7 +33,7 @@ dataset:
       n_ways: 1
       name: coco
       split: val
-      val_fold_idx: 1
+      val_fold_idx: 2
     val_coco20i_N2K1:
         img_dir: data/coco/train_val_2017
         instances_path: data/coco/annotations/instances_train2014.json
@@ -42,7 +42,61 @@ dataset:
         n_ways: 2
         name: coco
         split: val
-        val_fold_idx: 1
+        val_fold_idx: 2
+    val_coco20i_N3K1:
+      img_dir: data/coco/train_val_2017
+      instances_path: data/coco/annotations/instances_val2014.json
+      n_folds: 4
+      n_shots: 1
+      n_ways: 3
+      name: coco
+      split: val
+      val_fold_idx: 2
+    val_coco20i_N4K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 4
+        name: coco
+        split: val
+        val_fold_idx: 2
+    val_coco20i_N5K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 5
+        name: coco
+        split: val
+        val_fold_idx: 2
+    val_coco20i_N10K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 10
+        name: coco
+        split: val
+        val_fold_idx: 2
+    val_coco20i_N15K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 15
+        name: coco
+        split: val
+        val_fold_idx: 2
+    val_coco20i_N20K1:
+        img_dir: data/coco/train_val_2017
+        instances_path: data/coco/annotations/instances_train2014.json
+        n_folds: 4
+        n_shots: 1
+        n_ways: 20
+        name: coco
+        split: val
+        val_fold_idx: 2
 experiment:
   continue_with_errors: false
   direction: null
@@ -64,7 +118,7 @@ logger:
   experiment_save_delta: null
   log_frequency: 1
   tags:
-  - Validation
+  - Validations
   tmp_dir: tmp
   train_image_log_frequency: 5
   val_image_log_frequency: 100
