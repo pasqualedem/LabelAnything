@@ -64,7 +64,7 @@ class BatchMetadataKeys(StrEnum):
     PROMPT_CHOICE_LEVEL = "prompt_choice_level"
     
     
-def flags_merge(flag_masks: torch.Tensor, flag_points: torch.Tensor, flag_bboxes: torch.Tensor) -> torch.Tensor:
+def flags_merge(flag_masks: torch.Tensor = None, flag_points: torch.Tensor = None, flag_bboxes: torch.Tensor = None) -> torch.Tensor:
     """
     Merges the flags of the prompt masks, points and bboxes into a single tensor.
 
@@ -79,8 +79,20 @@ def flags_merge(flag_masks: torch.Tensor, flag_points: torch.Tensor, flag_bboxes
     Returns:
         torch.Tensor: tensor of shape M x C, in which each element indicates whether the example is real or a padding one.
     """
-    flag_examples = torch.logical_or(flag_masks, flag_points.any(dim=-1))
-    flag_examples = torch.logical_or(flag_examples, flag_bboxes.any(dim=-1))
+    if flag_masks is None and flag_points is None and flag_bboxes is None:
+        raise ValueError("At least one of the flags must be provided.")
+    flag_examples = []
+    if flag_points is not None:
+        flag_examples.append(flag_points.any(dim=-1))
+    if flag_bboxes is not None:
+        flag_examples.append(flag_bboxes.any(dim=-1))
+    if flag_masks is not None:
+        flag_examples.append(flag_masks)
+    if len(flag_examples) > 1:
+        flag_examples = torch.stack(flag_examples, dim=1).any(dim=1)
+    else:
+        flag_examples = flag_examples[0]
+    
     # Put BG class to 1
     flag_examples[:, 0] = 1
     return flag_examples

@@ -12,7 +12,7 @@ from transformers import get_scheduler as get_transformers_scheduler
 from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
 from label_anything.logger.abstract_logger import AbstractLogger
-from label_anything.utils.utils import find_divisor_pairs, get_divisors
+from label_anything.utils.utils import find_divisor_pairs, get_divisors, torch_dict_load
 
 logger = get_logger(__name__)
 
@@ -24,7 +24,13 @@ def parse_params(params_dict):
     prompt_encoder_params = params_dict.get("prompt_encoder", {})
     dataloader_params = params_dict.get("dataloader", {})
 
-    return train_params, dataset_params, dataloader_params, model_params, prompt_encoder_params
+    return (
+        train_params,
+        dataset_params,
+        dataloader_params,
+        model_params,
+        prompt_encoder_params,
+    )
 
 
 def cast_model(model: torch.nn.Module, precision=torch.float32):
@@ -185,7 +191,9 @@ def set_class_embeddings(
     model,
     examples,
 ):
-    examples = {k: v.unsqueeze(dim=0).to(accelerator.device) for k, v in examples.items()}
+    examples = {
+        k: v.unsqueeze(dim=0).to(accelerator.device) for k, v in examples.items()
+    }
     example_size, num_classes = get_example_class_size(examples)
     chunk_sizes = [None] + list(reversed(get_divisors(example_size * num_classes)))
     chunk_sizes = [1]
@@ -236,7 +244,7 @@ class WrapperModule(torch.nn.Module):
         super().__init__()
         self.model = model
         self.loss = loss
-        
+
         self.predict = self.model.predict
         self.generate_class_embeddings = self.model.generate_class_embeddings
 
@@ -251,7 +259,7 @@ class WrapperModule(torch.nn.Module):
         if isinstance(model_params[0], dict):
             loss_params = [{"params": loss_params}]
         return model_params + loss_params
-    
+
     @property
     def class_embeddings(self):
         return self.model.class_embeddings
@@ -259,3 +267,23 @@ class WrapperModule(torch.nn.Module):
     @class_embeddings.setter
     def class_embeddings(self, value):
         self.model.class_embeddings = value
+
+
+def convert_no_vit_checkpoint(model, no_vit_state_dict):
+    """
+    Convert a checkpoint from a model without Vision Transformer to a model with Vision Transformer
+
+    Args:
+        model: Label Anything model with Vision Transformer
+        no_vit_state_dict: Checkpoint from a model without Vision Transformer
+    """
+    state_dict = torch_dict_load(no_vit_state_dict)
+
+    state_dict = {
+        **{
+            "model.image_encoder." + k: v
+            for k, v in model.image_encoder.state_dict().items()
+        },
+        **state_dict,
+    }
+    return state_dict
