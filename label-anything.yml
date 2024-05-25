@@ -15,6 +15,7 @@ dependencies:
   - alembic=1.13.1=pyhd8ed1ab_1
   - arrow-cpp=14.0.2=h374c478_1
   - asttokens=2.4.1=pyhd8ed1ab_0
+  - attrs=23.2.0=pyh71513ae_0
   - aws-c-auth=0.6.19=h5eee18b_0
   - aws-c-cal=0.5.20=hdbd6064_0
   - aws-c-common=0.8.5=h5eee18b_0
@@ -34,11 +35,12 @@ dependencies:
   - brotli-python=1.0.9=py311h6a678d5_7
   - bzip2=1.0.8=h5eee18b_5
   - c-ares=1.19.1=h5eee18b_0
-  - ca-certificates=2024.2.2=hbcca054_0
-  - certifi=2024.2.2=pyhd8ed1ab_0
+  - ca-certificates=2024.3.11=h06a4308_0
+  - certifi=2024.2.2=py311h06a4308_0
   - charset-normalizer=2.0.4=pyhd3eb1b0_0
   - colorama=0.4.6=pyhd8ed1ab_0
   - colorlog=6.8.2=py311h38be061_0
+  - comm=0.2.2=pyhd8ed1ab_0
   - contourpy=1.2.0=py311h9547e67_0
   - cuda-cudart=12.1.105=0
   - cuda-cupti=12.1.105=0
@@ -49,6 +51,7 @@ dependencies:
   - cuda-runtime=12.1.0=0
   - cycler=0.12.1=pyhd8ed1ab_0
   - datasets=2.12.0=py311h06a4308_0
+  - debugpy=1.8.1=py311hb755f60_0
   - decorator=5.1.1=pyhd8ed1ab_0
   - dill=0.3.6=py311h06a4308_0
   - exceptiongroup=1.2.0=pyhd8ed1ab_2
@@ -71,13 +74,17 @@ dependencies:
   - icu=73.1=h6a678d5_0
   - idna=3.4=py311h06a4308_0
   - importlib-metadata=7.0.2=pyha770c72_0
+  - importlib_metadata=7.0.2=hd8ed1ab_0
   - importlib_resources=6.1.3=pyhd8ed1ab_0
   - intel-openmp=2023.1.0=hdb19cb5_46306
+  - ipykernel=6.29.3=pyhd33586a_0
   - ipython=8.22.2=pyh707e725_0
   - jedi=0.19.1=pyhd8ed1ab_0
   - jinja2=3.1.3=py311h06a4308_0
   - joblib=1.3.2=pyhd8ed1ab_0
   - jpeg=9e=h5eee18b_1
+  - jupyter_client=8.6.1=pyhd8ed1ab_0
+  - jupyter_core=5.7.2=py311h38be061_0
   - kiwisolver=1.4.5=py311h9547e67_1
   - krb5=1.20.1=h143b758_1
   - lame=3.100=h7b6447c_0
@@ -113,6 +120,7 @@ dependencies:
   - libnvjpeg=12.1.1.14=0
   - libpng=1.6.39=h5eee18b_0
   - libprotobuf=3.20.3=he621ea3_0
+  - libsodium=1.0.18=h36c2ea0_1
   - libssh2=1.10.0=hdbd6064_2
   - libstdcxx-ng=13.2.0=h7e041cc_5
   - libtasn1=4.19.0=h5eee18b_0
@@ -128,7 +136,6 @@ dependencies:
   - lz4-c=1.9.4=h6a678d5_0
   - mako=1.3.2=pyhd8ed1ab_0
   - markupsafe=2.1.3=py311h5eee18b_0
-  - matplotlib-base=3.8.0=py311h54ef318_1
   - matplotlib-inline=0.1.6=pyhd8ed1ab_0
   - mkl=2023.1.0=h213fc3f_46344
   - mkl-service=2.4.0=py311h5eee18b_1
@@ -141,13 +148,14 @@ dependencies:
   - multiprocess=0.70.14=py311h06a4308_0
   - munkres=1.1.4=pyh9f0ad1d_0
   - ncurses=6.4=h6a678d5_0
+  - nest-asyncio=1.6.0=pyhd8ed1ab_0
   - nettle=3.7.3=hbbd107a_1
   - networkx=3.1=py311h06a4308_0
   - numpy=1.26.4=py311h08b1b3b_0
   - numpy-base=1.26.4=py311hf175353_0
   - openh264=2.1.1=h4ff587b_0
   - openjpeg=2.4.0=h3ad879b_0
-  - openssl=3.2.1=hd590300_0
+  - openssl=3.2.1=hd590300_1
   - optuna=3.5.0=pyhd8ed1ab_0
   - orc=1.7.4=hb3bc3d3_1
   - pandas=2.2.1=py311h320fe9a_0
@@ -156,6 +164,7 @@ dependencies:
   - pickleshare=0.7.5=py_1003
   - pillow=10.2.0=py311h5eee18b_0
   - pip=23.3.1=py311h06a4308_0
+  - platformdirs=4.2.0=pyhd8ed1ab_0
   - plotly=5.20.0=py_0
   - prompt-toolkit=3.0.42=pyha770c72_0
   - psutil=5.9.8=py311h459d7ec_0
@@ -175,6 +184,7 @@ dependencies:
   - pytorch-mutex=1.0=cuda
   - pytz=2024.1=pyhd8ed1ab_0
   - pyyaml=6.0.1=py311h5eee18b_0
+  - pyzmq=26.0.2=py311h08a0b41_0
   - re2=2022.04.01=h295c915_0
   - readline=8.2=h5eee18b_0
   - regex=2023.10.3=py311h5eee18b_0
@@ -192,6 +202,7 @@ dependencies:
   - stack_data=0.6.2=pyhd8ed1ab_0
   - sympy=1.12=py311h06a4308_0
   - tbb=2021.8.0=hdb19cb5_0
+  - tenacity=8.2.3=pyhd8ed1ab_0
   - threadpoolctl=3.3.0=pyhc1e730c_0
   - tk=8.6.12=h1ccaba5_0
   - tokenizers=0.15.1=py311h22610ee_0
@@ -199,6 +210,7 @@ dependencies:
   - torchmetrics=1.3.1=pyhd8ed1ab_0
   - torchtriton=2.2.0=py311
   - torchvision=0.17.1=py311_cu121
+  - tornado=6.4=py311h459d7ec_0
   - tqdm=4.66.2=pyhd8ed1ab_0
   - traitlets=5.14.2=pyhd8ed1ab_0
   - transformers=4.38.2=pyhd8ed1ab_0
@@ -213,13 +225,13 @@ dependencies:
   - xz=5.4.6=h5eee18b_0
   - yaml=0.2.5=h7b6447c_0
   - yarl=1.9.3=py311h5eee18b_0
+  - zeromq=4.3.5=h59595ed_1
   - zipp=3.17.0=pyhd8ed1ab_0
   - zlib=1.2.13=h5eee18b_0
   - zstd=1.5.5=hc292b87_0
   - pip:
       - altair==5.2.0
       - appdirs==1.4.4
-      - attrs==23.2.0
       - blinker==1.7.0
       - cachetools==5.3.3
       - click==8.1.7
@@ -259,16 +271,15 @@ dependencies:
       - simplejson==3.19.2
       - smmap==5.0.1
       - streamlit==1.32.2
+      - streamlit-drawable-canvas==0.9.3
       - streamlit-image-annotation==0.3.2
       - streamlit-tags==1.2.8
-      - tenacity==8.2.3
       - timm==0.9.16
       - toml==0.10.2
       - toolz==0.12.1
-      - tornado==6.4
       - wandb==0.16.4
       - watchdog==4.0.0
       - websocket-client==1.3.3
+      - wget==3.2
       - wrapt==1.16.0
       - wurlitzer==3.0.3
-prefix: /home/nicola/miniconda3/envs/label-anything
