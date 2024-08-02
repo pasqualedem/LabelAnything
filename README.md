@@ -1,6 +1,8 @@
-# Label Anything
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/label-anything-multi-class-few-shot-semantic/few-shot-semantic-segmentation-on-coco-20i-2-1)](https://paperswithcode.com/sota/few-shot-semantic-segmentation-on-coco-20i-2-1?p=label-anything-multi-class-few-shot-semantic)
 
-This repository contains the official code for the paper "LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts".
+# [Label Anything](https://arxiv.org/abs/2407.02075)
+
+This repository contains the official code for the paper ["LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts"](https://arxiv.org/abs/2407.02075).
 
 ![Label Anything](assets/la.png)
 

@@ -312,6 +312,7 @@ def try_it_yourself(model, image_encoder):
                 image,
                 st.session_state[SS.SUPPORT_SET],
                 list(range(len(st.session_state[SS.CLASSES]))),
+                size=st.session_state.get("image_size", 1024),
             )
             for image in images
         ]
@@ -348,6 +349,7 @@ def main():
         run_id = st.text_input("Run ID", "3ndl7had")
         model = load_model(accelerator, run_id).model  # WrapperModule
         image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b", "vit_mae_b"])
+        st.number_input("Image size", min_value=1, max_value=1024, value=1024, step=1,  key="image_size")
         image_encoder = load_image_encoder(image_encoder)
         st.divider()
         st.json(st.session_state, expanded=False)
