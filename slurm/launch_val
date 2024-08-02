@@ -2,8 +2,8 @@
 
 #SBATCH -A IscrC_DIANA
 #SBATCH -p boost_usr_prod
-#SBATCH --qos boost_qos_dbg
-#SBATCH --time 00:30:00
+#SBATCH --qos normal
+#SBATCH --time 12:00:00
 #SBATCH -N 1
 #SBATCH --ntasks-per-node=1
 #SBATCH --mem=0
