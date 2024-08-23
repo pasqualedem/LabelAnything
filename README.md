@@ -65,8 +65,8 @@ rm -rf val2017
 Finally, you will have to rename image filenames in the COCO 2014 annotations to match the filenames in the `train_val_2017` directory. To do this, run the following script:
 
 ```bash
-python main.py rename_coco20i_json --instances-path data/coco/annotations/instances_train2014.json
-python main.py rename_coco20i_json --instances-path data/coco/annotations/instances_val2014.json
+python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_train2014.json
+python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_val2014.json
 ```
 
 ## Preprocess
