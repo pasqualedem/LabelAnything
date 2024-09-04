@@ -151,6 +151,7 @@ def load_model(_accelerator: Accelerator, checkpoint, model_load_mode):
 def reset_support(idx):
     if idx is None:
         st.session_state[SS.SUPPORT_SET] = []
+        st.session_state[SS.CLASSES] = []
         return
     st.session_state[SS.SUPPORT_SET].pop(idx)
 
@@ -161,20 +162,24 @@ def build_support_set():
     st.write("Choose the classes you want to segment in the image")
     cols = st.columns(2)
     with cols[0]:
-        classes = st_tags(
-            label=SS.CLASSES,
-            text="Type and press enter",
-            value=st.session_state.get(SS.CLASSES, []),
-            suggestions=["person", "car", "dog", "cat", "bus", "truck"],
-        )
+        # classes = st_tags(
+        #     label=SS.CLASSES,
+        #     text="Type and press enter",
+        #     value=st.session_state.get(SS.CLASSES, []),
+        #     suggestions=["person", "car", "dog", "cat", "bus", "truck"],
+        # )
+        new_class = st.text_input("Type and press enter to add a class")
+        classes = st.session_state.get(SS.CLASSES, [])
+        if new_class not in classes and new_class != "":
+            classes.append(new_class)
+        st.session_state[SS.CLASSES] = classes
     with cols[1]:
         if st.button("Reset"):
-            st.session_state[SS.SUPPORT_SET] = []
-    if len(classes) < len(st.session_state.get(SS.CLASSES, [])):
-        reset_support(None)
+            reset_support(None)
+            classes = []
     if not classes:
         return
-    st.session_state[SS.CLASSES] = classes
+    st.write("Classes:", ", ".join(classes))
     st.write("## Upload and annotate the support images")
 
     support_image = st.file_uploader(
