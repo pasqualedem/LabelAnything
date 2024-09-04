@@ -86,8 +86,8 @@ def extract_prompts_from_canvas(canvas, source_shape, target_shape):
                 bbox = [
                             obj["left"],
                             obj["top"],
-                            obj["left"] + obj["width"],
-                            obj["top"] + obj["height"],
+                            obj["width"],
+                            obj["height"],
                         ]
                 bbox = reshape_bbox(bbox, source_shape, target_shape)
                 prompts["bboxes"].append(
@@ -120,7 +120,7 @@ def extract_prompts_from_canvas(canvas, source_shape, target_shape):
     return prompts
 
 
-def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_preprocess=True):
+def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=True):
     classes = [-1] + classes
     prompts_processor = PromptsProcessor(custom_preprocess=custom_preprocess)
     transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
@@ -128,10 +128,10 @@ def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_pre
     if not support_set:
         return {}
 
-    images = [(elem.img) for elem in support_set.values()]
+    images = [(elem.img) for elem in support_set]
     image_sizes = [(img.size[1], img.size[0]) for img in images]
-    
-    for v, image_size in zip(support_set.values(), image_sizes):
+
+    for v, image_size in zip(support_set, image_sizes):
         v.prompts = extract_prompts_from_canvas(v.prompts, v.reshape, image_size)
 
     bboxes = [{cat_id: [] for cat_id in classes} for _ in images]
@@ -139,7 +139,7 @@ def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_pre
     points = [{cat_id: [] for cat_id in classes} for _ in images]
 
     for image_id, (elem, image_size) in enumerate(
-        zip(support_set.values(), image_sizes)
+        zip(support_set, image_sizes)
     ):
         for bbox in elem.prompts["bboxes"]:
             label = bbox["label"]
@@ -181,14 +181,10 @@ def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_pre
     )
 
     flag_examples = utils.flags_merge(flag_masks, flag_points, flag_bboxes)
-    dims = torch.tensor([(query_image.size[1], query_image.size[0])] + image_sizes)
-    images = torch.stack(
-        [transforms(query_image)] + [transforms(img) for img in images]
-    )
-    for image in images:
-        debug_write(query_image)
+    dims = torch.tensor(image_sizes)
+    images = torch.stack([transforms(img) for img in images])
 
-    data_dict = {
+    return {
         utils.BatchKeys.IMAGES: images.unsqueeze(0).cuda(),
         utils.BatchKeys.PROMPT_MASKS: masks.unsqueeze(0).cuda(),
         utils.BatchKeys.FLAG_MASKS: flag_masks.unsqueeze(0).cuda(),
@@ -201,4 +197,15 @@ def preprocess_to_batch(query_image, support_set, classes, size=1024, custom_pre
         utils.BatchKeys.CLASSES: [classes[1:]],
     }
 
-    return data_dict
+def preprocess_to_batch(query_image, batch, size=1024):
+    transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
+    dims = batch[utils.BatchKeys.DIMS].clone()
+    images = batch[utils.BatchKeys.IMAGES].clone()
+    dims = torch.cat([torch.tensor([[[query_image.size[1], query_image.size[0]]]], device="cuda"), dims], dim=1)
+    images = torch.cat(
+        [transforms(query_image).unsqueeze(0).unsqueeze(0).cuda(), images],
+        dim=1,
+    )
+    batch[utils.BatchKeys.IMAGES] = images
+    batch[utils.BatchKeys.DIMS] = dims
+    return batch

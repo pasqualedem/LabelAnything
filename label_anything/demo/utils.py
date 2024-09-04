@@ -52,11 +52,11 @@ def color_to_class(color):
     # use regex to extract r, g, b (values can be float or int)
     color = re.findall(r"\d+\.\d+|\d+", color)
     color = (int(color[0]), int(color[1]), int(color[2]))
-    return COLORS.index(color)
+    return COLORS.index(color) - 1 # -1 because background is not a class
 
 
 def get_color_from_class(classes, selected_class):
-    selected_class_color = COLORS[classes.index(selected_class)]
+    selected_class_color = COLORS[classes.index(selected_class) + 1] # +1 because background is not a class
     selected_class_color_f = f"rgba({selected_class_color[0]}, {selected_class_color[1]}, {selected_class_color[2]}, 0.3)"
     selected_class_color_st = f"rgba({selected_class_color[0]}, {selected_class_color[1]}, {selected_class_color[2]}, 0.8)"
     return selected_class_color_f, selected_class_color_st
@@ -89,3 +89,6 @@ class SupportExample(dict):
         self['img'] = support_image
         self['prompts'] = prompts
         self['reshape'] = reshape
+        
+    def draw(self, draw):
+        raise NotImplementedError

@@ -107,6 +107,7 @@ def draw_points(img: Image, points: torch.Tensor, colors):
 def draw_masks(img: Image, masks: torch.Tensor, colors):
     # here masks is a dict having category names as keys
     # associated to a list of binary masks
+    orig_shape = img.size
     masked_image = resize(img.copy(), 256)
     
     for i, mask in enumerate(masks):
@@ -116,7 +117,8 @@ def draw_masks(img: Image, masks: torch.Tensor, colors):
                                 masked_image)
     
     masked_image = masked_image.astype(np.uint8)
-    return cv2.addWeighted(np.array(resize(img, 256)), 0.3, masked_image, 0.7, 0)
+    overlap = cv2.addWeighted(np.array(resize(img, 256)), 0.3, masked_image, 0.7, 0)
+    return resize(Image.fromarray(overlap), orig_shape)
 
 
 def draw_boxes(img: Image, boxes: torch.Tensor, colors):
@@ -136,7 +138,7 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
         binary_mask = (seg == i)[0]
         mask = binary_mask.cpu().numpy()
         masked_image = np.where(np.repeat(mask[:, :, np.newaxis], 3, axis=2),
-                                np.asarray(colors[i-1], dtype="uint8"),
+                                np.asarray(colors[i], dtype="uint8"),
                                 masked_image)
     
     masked_image = masked_image.astype(np.uint8)
@@ -144,9 +146,7 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
 
 
 def draw_all(img: Image, masks, boxes, points, colors):
-    segmented_image = draw_masks(img, masks, colors)
-    img = Image.fromarray(segmented_image)
-    img = resize(img, 1024)
+    img = draw_masks(img, masks, colors)
     img = draw_boxes(img, boxes, colors)
     img = Image.fromarray(img)
     img = draw_points(img, points, colors)

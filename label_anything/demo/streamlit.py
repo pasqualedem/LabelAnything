@@ -9,9 +9,9 @@ import plotly.graph_objects as go
 from streamlit_image_annotation import detection
 from streamlit_drawable_canvas import st_canvas
 from streamlit_tags import st_tags
-from tempfile import NamedTemporaryFile
+from huggingface_hub import list_models
 
-
+from label_anything import LabelAnything
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
 from label_anything.data.transforms import CustomResize, CustomNormalize
 from accelerate import Accelerator
@@ -24,7 +24,7 @@ import numpy as np
 import os
 
 import lovely_tensors as lt
-from label_anything.demo.preprocess import preprocess_to_batch
+from label_anything.demo.preprocess import preprocess_support_set, preprocess_to_batch
 from label_anything.demo.utils import (
     COLORS,
     TEXT_COLORS,
@@ -53,6 +53,8 @@ from label_anything.data.utils import (
 from label_anything.experiment.utils import WrapperModule
 
 from label_anything.demo.visualize import (
+    draw_all,
+    get_image,
     load_from_wandb,
     plot_seg,
 )
@@ -110,67 +112,54 @@ def get_data(_accelerator):
 
 
 @st.cache_resource
-def load_model(_accelerator: Accelerator, run_id):
-    folder = "best"
-    model_file, config_file = load_from_wandb(run_id, folder)
-    if config_file is not None:
-        config = load_yaml(config_file)
-        model_params = config["model"]
-        name = model_params.pop("name")
-    else:
-        model_params = {}
-        name = "lam_no_vit"
-        st.warning(
-            f"Config file not found, using default model params: {model_params}, {name}"
-        )
-    model = model_registry[name](**model_params)
-    model = WrapperModule(model, None)
-    model_state_dict = torch_dict_load(model_file)
-    unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
-    model = _accelerator.prepare(model)
-    if unmatched_keys.missing_keys:
-        st.warning(f"Missing keys: {unmatched_keys.missing_keys}")
-    if unmatched_keys.unexpected_keys:
-        if unmatched_keys.unexpected_keys != [
-            "loss.prompt_components.prompt_contrastive.t_prime",
-            "loss.prompt_components.prompt_contrastive.bias",
-        ]:
+def load_model(_accelerator: Accelerator, checkpoint, model_load_mode):
+    if model_load_mode == "Hugging Face":
+        model = LabelAnything.from_pretrained(checkpoint)
+        model = _accelerator.prepare(model)
+        return model.model
+    elif model_load_mode == "Wandb":
+        folder = "best"
+        model_file, config_file = load_from_wandb(checkpoint, folder)
+        if config_file is not None:
+            config = load_yaml(config_file)
+            model_params = config["model"]
+            name = model_params.pop("name")
+        else:
+            model_params = {}
+            name = "lam_no_vit"
+            st.warning(
+                f"Config file not found, using default model params: {model_params}, {name}"
+            )
+        model = model_registry[name](**model_params)
+        model = WrapperModule(model, None)
+        model_state_dict = torch_dict_load(model_file)
+        unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
+        model = _accelerator.prepare(model)
+        if unmatched_keys.missing_keys:
+            st.warning(f"Missing keys: {unmatched_keys.missing_keys}")
+        if unmatched_keys.unexpected_keys and unmatched_keys.unexpected_keys != [
+                    "loss.prompt_components.prompt_contrastive.t_prime",
+                    "loss.prompt_components.prompt_contrastive.bias",
+                ]:
             st.warning(f"Unexpected keys: {unmatched_keys.unexpected_keys}")
-    return model
-
-
-@st.cache_resource
-def load_image_encoder(image_encoder):
-    checkpoint = VIT_B_SAM_PATH
-    if not os.path.exists(checkpoint):
-        st.warning(f"Checkpoint {checkpoint} not found")
+        return model.model
+    else:
+        st.warning("Model load mode not supported")
         return None
-    if image_encoder == "None":
-        return None
-    elif image_encoder == "vit_mae_b":
-        return build_vit_b_mae().cuda()
-    return build_vit_b(
-        checkpoint=checkpoint,
-        use_sam_checkpoint=True,
-        project_last_hidden=False,
-    ).cuda()
 
 
-def reset_support(idx, image=False):
+def reset_support(idx):
     if idx is None:
-        st.session_state[SS.SUPPORT_SET] = {}
+        st.session_state[SS.SUPPORT_SET] = []
         return
-    if idx in st.session_state[SS.SUPPORT_SET]:
-        st.session_state[SS.SUPPORT_SET][idx].prompts = {}
-        if image:
-            st.session_state[SS.SUPPORT_SET].pop(idx)
+    st.session_state[SS.SUPPORT_SET].pop(idx)
 
 
 def build_support_set():
     if st.session_state.get(SS.SUPPORT_SET, None) is None:
-        st.session_state[SS.SUPPORT_SET] = {}
+        st.session_state[SS.SUPPORT_SET] = []
     st.write("Choose the classes you want to segment in the image")
-    cols = st.columns(3)
+    cols = st.columns(2)
     with cols[0]:
         classes = st_tags(
             label=SS.CLASSES,
@@ -179,43 +168,28 @@ def build_support_set():
             suggestions=["person", "car", "dog", "cat", "bus", "truck"],
         )
     with cols[1]:
-        len_support_set = st.slider(
-            "Number of support images", 1, 10, key="len_support_set"
-        )
-    with cols[2]:
         if st.button("Reset"):
-            st.session_state[SS.SUPPORT_SET] = {}
-    if len(classes) < len(st.session_state.get(SS.CLASSES, [])):  # Reset annotations
-        for k in st.session_state[SS.SUPPORT_SET].keys():
-            reset_support(k)
+            st.session_state[SS.SUPPORT_SET] = []
+    if len(classes) < len(st.session_state.get(SS.CLASSES, [])):
+        reset_support(None)
     if not classes:
         return
     st.session_state[SS.CLASSES] = classes
     st.write("## Upload and annotate the support images")
-    i = 0
-    tabs = st.tabs([f"Support Image {i+1}" for i in range(len_support_set)])
-    for i in range(len_support_set):
-        with tabs[i]:
-            support_image = st.file_uploader(
-                f"If you want, you can upload and annotate another support image",
-                type=["png", "jpg"],
-                on_change=lambda: reset_support(None, True),
-                key=f"support_image_{i}",
-            )
-            if support_image is not None:
-                add_support_image(support_image, i)
-            i += 1
+
+    support_image = st.file_uploader(
+        "If you want, you can upload and annotate another support image",
+        type=["png", "jpg"],
+        key="support_image",
+    )
+    if support_image is not None:
+        add_support_image(support_image)
 
 
-def add_support_image(support_image, idx):
+def add_support_image(support_image):
     support_image = open_rgb_image(support_image)
-    if idx not in st.session_state[SS.SUPPORT_SET]:
-        st.write("Reset")
-        st.session_state[SS.SUPPORT_SET][idx] = SupportExample(
-            support_image=support_image
-        )
     st.write(
-        f"Use the annotation tool to annotate the image with bounding boxes, click Complete when you are done"
+        "Use the annotation tool to annotate the image with bounding boxes, click Complete when you are done"
     )
     tab1, tab2 = st.tabs(["Annotate", "Load mask"])
     with tab1:
@@ -224,17 +198,15 @@ def add_support_image(support_image, idx):
             selected_class = st.selectbox(
                 "Select the class you want to annotate",
                 st.session_state[SS.CLASSES],
-                key=f"selectbox_class_{idx}",
+                key="selectbox_class",
             )
         with cols[1]:
             prompt_type = st.selectbox(
-                "Prompt Type",
-                ["rect", "point", "polygon"],
-                key=f"drawing_mode_{idx}",
+                "Prompt Type", ["rect", "point", "polygon"], key="drawing_mode"
             )
         with cols[2]:
-            edit_mode = st.checkbox("Edit annotations", key=f"edit_mode_{idx}")
-        edit_mode = prompt_type if not edit_mode else "transform"
+            edit_mode = st.checkbox("Edit annotations", key="edit_mode")
+        edit_mode = "transform" if edit_mode else prompt_type
         selected_class_color_f, selected_class_color_st = get_color_from_class(
             st.session_state[SS.CLASSES], selected_class
         )
@@ -246,7 +218,7 @@ def add_support_image(support_image, idx):
             stroke_color=selected_class_color_st,  # Fixed stroke color with full opacity
             background_image=support_image,
             drawing_mode=edit_mode,
-            key=f"input_prompt_detection_{idx}",
+            key="input_prompt_detection",
             width=shape[1],
             height=shape[0],
             stroke_width=2,
@@ -262,12 +234,15 @@ def add_support_image(support_image, idx):
                 color = st.selectbox(
                     f"Select color for {cls}",
                     TEXT_COLORS,
-                    key=f"color_{idx}_{cls}",
+                    key=f"color_{cls}",
                     index=i,
                 )
                 color_map[i] = np.array(COLORS[TEXT_COLORS.index(color)])
         mask = st.file_uploader(
-            "Upload the mask", type=["png", "jpg"], accept_multiple_files=False
+            "Upload the mask",
+            type=["png", "jpg"],
+            accept_multiple_files=False,
+            key="mask_support",
         )
         mask = np.array(open_rgb_image(mask)) if mask is not None else None
         st.image(mask, caption="Mask", use_column_width=True) if mask is not None else None
@@ -276,16 +251,36 @@ def add_support_image(support_image, idx):
                 "mask": mask,
                 "color_map": color_map,
             }
-    if results is not None:
+    if results is not None and st.button("Add Support Image"):
+        example = SupportExample(support_image=support_image)
         if hasattr(results, "json_data") and results.json_data is not None:
             st.write("Extracting prompts from canvas")
-            st.session_state[SS.SUPPORT_SET][idx].prompts = results.json_data
-            st.session_state[SS.SUPPORT_SET][idx].reshape = shape
+            example.prompts = results.json_data
+            example.reshape = shape
         if isinstance(results, dict) and "mask" in results:
             st.write("Extracting prompts from mask")
-            st.session_state[SS.SUPPORT_SET][idx].prompts = results
-            st.session_state[SS.SUPPORT_SET][idx].reshape = shape
-
+            example.prompts = results
+            example.reshape = shape
+        st.session_state[SS.SUPPORT_SET].append(example)
+        st.session_state.pop("input_prompt_detection", None)
+        st.session_state.pop("mask_support", None)
+        st.session_state.pop("support_image", None)
+        st.write("Support image added")
+        
+        
+def preview_support_set(batch, preview_cols):
+    for i, elem in enumerate(st.session_state[SS.SUPPORT_SET]):
+        img = batch[BatchKeys.IMAGES][0][i]
+        masks = batch[BatchKeys.PROMPT_MASKS][0][i]
+        bboxes = batch[BatchKeys.PROMPT_BBOXES][0][i]
+        points = batch[BatchKeys.PROMPT_POINTS][0][i]
+        img = get_image(img)
+        img = draw_all(img, masks=masks, boxes=bboxes, points=points, colors=COLORS)
+        with preview_cols[i]:
+            if st.button(f"Remove Image {i+1}"):
+                reset_support(i)
+            st.image(img, caption=f"Support Image {i+1}", use_column_width=True)
+            
 
 def try_it_yourself(model, image_encoder):
     st.write("Upload the image the you want to segment")
@@ -302,22 +297,29 @@ def try_it_yourself(model, image_encoder):
                     # Save image in a temp file
                     st.image(image, caption=f"Query Image {i+1}", width=300)
     build_support_set()
+    if SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0:
+        preview_cols = st.columns((len(st.session_state[SS.SUPPORT_SET])))
+        batch = preprocess_support_set(
+                st.session_state[SS.SUPPORT_SET],
+                list(range(len(st.session_state[SS.CLASSES]))),
+                size=st.session_state.get("image_size", 1024),
+            )
+        preview_support_set(batch, preview_cols)
+
     if (
-        SS.SUPPORT_SET in st.session_state
+        SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0
         and SS.CLASSES in st.session_state
         and len(query_images) > 0
     ):
         batches = [
             preprocess_to_batch(
                 image,
-                st.session_state[SS.SUPPORT_SET],
-                list(range(len(st.session_state[SS.CLASSES]))),
+                batch.copy(),
                 size=st.session_state.get("image_size", 1024),
             )
             for image in images
         ]
         st.write(batches)
-        debug_write(batches[0]["images"][0][0])
         if st.button("Predict"):
             progress = st.progress(0)
             tabs = st.tabs([f"Query Image {i+1}" for i in range(len(batches))])
@@ -346,11 +348,15 @@ def main():
     accelerator = Accelerator()
     with st.sidebar:
         # load model
-        run_id = st.text_input("Run ID", "3ndl7had")
-        model = load_model(accelerator, run_id).model  # WrapperModule
-        image_encoder = st.selectbox("Image Encoder", options=["vit_sam_b", "vit_mae_b"])
-        st.number_input("Image size", min_value=1, max_value=1024, value=1024, step=1,  key="image_size")
-        image_encoder = load_image_encoder(image_encoder)
+        model_load_mode = st.radio("Load model", ["Hugging Face", "Wandb"], index=0)
+        if model_load_mode == "Hugging Face":
+            models = [model.id for model in list_models(author="pasqualedem") if model.id.startswith("pasqualedem/label_anything")]
+            checkpoint = st.selectbox("Model", models)
+        elif model_load_mode == "Wandb":
+            checkpoint = st.text_input("Wandb run id", "3ndl7had")
+        model = load_model(accelerator, checkpoint, model_load_mode)
+        st.session_state["image_size"] = 1024 #TODO remove this
+        image_encoder = model.image_encoder
         st.divider()
         st.json(st.session_state, expanded=False)
     tiy_tab, dataset_tab = st.tabs(["Try it yourself", "Built-in dataset"])

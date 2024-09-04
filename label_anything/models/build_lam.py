@@ -7,8 +7,12 @@
 import torch
 import torch.nn as nn
 
+from huggingface_hub import PyTorchModelHubMixin
+from transformers.configuration_utils import PretrainedConfig
+
 from label_anything.models.common import LayerNorm2d
 from label_anything.models.common import SAM_EMBED_DIM
+from label_anything.models.hfhub import has_config
 from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
 from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
@@ -26,6 +30,7 @@ from . import (
     RandomMatrixEncoder,
 )
 from .build_encoder import (
+    ENCODERS,
     build_encoder,
     build_vit_b,
     build_vit_h,
@@ -70,6 +75,7 @@ def build_lam_vit_b_imagenet_i21k(**kwargs):
         **kwargs,
     )
 
+
 def build_lam_no_vit(**kwargs):
     return _build_lam(
         build_vit=None,
@@ -77,11 +83,13 @@ def build_lam_no_vit(**kwargs):
         **kwargs,
     )
 
+
 def build_lam_dino_b8(**kwargs):
     return _build_lam(
         build_vit_dino_b8,
         **kwargs,
     )
+
 
 def _build_lam(
     build_vit,
@@ -357,3 +365,112 @@ def build_multilevel_lam(
         neck=None,
     )
     return lam
+
+
+class LabelAnythingConfig(PretrainedConfig):
+    def __init__(
+        self,
+        encoder,
+        checkpoint=None,
+        use_sam_checkpoint=False,
+        use_vit_sam_neck=True,
+        use_vit=True,
+        image_embed_dim=SAM_EMBED_DIM,
+        embed_dim=SAM_EMBED_DIM,
+        image_size=1024,
+        vit_patch_size=16,
+        class_attention=False,
+        example_attention=False,
+        example_class_attention=True,
+        class_embedding_dim=None,
+        spatial_convs=None,
+        encoder_attention_downsample_rate: int = 2,
+        decoder_attention_downsample_rate: int = 2,
+        classification_layer_downsample_rate: int = 8,
+        use_support_features_in_prompt_encoder: bool = True,
+        fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer" or "IdentityTransformer"
+        few_type="Prototype",  # "Prototype" or "Affinity" or "PrototypeAffinity"
+        class_fusion="sum",
+        transformer_keys_are_images=True,
+        transformer_feature_size=None,
+        class_encoder=None,
+        segment_example_logits=False,
+        dropout: float = 0.0,
+        binary=False,
+        custom_preprocess=True,
+    ):
+        super().__init__()
+        self.encoder = encoder
+        self.checkpoint = checkpoint
+        self.use_sam_checkpoint = use_sam_checkpoint
+        self.use_vit_sam_neck = use_vit_sam_neck
+        self.use_vit = use_vit
+        self.image_embed_dim = image_embed_dim
+        self.embed_dim = embed_dim
+        self.image_size = image_size
+        self.vit_patch_size = vit_patch_size
+        self.class_attention = class_attention
+        self.example_attention = example_attention
+        self.example_class_attention = example_class_attention
+        self.class_embedding_dim = class_embedding_dim
+        self.spatial_convs = spatial_convs
+        self.encoder_attention_downsample_rate = encoder_attention_downsample_rate
+        self.decoder_attention_downsample_rate = decoder_attention_downsample_rate
+        self.classification_layer_downsample_rate = classification_layer_downsample_rate
+        self.use_support_features_in_prompt_encoder = (
+            use_support_features_in_prompt_encoder
+        )
+        self.fusion_transformer = fusion_transformer
+        self.few_type = few_type
+        self.class_fusion = class_fusion
+        self.transformer_keys_are_images = transformer_keys_are_images
+        self.transformer_feature_size = transformer_feature_size
+        self.class_encoder = class_encoder
+        self.segment_example_logits = segment_example_logits
+        self.dropout = dropout
+        self.binary = binary
+        self.custom_preprocess = custom_preprocess
+
+
+class LabelAnything(nn.Module, PyTorchModelHubMixin):
+    @has_config
+    def __init__(
+        self,
+        encoder,
+        checkpoint=None,
+        use_sam_checkpoint=False,
+        use_vit_sam_neck=True,
+        use_vit=True,
+        image_embed_dim=SAM_EMBED_DIM,
+        embed_dim=SAM_EMBED_DIM,
+        image_size=1024,
+        vit_patch_size=16,
+        class_attention=False,
+        example_attention=False,
+        example_class_attention=True,
+        class_embedding_dim=None,
+        spatial_convs=None,
+        encoder_attention_downsample_rate: int = 2,
+        decoder_attention_downsample_rate: int = 2,
+        classification_layer_downsample_rate: int = 8,
+        use_support_features_in_prompt_encoder: bool = True,
+        fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer" or "IdentityTransformer"
+        few_type="Prototype",  # "Prototype" or "Affinity" or "PrototypeAffinity"
+        class_fusion="sum",
+        transformer_keys_are_images=True,
+        transformer_feature_size=None,
+        class_encoder=None,
+        segment_example_logits=False,
+        dropout: float = 0.0,
+        binary=False,
+        custom_preprocess=True,
+    ):
+        super().__init__()
+        build_vit = ENCODERS[encoder]
+        config = self.config.copy()
+        config["build_vit"] = build_vit
+        config.pop("encoder")
+        self.model = build_lam(**config)
+
+    def forward(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
