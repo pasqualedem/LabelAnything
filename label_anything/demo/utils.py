@@ -1,6 +1,7 @@
 import re
 import streamlit as st
 from PIL import Image
+import torch
 
 COLORS = [
     # blue
@@ -74,6 +75,11 @@ def open_rgb_image(path):
     img = img.convert("RGB") 
     return img
 
+def take_elem_from_batch(batch, idx):
+    return {
+        key: value[idx].unsqueeze(0) if isinstance(value, torch.Tensor) else [value[idx]]
+        for key, value in batch.items()
+        }
 
 class SupportExample(dict):
     img: Image

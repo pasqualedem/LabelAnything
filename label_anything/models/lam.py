@@ -154,6 +154,25 @@ class Lam(nn.Module):
         prompt_embeddings = embeddings[:, 1:]
 
         return query_embeddings, prompt_embeddings
+    
+    # Added to work with support images' embeddings only
+    def prepare_embeddings_example(self, batched_input):
+        if "embeddings" in batched_input:
+            embeddings = batched_input["embeddings"]
+            B, N, C, H, W = embeddings.shape
+            if self.neck is not None:
+                embeddings = rearrange(embeddings, "b n c h w -> (b n) c h w", b=B)
+                embeddings = self.neck(embeddings)
+                embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
+        elif "images" in batched_input:
+            B, N, C, H, W = batched_input["images"].shape
+            images = rearrange(batched_input["images"], "b n c h w -> (b n) c h w")
+            embeddings = self.image_encoder(images)
+            if self.neck is not None:
+                embeddings = self.neck(embeddings)
+            embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
+        else:
+            raise ValueError("Either 'images' or 'embeddings' must be provided.")
 
     def prepare_embeddings(self, batched_input, chunk_size=None):
         if "embeddings" in batched_input:

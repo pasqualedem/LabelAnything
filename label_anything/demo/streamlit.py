@@ -10,6 +10,7 @@ from streamlit_image_annotation import detection
 from streamlit_drawable_canvas import st_canvas
 from streamlit_tags import st_tags
 from huggingface_hub import list_models
+from PIL import Image
 
 from label_anything import LabelAnything
 from label_anything.data.dataset import LabelAnythingDataset, VariableBatchSampler
@@ -32,9 +33,11 @@ from label_anything.demo.utils import (
     get_color_from_class,
     open_rgb_image,
     debug_write,
+    take_elem_from_batch,
 )
 from label_anything.experiment.substitution import Substitutor
 from label_anything.models.build_encoder import build_vit_b, build_vit_b_mae
+from label_anything.models.explainer import LamExplainer
 from label_anything.utils.utils import ResultDict, load_yaml, torch_dict_load
 from label_anything.models import model_registry
 
@@ -81,6 +84,7 @@ preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
 class SS(StrEnum):
     SUPPORT_SET = "support_set"
     CLASSES = "classes"
+    RESULT = "result"
 
 
 @st.cache_resource
@@ -162,12 +166,6 @@ def build_support_set():
     st.write("Choose the classes you want to segment in the image")
     cols = st.columns(2)
     with cols[0]:
-        # classes = st_tags(
-        #     label=SS.CLASSES,
-        #     text="Type and press enter",
-        #     value=st.session_state.get(SS.CLASSES, []),
-        #     suggestions=["person", "car", "dog", "cat", "bus", "truck"],
-        # )
         new_class = st.text_input("Type and press enter to add a class")
         classes = st.session_state.get(SS.CLASSES, [])
         if new_class not in classes and new_class != "":
@@ -285,7 +283,34 @@ def preview_support_set(batch, preview_cols):
             if st.button(f"Remove Image {i+1}"):
                 reset_support(i)
             st.image(img, caption=f"Support Image {i+1}", use_column_width=True)
-            
+
+def explain(model, batch, result, i):
+    batch = take_elem_from_batch(batch, i)
+    st.write("Explain the prediction")
+    query_image = get_image(batch[BatchKeys.IMAGES][0][0])
+    shape = get_preprocess_shape(
+        query_image.size[0], query_image.size[1], LONG_SIDE_LENGTH
+    )
+    results = st_canvas(
+        fill_color="white",  # Fixed fill color with some opacity
+        stroke_color="black",  # Fixed stroke color with full opacity
+        background_image=query_image,
+        drawing_mode="point",
+        key="explain_input",
+        width=shape[1],
+        height=shape[0],
+        stroke_width=2,
+        update_streamlit=False,
+    )
+    points = [
+        (point["left"], point["top"])
+        for point in results.json_data['objects']
+    ]
+    st.json(points, expanded=False)
+    explainer = LamExplainer(model)
+    class_to_explain = st.session_state[SS.CLASSES].index(st.selectbox("Select the class to explain", st.session_state[SS.CLASSES])) + 1
+    st.write(f"Explaining class {class_to_explain}")
+    explainer.explain(batch, points[0], class_to_explain)
 
 def try_it_yourself(model, image_encoder):
     st.write("Upload the image the you want to segment")
@@ -326,11 +351,16 @@ def try_it_yourself(model, image_encoder):
         ]
         st.write(batches)
         if st.button("Predict"):
+            st.session_state[SS.RESULT] = []
             progress = st.progress(0)
+            for batch in batches:
+                result = predict(model, image_encoder, batch)
+                st.session_state[SS.RESULT].append(result)
+                progress.progress((i + 1) / len(batches))
+        if SS.RESULT in st.session_state:
             tabs = st.tabs([f"Query Image {i+1}" for i in range(len(batches))])
-            for i, batch in enumerate(batches):
+            for i, (batch, result) in enumerate(zip(batches, st.session_state[SS.RESULT])):        
                 with tabs[i]:
-                    result = predict(model, image_encoder, batch)
                     pred = result[ResultDict.LOGITS].argmax(dim=1)
                     st.json(result, expanded=False)
                     plots, titles = plot_seg(
@@ -343,7 +373,8 @@ def try_it_yourself(model, image_encoder):
                     cols = st.columns(2)
                     cols[0].image(plots[0], caption=titles[0], use_column_width=True)
                     cols[1].image(plots[1], caption=titles[1], use_column_width=True)
-                    progress.progress((i + 1) / len(batches))
+                    if st.toggle("Show explanation", False):
+                        explain(model, batch, result, i)
 
 
 def main():
