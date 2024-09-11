@@ -2,6 +2,7 @@ import re
 import streamlit as st
 from PIL import Image
 import torch
+from huggingface_hub import list_models
 
 COLORS = [
     # blue
@@ -98,3 +99,15 @@ class SupportExample(dict):
         
     def draw(self, draw):
         raise NotImplementedError
+    
+
+DEFAULT_MODELS = [
+    "pasqualedem/label_anything_sam_1024_coco"   
+]
+    
+    
+def retrieve_models():
+    try:
+        return [model.id for model in list_models(author="pasqualedem") if model.id.startswith("pasqualedem/label_anything")]
+    except Exception as e:
+        return DEFAULT_MODELS

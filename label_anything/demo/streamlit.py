@@ -4,12 +4,7 @@ import pandas as pd
 import streamlit as st
 import torch
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from streamlit_image_annotation import detection
 from streamlit_drawable_canvas import st_canvas
-from streamlit_tags import st_tags
-from huggingface_hub import list_models
 from PIL import Image
 
 from label_anything import LabelAnything
@@ -33,6 +28,7 @@ from label_anything.demo.utils import (
     get_color_from_class,
     open_rgb_image,
     debug_write,
+    retrieve_models,
     take_elem_from_batch,
 )
 from label_anything.experiment.substitution import Substitutor
@@ -306,11 +302,11 @@ def explain(model, batch, result, i):
         (point["left"], point["top"])
         for point in results.json_data['objects']
     ]
-    st.json(points, expanded=False)
-    explainer = LamExplainer(model)
-    class_to_explain = st.session_state[SS.CLASSES].index(st.selectbox("Select the class to explain", st.session_state[SS.CLASSES])) + 1
-    st.write(f"Explaining class {class_to_explain}")
-    explainer.explain(batch, points[0], class_to_explain)
+    if points:
+        explainer = LamExplainer(model)
+        class_to_explain = st.session_state[SS.CLASSES].index(st.selectbox("Select the class to explain", st.session_state[SS.CLASSES])) + 1
+        st.write(f"Explaining class {class_to_explain}")
+        explainer.explain(batch, points[0], class_to_explain)
 
 def try_it_yourself(model, image_encoder):
     st.write("Upload the image the you want to segment")
@@ -386,7 +382,7 @@ def main():
         # load model
         model_load_mode = st.radio("Load model", ["Hugging Face", "Wandb"], index=0)
         if model_load_mode == "Hugging Face":
-            models = [model.id for model in list_models(author="pasqualedem") if model.id.startswith("pasqualedem/label_anything")]
+            models = retrieve_models()
             checkpoint = st.selectbox("Model", models)
         elif model_load_mode == "Wandb":
             checkpoint = st.text_input("Wandb run id", "3ndl7had")

@@ -9,6 +9,19 @@ from label_anything.data.utils import BatchKeys
 from label_anything.models.lam import Lam
 
 
+GRADIENT_KEYS = [
+    BatchKeys.IMAGES,
+    BatchKeys.PROMPT_BBOXES,
+    BatchKeys.PROMPT_MASKS,
+    BatchKeys.PROMPT_POINTS,
+]
+NON_GRADIENT_KEYS = [
+    BatchKeys.FLAG_POINTS,
+    BatchKeys.FLAG_BBOXES,
+    BatchKeys.FLAG_MASKS,
+    BatchKeys.DIMS,
+]
+
 class LamExplainer(nn.Module):
     def __init__(self, model: Lam):
         super(LamExplainer, self).__init__()
@@ -96,7 +109,12 @@ class LamExplainer(nn.Module):
         query_img = batch[BatchKeys.IMAGES][0]
         self.prepare(query_img, coord)
         ig = IntegratedGradients(self)
-        input = (query_img, )
-        attr = ig.attribute(input, target=target)
+        # Get a tuple from the batch
+        tuple_mapping = {key: i for i, key in enumerate(batch.keys())}
+        input = tuple(batch[key]for key in batch.keys() if key in GRADIENT_KEYS)
+        additional_input = tuple(batch[key] for key in batch.keys() if key in NON_GRADIENT_KEYS)
+        additional_input = tuple(additional_input + (tuple_mapping,))
+        
+        attr = ig.attribute(input, additional_forward_args=additional_input, target=target)
         return attr
     
