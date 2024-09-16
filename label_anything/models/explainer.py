@@ -19,6 +19,7 @@ NON_GRADIENT_KEYS = [
     BatchKeys.FLAG_POINTS,
     BatchKeys.FLAG_BBOXES,
     BatchKeys.FLAG_MASKS,
+    BatchKeys.FLAG_EXAMPLES,
     BatchKeys.DIMS,
 ]
 
@@ -88,7 +89,7 @@ class LamExplainer(nn.Module):
         #     flag_examples=flag_examples,
         # )
         class_embeddings = self.model._get_class_embeddings(pe_result)
-
+        b, c, h, w = self.query_embeddings.shape
         class_embeddings, self.query_embeddings = self.transformer(
             self.query_embeddings, self.model.get_dense_pe(), class_embeddings
         )

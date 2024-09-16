@@ -102,7 +102,8 @@ class SupportExample(dict):
     
 
 DEFAULT_MODELS = [
-    "pasqualedem/label_anything_sam_1024_coco"   
+    "pasqualedem/label_anything_sam_1024_coco",
+    "pasqualedem/label_anything_256_sam_1024_coco", 
 ]
     
     

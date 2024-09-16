@@ -120,7 +120,7 @@ def extract_prompts_from_canvas(canvas, source_shape, target_shape):
     return prompts
 
 
-def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=True):
+def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=True, device="cuda"):
     classes = [-1] + classes
     prompts_processor = PromptsProcessor(custom_preprocess=custom_preprocess)
     transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
@@ -185,25 +185,25 @@ def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=Tr
     images = torch.stack([transforms(img) for img in images])
 
     return {
-        utils.BatchKeys.IMAGES: images.unsqueeze(0).cuda(),
-        utils.BatchKeys.PROMPT_MASKS: masks.unsqueeze(0).cuda(),
-        utils.BatchKeys.FLAG_MASKS: flag_masks.unsqueeze(0).cuda(),
-        utils.BatchKeys.PROMPT_POINTS: points.unsqueeze(0).cuda(),
-        utils.BatchKeys.FLAG_POINTS: flag_points.unsqueeze(0).cuda(),
-        utils.BatchKeys.PROMPT_BBOXES: bboxes.unsqueeze(0).cuda(),
-        utils.BatchKeys.FLAG_BBOXES: flag_bboxes.unsqueeze(0).cuda(),
-        utils.BatchKeys.FLAG_EXAMPLES: flag_examples.unsqueeze(0).cuda(),
-        utils.BatchKeys.DIMS: dims.unsqueeze(0).cuda(),
+        utils.BatchKeys.IMAGES: images.unsqueeze(0).to(device),
+        utils.BatchKeys.PROMPT_MASKS: masks.unsqueeze(0).to(device),
+        utils.BatchKeys.FLAG_MASKS: flag_masks.unsqueeze(0).to(device),
+        utils.BatchKeys.PROMPT_POINTS: points.unsqueeze(0).to(device),
+        utils.BatchKeys.FLAG_POINTS: flag_points.unsqueeze(0).to(device),
+        utils.BatchKeys.PROMPT_BBOXES: bboxes.unsqueeze(0).to(device),
+        utils.BatchKeys.FLAG_BBOXES: flag_bboxes.unsqueeze(0).to(device),
+        utils.BatchKeys.FLAG_EXAMPLES: flag_examples.unsqueeze(0).to(device),
+        utils.BatchKeys.DIMS: dims.unsqueeze(0).to(device),
         utils.BatchKeys.CLASSES: [classes[1:]],
     }
 
-def preprocess_to_batch(query_image, batch, size=1024):
+def preprocess_to_batch(query_image, batch, size=1024, device="cuda"):
     transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
     dims = batch[utils.BatchKeys.DIMS].clone()
     images = batch[utils.BatchKeys.IMAGES].clone()
-    dims = torch.cat([torch.tensor([[[query_image.size[1], query_image.size[0]]]], device="cuda"), dims], dim=1)
+    dims = torch.cat([torch.tensor([[[query_image.size[1], query_image.size[0]]]], device=device), dims], dim=1)
     images = torch.cat(
-        [transforms(query_image).unsqueeze(0).unsqueeze(0).cuda(), images],
+        [transforms(query_image).unsqueeze(0).unsqueeze(0).to(device), images],
         dim=1,
     )
     batch[utils.BatchKeys.IMAGES] = images

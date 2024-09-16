@@ -329,6 +329,7 @@ def try_it_yourself(model, image_encoder):
                 st.session_state[SS.SUPPORT_SET],
                 list(range(len(st.session_state[SS.CLASSES]))),
                 size=st.session_state.get("image_size", 1024),
+                device=st.session_state.get("device", "cpu"),
             )
         preview_support_set(batch, preview_cols)
 
@@ -342,6 +343,7 @@ def try_it_yourself(model, image_encoder):
                 image,
                 batch.copy(),
                 size=st.session_state.get("image_size", 1024),
+                device=st.session_state.get("device", "cpu"),
             )
             for image in images
         ]
@@ -378,8 +380,10 @@ def main():
     st.title("Label Anything")
     st.sidebar.title("Settings")
     accelerator = Accelerator()
+    st.session_state["device"] = accelerator.device
     with st.sidebar:
         # load model
+        st.write("Working on device:", accelerator.device)
         model_load_mode = st.radio("Load model", ["Hugging Face", "Wandb"], index=0)
         if model_load_mode == "Hugging Face":
             models = retrieve_models()
