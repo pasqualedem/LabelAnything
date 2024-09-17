@@ -253,7 +253,7 @@ def plot_results():
         cols[i % 2].image(plot, caption=titles[i], use_column_width=True)
 
 
-def built_in_dataset(accelerator, model):
+def built_in_dataset(model):
     st.write("## Under maintanaince")
     return
     st.text_input("Image directory", IMG_DIR, key="img_dir")

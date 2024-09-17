@@ -112,10 +112,10 @@ def get_data(_accelerator):
 
 
 @st.cache_resource
-def load_model(_accelerator: Accelerator, checkpoint, model_load_mode):
+def load_model(checkpoint, model_load_mode, device):
     if model_load_mode == "Hugging Face":
         model = LabelAnything.from_pretrained(checkpoint)
-        model = _accelerator.prepare(model)
+        model.to(device)
         return model.model
     elif model_load_mode == "Wandb":
         folder = "best"
@@ -134,13 +134,13 @@ def load_model(_accelerator: Accelerator, checkpoint, model_load_mode):
         model = WrapperModule(model, None)
         model_state_dict = torch_dict_load(model_file)
         unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
-        model = _accelerator.prepare(model)
+        model.to(device)
         if unmatched_keys.missing_keys:
             st.warning(f"Missing keys: {unmatched_keys.missing_keys}")
         if unmatched_keys.unexpected_keys and unmatched_keys.unexpected_keys != [
-                    "loss.prompt_components.prompt_contrastive.t_prime",
-                    "loss.prompt_components.prompt_contrastive.bias",
-                ]:
+            "loss.prompt_components.prompt_contrastive.t_prime",
+            "loss.prompt_components.prompt_contrastive.bias",
+        ]:
             st.warning(f"Unexpected keys: {unmatched_keys.unexpected_keys}")
         return model.model
     else:
@@ -244,7 +244,11 @@ def add_support_image(support_image):
             key="mask_support",
         )
         mask = np.array(open_rgb_image(mask)) if mask is not None else None
-        st.image(mask, caption="Mask", use_column_width=True) if mask is not None else None
+        (
+            st.image(mask, caption="Mask", use_column_width=True)
+            if mask is not None
+            else None
+        )
         if mask is not None:
             results = {
                 "mask": mask,
@@ -265,8 +269,8 @@ def add_support_image(support_image):
         st.session_state.pop("mask_support", None)
         st.session_state.pop("support_image", None)
         st.write("Support image added")
-        
-        
+
+
 def preview_support_set(batch, preview_cols):
     for i, elem in enumerate(st.session_state[SS.SUPPORT_SET]):
         img = batch[BatchKeys.IMAGES][0][i]
@@ -280,8 +284,8 @@ def preview_support_set(batch, preview_cols):
                 reset_support(i)
             st.image(img, caption=f"Support Image {i+1}", use_column_width=True)
 
-def explain(model, batch, result, i):
-    batch = take_elem_from_batch(batch, i)
+
+def explain(model, batch):
     st.write("Explain the prediction")
     query_image = get_image(batch[BatchKeys.IMAGES][0][0])
     shape = get_preprocess_shape(
@@ -298,15 +302,26 @@ def explain(model, batch, result, i):
         stroke_width=2,
         update_streamlit=False,
     )
-    points = [
-        (point["left"], point["top"])
-        for point in results.json_data['objects']
-    ]
-    if points:
-        explainer = LamExplainer(model)
-        class_to_explain = st.session_state[SS.CLASSES].index(st.selectbox("Select the class to explain", st.session_state[SS.CLASSES])) + 1
-        st.write(f"Explaining class {class_to_explain}")
-        explainer.explain(batch, points[0], class_to_explain)
+    if results is not None and results.json_data is not None:
+        if points := [
+        (point["left"], point["top"]) for point in results.json_data["objects"]
+        ]:
+            explainer = LamExplainer(model)
+            class_to_explain = (
+                st.session_state[SS.CLASSES].index(
+                    st.selectbox(
+                        "Select the class to explain", st.session_state[SS.CLASSES]
+                    )
+                )
+                + 1
+            )
+            st.write(f"Explaining class {class_to_explain}")
+            with st.spinner("Explaining..."):
+                explanation = explainer.explain(batch, points[0], class_to_explain)
+            st.write(explanation)
+        else:
+            st.write("No points selected")
+
 
 def try_it_yourself(model, image_encoder):
     st.write("Upload the image the you want to segment")
@@ -325,81 +340,106 @@ def try_it_yourself(model, image_encoder):
     build_support_set()
     if SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0:
         preview_cols = st.columns((len(st.session_state[SS.SUPPORT_SET])))
-        batch = preprocess_support_set(
-                st.session_state[SS.SUPPORT_SET],
-                list(range(len(st.session_state[SS.CLASSES]))),
-                size=st.session_state.get("image_size", 1024),
-                device=st.session_state.get("device", "cpu"),
-            )
-        preview_support_set(batch, preview_cols)
+        support_batch = preprocess_support_set(
+            st.session_state[SS.SUPPORT_SET],
+            list(range(len(st.session_state[SS.CLASSES]))),
+            size=st.session_state.get("image_size", 1024),
+            device=st.session_state.get("device", "cpu"),
+        )
+        preview_support_set(support_batch, preview_cols)
 
     if (
-        SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0
+        SS.SUPPORT_SET in st.session_state
+        and len(st.session_state[SS.SUPPORT_SET]) > 0
         and SS.CLASSES in st.session_state
         and len(query_images) > 0
     ):
         batches = [
             preprocess_to_batch(
                 image,
-                batch.copy(),
+                support_batch.copy(),
                 size=st.session_state.get("image_size", 1024),
                 device=st.session_state.get("device", "cpu"),
             )
             for image in images
         ]
         st.write(batches)
+        st.write("## Predictions")
         if st.button("Predict"):
             st.session_state[SS.RESULT] = []
             progress = st.progress(0)
-            for batch in batches:
-                result = predict(model, image_encoder, batch)
+            for support_batch in batches:
+                result = predict(model, image_encoder, support_batch)
                 st.session_state[SS.RESULT].append(result)
                 progress.progress((i + 1) / len(batches))
         if SS.RESULT in st.session_state:
             tabs = st.tabs([f"Query Image {i+1}" for i in range(len(batches))])
-            for i, (batch, result) in enumerate(zip(batches, st.session_state[SS.RESULT])):        
+            for i, (support_batch, result) in enumerate(
+                zip(batches, st.session_state[SS.RESULT])
+            ):
                 with tabs[i]:
                     pred = result[ResultDict.LOGITS].argmax(dim=1)
                     st.json(result, expanded=False)
                     plots, titles = plot_seg(
-                        batch,
+                        support_batch,
                         pred,
                         COLORS,
-                        dims=batch[BatchKeys.DIMS],
+                        dims=support_batch[BatchKeys.DIMS],
                         classes=st.session_state[SS.CLASSES],
                     )
                     cols = st.columns(2)
-                    cols[0].image(plots[0], caption=titles[0], use_column_width=True)
-                    cols[1].image(plots[1], caption=titles[1], use_column_width=True)
-                    if st.toggle("Show explanation", False):
-                        explain(model, batch, result, i)
+                    cols[0].image(
+                        plots[0], caption=titles[0], use_column_width=True
+                    )
+                    cols[1].image(
+                        plots[1], caption=titles[1], use_column_width=True
+                    )
+        if st.toggle("Explain prediction"):
+            explain(model, batches[i])
+
+
+def handle_gpu_memory(device):
+    # Display GPU memory
+    if device == "cuda":
+        allocated = f"{torch.cuda.memory_allocated() / 1e9:.2f}"
+        total = f"{torch.cuda.get_device_properties(0).total_memory / 1e9:.2f}"
+        st.progress(
+            torch.cuda.memory_allocated()
+            / torch.cuda.get_device_properties(0).total_memory,
+            text=f"GPU memory allocated: {allocated} GB / {total} GB",
+        )
+    if st.button("Clear GPU cache") and device == "cuda":
+        torch.cuda.empty_cache()
 
 
 def main():
     st.set_page_config(layout="wide", page_title="Label Anything")
     st.title("Label Anything")
     st.sidebar.title("Settings")
-    accelerator = Accelerator()
-    st.session_state["device"] = accelerator.device
     with st.sidebar:
+        if cuda := torch.cuda.is_available():
+            use_gpu = st.checkbox("Use GPU", True)
+        device = "cuda" if cuda and use_gpu else "cpu"
+        st.session_state["device"] = device
         # load model
-        st.write("Working on device:", accelerator.device)
+        st.write("Working on device:", device)
         model_load_mode = st.radio("Load model", ["Hugging Face", "Wandb"], index=0)
         if model_load_mode == "Hugging Face":
             models = retrieve_models()
             checkpoint = st.selectbox("Model", models)
         elif model_load_mode == "Wandb":
             checkpoint = st.text_input("Wandb run id", "3ndl7had")
-        model = load_model(accelerator, checkpoint, model_load_mode)
-        st.session_state["image_size"] = 1024 #TODO remove this
+        model = load_model(checkpoint, model_load_mode, device)
+        st.session_state["image_size"] = 1024  # TODO remove this
         image_encoder = model.image_encoder
         st.divider()
         st.json(st.session_state, expanded=False)
+        handle_gpu_memory(device)
     tiy_tab, dataset_tab = st.tabs(["Try it yourself", "Built-in dataset"])
     with tiy_tab:
         try_it_yourself(model, image_encoder)
     with dataset_tab:
-        built_in_dataset(accelerator, model)
+        built_in_dataset(model)
 
 
 if __name__ == "__main__":

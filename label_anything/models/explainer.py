@@ -6,7 +6,9 @@ import torch.nn as nn
 from captum.attr import IntegratedGradients
 
 from label_anything.data.utils import BatchKeys
+from label_anything.demo.utils import debug_write
 from label_anything.models.lam import Lam
+from label_anything.models.mask_decoder import MaskDecoderLam
 
 
 GRADIENT_KEYS = [
@@ -23,12 +25,15 @@ NON_GRADIENT_KEYS = [
     BatchKeys.DIMS,
 ]
 
+
 class LamExplainer(nn.Module):
     def __init__(self, model: Lam):
         super(LamExplainer, self).__init__()
         self.model = model
-        self.fc = nn.Linear(512, 1)
         
+        self.fc = nn.Linear(1, 1, bias=False)
+        self.query_embeddings = None
+
     def prepare(self, query_img, coord):
         x, y = coord
         feat_map = self.model.neck(self.model.image_encoder(query_img))
@@ -36,42 +41,30 @@ class LamExplainer(nn.Module):
         y_multiplier = feat_map.shape[-2] / query_img.shape[-2]
         x = int(x * x_multiplier)
         y = int(y * y_multiplier)
+        self.query_embeddings = feat_map
         # Needed due to some trasformation applied to query embeddings
         upscaled_feat_map = self.model.mask_decoder.output_upscaling(feat_map)
         query_embeddings = self.model.mask_decoder.spatial_convs(upscaled_feat_map)
 
-        self.model.mask_decoder.query_embeddings = feat_map
-        #print('Feature map:', feat_map.shape)
-
         # Step2
         feature_vector = query_embeddings[0, :, x, y]
         self.fc.weight = nn.Parameter(feature_vector)
-        
-    def _classify(self, query_embeddings, class_embeddings, flag_examples):
-        b, d, h, w = query_embeddings.shape
-        _, c, _ = class_embeddings.shape
-        seg = self.fc(class_embeddings)
-        '''seg = (class_embeddings @ self.query_embeddings.view(b, d, h * w)).view(
-            b, -1, h, w
-        )'''
-        if self.model.mask_decoder.segment_example_logits:
-            seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
-            seg[flag_examples.logical_not()] = float("-inf")
-            seg = seg.max(dim=1).values
-        return seg
 
     def forward(
-    self, *batched_input_tuple: Tuple[torch.Tensor, ...]
+        self, *batched_input_tuple: Tuple[torch.Tensor, ...]
     ) -> List[Dict[str, torch.Tensor]]:
-        
+
         tuple_mapping = batched_input_tuple[-1]
 
         # Prepare batched_input in the format expected by self._forward
         batched_input = {
             key: batched_input_tuple[value] for key, value in tuple_mapping.items()
         }
+        print("Batched input:", batched_input)
 
         prompt_embeddings = self.model.prepare_embeddings_example(batched_input)
+        print("Prompt embeddings:", prompt_embeddings)
+
         points, boxes, masks, flag_examples = self.model.prepare_prompts(batched_input)
 
         pe_result = self.model.prompt_encoder(
@@ -88,34 +81,46 @@ class LamExplainer(nn.Module):
         #     class_embeddings=pe_result,
         #     flag_examples=flag_examples,
         # )
-        class_embeddings = self.model._get_class_embeddings(pe_result)
         b, c, h, w = self.query_embeddings.shape
-        class_embeddings, self.query_embeddings = self.transformer(
+        mask_decoder: MaskDecoderLam = self.model.mask_decoder
+        class_embeddings = mask_decoder._get_class_embeddings(pe_result)
+        class_embeddings, _ = mask_decoder.transformer(
             self.query_embeddings, self.model.get_dense_pe(), class_embeddings
         )
-        self.query_embeddings = rearrange(self.query_embeddings, "b (h w) c -> b c h w", h=h)
 
-        upscaled_embeddings, class_embeddings = self.model.mask_decoder._upscale(
-            self.query_embeddings, class_embeddings
-        )
-        upscaled_embeddings = self.model.mask_decoder._spatial_convs(upscaled_embeddings)
-        seg = self._classify(upscaled_embeddings, class_embeddings, flag_examples)
+        class_embeddings = mask_decoder.class_mlp(class_embeddings)
+        print("Class embeddings:", class_embeddings)
+        print("fc weights:", self.fc.weight)
+        print("oooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
+        seg = self.fc(class_embeddings)
 
         if "flag_gts" in batched_input:
             seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-    
+
         return seg
-    
+
     def explain(self, batch, coord, target):
-        query_img = batch[BatchKeys.IMAGES][0]
+        batch = batch.copy()
+        query_img = batch[BatchKeys.IMAGES][:, 0]
+        support_imgs = batch[BatchKeys.IMAGES][:, 1:]
+        batch[BatchKeys.IMAGES] = support_imgs
         self.prepare(query_img, coord)
         ig = IntegratedGradients(self)
         # Get a tuple from the batch
-        tuple_mapping = {key: i for i, key in enumerate(batch.keys())}
-        input = tuple(batch[key]for key in batch.keys() if key in GRADIENT_KEYS)
-        additional_input = tuple(batch[key] for key in batch.keys() if key in NON_GRADIENT_KEYS)
-        additional_input = tuple(additional_input + (tuple_mapping,))
-        
-        attr = ig.attribute(input, additional_forward_args=additional_input, target=target)
-        return attr
-    
+        main_input = {key: batch[key] for key in batch.keys() if key in GRADIENT_KEYS}
+        additional_input = {
+            key: batch[key] for key in batch.keys() if key in NON_GRADIENT_KEYS
+        }
+        tuple_mapping = {key: i for i, key in enumerate(main_input.keys())} | {
+            key: i + len(main_input) for i, key in enumerate(additional_input.keys())
+        }
+        main_input = tuple(main_input.values())
+        additional_input = tuple(additional_input.values())
+        additional_input += (tuple_mapping,)
+
+        return ig.attribute(
+            main_input,
+            additional_forward_args=additional_input,
+            target=target,
+            internal_batch_size=1,
+        )

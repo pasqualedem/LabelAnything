@@ -173,6 +173,7 @@ class Lam(nn.Module):
             embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         else:
             raise ValueError("Either 'images' or 'embeddings' must be provided.")
+        return embeddings
 
     def prepare_embeddings(self, batched_input, chunk_size=None):
         if "embeddings" in batched_input:
