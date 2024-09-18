@@ -1,9 +1,10 @@
+import math
 from typing import Dict, List, Tuple
 from einops import rearrange
 import torch
 import torch.nn as nn
 
-from captum.attr import IntegratedGradients
+from captum.attr import IntegratedGradients, Saliency, LayerGradCam
 
 from label_anything.data.utils import BatchKeys
 from label_anything.demo.utils import debug_write
@@ -25,14 +26,32 @@ NON_GRADIENT_KEYS = [
     BatchKeys.DIMS,
 ]
 
+class LamLayerGradCam(LayerGradCam):
+    def attribute(self, *args, **kwargs):
+        inputs = args[0]
+        b, m, c, h, w = inputs[0].shape
+        attrs = super().attribute(*args, **kwargs)
+        debug_write("attrs", attrs)
+        size = int(math.sqrt(attrs[0].shape[0]))
+        return (rearrange(attrs.sum(dim=-1), " (b m c)(h w) -> b m c h w", h=size, b=b, m=m, c=c),)
 
 class LamExplainer(nn.Module):
-    def __init__(self, model: Lam):
+    methods = {
+        "integrated gradients": (IntegratedGradients, {}, {"n_steps": 100, "internal_batch_size": 1}),
+        "saliency": (Saliency, {}, {}),
+        "gradcam": (LamLayerGradCam, {}, {"attr_dim_summation": False}),
+    }
+    def __init__(self, model: Lam, method: str = "ig"):
         super(LamExplainer, self).__init__()
         self.model = model
-        
         self.fc = nn.Linear(1, 1, bias=False)
         self.query_embeddings = None
+        
+        method, init_kwargs, kwargs = self.methods[method]
+        if method == LamLayerGradCam:
+            init_kwargs["layer"] = self.model.prompt_encoder.transformer.layers[-1].cross_attn_image_to_token.q_proj
+        self.method = method(self, **init_kwargs)
+        self.method_kwargs = kwargs
 
     def prepare(self, query_img, coord):
         x, y = coord
@@ -60,11 +79,8 @@ class LamExplainer(nn.Module):
         batched_input = {
             key: batched_input_tuple[value] for key, value in tuple_mapping.items()
         }
-        print("Batched input:", batched_input)
 
         prompt_embeddings = self.model.prepare_embeddings_example(batched_input)
-        print("Prompt embeddings:", prompt_embeddings)
-
         points, boxes, masks, flag_examples = self.model.prepare_prompts(batched_input)
 
         pe_result = self.model.prompt_encoder(
@@ -84,20 +100,12 @@ class LamExplainer(nn.Module):
         b, c, h, w = self.query_embeddings.shape
         mask_decoder: MaskDecoderLam = self.model.mask_decoder
         class_embeddings = mask_decoder._get_class_embeddings(pe_result)
-        class_embeddings, _ = mask_decoder.transformer(
+        class_embeddings, self.query_embeddings = mask_decoder.transformer(
             self.query_embeddings, self.model.get_dense_pe(), class_embeddings
         )
 
         class_embeddings = mask_decoder.class_mlp(class_embeddings)
-        print("Class embeddings:", class_embeddings)
-        print("fc weights:", self.fc.weight)
-        print("oooooooooooooooooooooooooooooooooooooooooooooooooooooooo")
-        seg = self.fc(class_embeddings)
-
-        if "flag_gts" in batched_input:
-            seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-
-        return seg
+        return self.fc(class_embeddings)
 
     def explain(self, batch, coord, target):
         batch = batch.copy()
@@ -105,9 +113,17 @@ class LamExplainer(nn.Module):
         support_imgs = batch[BatchKeys.IMAGES][:, 1:]
         batch[BatchKeys.IMAGES] = support_imgs
         self.prepare(query_img, coord)
-        ig = IntegratedGradients(self)
         # Get a tuple from the batch
         main_input = {key: batch[key] for key in batch.keys() if key in GRADIENT_KEYS}
+
+        # Remove flag 0 tensors
+        if BatchKeys.FLAG_MASKS in batch and batch[BatchKeys.FLAG_MASKS].sum() == 0:
+            del main_input[BatchKeys.PROMPT_MASKS]
+        if BatchKeys.FLAG_BBOXES in batch and batch[BatchKeys.FLAG_BBOXES].sum() == 0:
+            del main_input[BatchKeys.PROMPT_BBOXES]
+        if BatchKeys.FLAG_POINTS in batch and batch[BatchKeys.FLAG_POINTS].sum() == 0:
+            del main_input[BatchKeys.PROMPT_POINTS]
+
         additional_input = {
             key: batch[key] for key in batch.keys() if key in NON_GRADIENT_KEYS
         }
@@ -118,9 +134,10 @@ class LamExplainer(nn.Module):
         additional_input = tuple(additional_input.values())
         additional_input += (tuple_mapping,)
 
-        return ig.attribute(
+        attribution_tuple = self.method.attribute(
             main_input,
             additional_forward_args=additional_input,
             target=target,
-            internal_batch_size=1,
+            **self.method_kwargs,
         )
+        return dict(zip(tuple_mapping.keys(), attribution_tuple))
