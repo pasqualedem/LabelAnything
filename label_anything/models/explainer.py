@@ -97,12 +97,14 @@ class LamExplainer(nn.Module):
         #     class_embeddings=pe_result,
         #     flag_examples=flag_examples,
         # )
+        
         b, c, h, w = self.query_embeddings.shape
         mask_decoder: MaskDecoderLam = self.model.mask_decoder
         class_embeddings = mask_decoder._get_class_embeddings(pe_result)
         class_embeddings, self.query_embeddings = mask_decoder.transformer(
             self.query_embeddings, self.model.get_dense_pe(), class_embeddings
         )
+        self.query_embeddings = rearrange(self.query_embeddings, "b (h w) c -> b c h w", h=h, w=w)
 
         class_embeddings = mask_decoder.class_mlp(class_embeddings)
         return self.fc(class_embeddings)

@@ -357,10 +357,12 @@ def show_explanation(batch, explanation):
     for k, img in enumerate(img_attr):
         original_im_mat = np.transpose(batch[BatchKeys.IMAGES][0][k+1].cpu().detach().numpy(), (1, 2, 0))
         attributions_img = np.transpose(img.cpu().detach().numpy(), (1, 2, 0))
+        attr_total = np.sum(np.abs(attributions_img), axis=2, keepdims=True)
         fig, ax = visualization.visualize_image_attr_multiple(attributions_img, original_im_mat, 
                                                 ["original_image", "heat_map"], ["all", "absolute_value"], 
                                                 titles=["Original Image", "Attribution Magnitude"],
                                                 show_colorbar=True)
+        st.write(f"Explanation for image {k+1}, Total magnitude: {attr_total.sum()}")
         st.pyplot(fig)
 
 
