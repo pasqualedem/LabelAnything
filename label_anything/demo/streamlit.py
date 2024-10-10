@@ -20,6 +20,16 @@ import numpy as np
 import os
 
 import lovely_tensors as lt
+
+from captum.attr import (
+    IntegratedGradients,
+    LayerIntegratedGradients,
+    TokenReferenceBase,
+    configure_interpretable_embedding_layer,
+    remove_interpretable_embedding_layer,
+    visualization
+)
+
 from label_anything.demo.preprocess import preprocess_support_set, preprocess_to_batch
 from label_anything.demo.utils import (
     COLORS,
@@ -306,7 +316,6 @@ def explain(model, batch):
         if points := [
         (point["left"], point["top"]) for point in results.json_data["objects"]
         ]:
-            explainer = LamExplainer(model)
             class_to_explain = (
                 st.session_state[SS.CLASSES].index(
                     st.selectbox(
@@ -315,12 +324,46 @@ def explain(model, batch):
                 )
                 + 1
             )
+            method = st.selectbox("Select the method", LamExplainer.methods.keys())
+            explainer = LamExplainer(model, method=method)
             st.write(f"Explaining class {class_to_explain}")
-            with st.spinner("Explaining..."):
-                explanation = explainer.explain(batch, points[0], class_to_explain)
-            st.write(explanation)
+            if st.button("Explain"):
+                explanation = compute_explanation(points, explainer, batch, class_to_explain)
+                show_explanation(batch, explanation)
         else:
             st.write("No points selected")
+
+
+# TODO Rename this here and in `explain`
+def compute_explanation(points, explainer: LamExplainer, batch, class_to_explain):
+    progress = st.progress(0)
+    explanations = []
+    for pi, point in enumerate(points):
+        explanation = explainer.explain(batch, point, class_to_explain)
+        explanations.append(explanation)
+        progress.progress((pi + 1) / len(points), text=f"Point {pi+1} / {len(points)}")
+
+    explanation = {
+        key: sum(explanation[key] for explanation in explanations)
+        / len(explanations)
+        for key in explanations[0].keys()
+    }
+
+    st.write(explanation)
+    return explanation
+
+def show_explanation(batch, explanation):
+    img_attr = explanation[BatchKeys.IMAGES][0] # Get the image with the attribution and remove the batch dimension
+    for k, img in enumerate(img_attr):
+        original_im_mat = np.transpose(batch[BatchKeys.IMAGES][0][k+1].cpu().detach().numpy(), (1, 2, 0))
+        attributions_img = np.transpose(img.cpu().detach().numpy(), (1, 2, 0))
+        attr_total = np.sum(np.abs(attributions_img), axis=2, keepdims=True)
+        fig, ax = visualization.visualize_image_attr_multiple(attributions_img, original_im_mat, 
+                                                ["original_image", "heat_map"], ["all", "absolute_value"], 
+                                                titles=["Original Image", "Attribution Magnitude"],
+                                                show_colorbar=True)
+        st.write(f"Explanation for image {k+1}, Total magnitude: {attr_total.sum()}")
+        st.pyplot(fig)
 
 
 def try_it_yourself(model, image_encoder):
