@@ -1,4 +1,7 @@
 import os
+import gc
+import imageio
+import matplotlib.pyplot as plt
 from peft import LoraConfig, get_peft_model
 from tqdm import tqdm
 from label_anything.loss import LabelAnythingLoss
@@ -13,6 +16,13 @@ import lovely_tensors as lt
 import torch
 lt.monkey_patch()
 
+num_iterations = 50
+device = "cuda"
+lora_r = 16
+lora_alpha = 16
+lr = 1e-3
+target_modules=["query", "value"]
+lora_dropout=0.1
 
 
 def print_trainable_parameters(model):
@@ -170,10 +180,10 @@ for key in keys.unexpected_keys:
     print(f"Unexpected key: {key}")
     
 config = LoraConfig(
-    r=16,
-    lora_alpha=16,
-    target_modules=["query", "value"],
-    lora_dropout=0.1,
+    r=lora_r,
+    lora_alpha=lora_alpha,
+    target_modules=target_modules,
+    lora_dropout=lora_dropout,
     bias="none",
     # modules_to_save=["classifier"],
 )
@@ -188,8 +198,7 @@ loss = LabelAnythingLoss(
     )
 
 
-optimizer = AdamW(lora_model.parameters(), lr=1e-3)
-
+optimizer = AdamW(lora_model.parameters(), lr=lr)
 
 miou = DistributedMulticlassJaccardIndex(
                     num_classes=80 + 1,
@@ -206,9 +215,6 @@ segmentation_gt = create_rgb_segmentation(batch_tuple[1][:, 0].cpu())
 
 segmentation_gt.rgb.fig.savefig(f"{folder}/gt.png")
 
-num_iterations = 5
-device = "cuda"
-
 lora_model = lora_model.to(device)
 batch_dict = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch_tuple[0].items()}
 batch_gt = batch_tuple[1].to(device)
@@ -218,18 +224,25 @@ miou.to(device)
 mious = []
 losses = []
 segmentation_preds = []
+# Print the query image
+query_image = batch_tuple[0]['images'][0, 0].rgb.fig.savefig(f"{folder}/query.png")
+
 for k in range(num_iterations):
     substitutor.reset(batch=batch_tuple)
     num_examples = batch_tuple[0]['images'].shape[1]
-    bar = tqdm(enumerate(substitutor), total=num_examples+1)
+    bar = tqdm(enumerate(substitutor), total=num_examples)
     for i, (batch, gt) in bar:
         if i == num_examples:
             break
-        bar.set_description(f"iteration {k} | batch {i}")
+        bar.set_description(f"iteration {k} | batch {i} gpu memory: {torch.cuda.memory_allocated() / 1e9:.2f}GB")
         optimizer.zero_grad()
-        res = lora_model(batch)
-        loss_value = loss(res, gt)
-        if i != 0:
+        if i == 0:
+            with torch.no_grad():
+                res = lora_model(batch)
+                loss_value = loss(res, gt)
+        else:
+            res = lora_model(batch)
+            loss_value = loss(res, gt)
             loss_value.backward()
             optimizer.step()
         segmentation_pred = create_rgb_segmentation(res['logits'].cpu())
@@ -239,13 +252,30 @@ for k in range(num_iterations):
                         )
         miou_value = miou(glob_preds, glob_gt)
         if i == 0:
-            mious.append(miou_value)
-            losses.append(loss_value)
-            segmentation_preds.append(segmentation_pred)
+            mious.append(miou_value.cpu())
+            losses.append(loss_value.cpu())
+            segmentation_preds.append(segmentation_pred.detach().cpu())
         bar.set_postfix(loss=loss_value.item(), miou=miou_value.item())
+    # clear memory
+    del res, loss_value, segmentation_pred, preds, glob_preds, glob_gt
+    torch.cuda.empty_cache()
+    gc.collect()
     print(f"miou: {mious[-1]}, loss: {losses[-1]}")
     
     
 for i, (miou_value, loss_value, segmentation_pred) in enumerate(zip(mious, losses, segmentation_preds)):
     print(f"Iteration {i}: miou: {miou_value}, loss: {loss_value}")
     segmentation_pred.rgb.fig.savefig(f"{folder}/pred_{i}.png")
+    
+# Create a gif from the generated segmentations
+frame_duration = 0.5
+images = [imageio.imread(f"{folder}/pred_{i}.png") for i in range(num_iterations)]
+imageio.mimsave(f"{folder}/segmentation.gif", images, duration=frame_duration*len(images))
+
+# Create a graph from mious and losses
+plt.figure(figsize=(10, 5))
+plt.plot(mious, label="mIoU")
+plt.plot(losses, label="Loss")
+plt.xlabel("Iteration")
+plt.legend()
+plt.savefig(f"{folder}/graph.png")
