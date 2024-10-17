@@ -1,0 +1,14 @@
+
+parameters:
+  num_iterations: [10]
+  device: [cuda]
+  lora_r: [128]
+  lora_alpha: [128.0]
+  lr: [0.00005]
+  target_modules: ["query,value"]
+  lora_dropout: [0.1]
+
+other_grids:
+  - lr: [0.0001, 0.00005]
+    lora_r: [256]
+    lora_alpha: [256.0]

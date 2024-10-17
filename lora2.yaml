@@ -1,0 +1,17 @@
+
+parameters:
+  num_iterations: [4]
+  device: [cuda]
+  lora_r: [64]
+  lora_alpha: [64.0]
+  lr: [0.0005]
+  target_modules: ["query,value", "query,key,value", "query", "value"]
+  lora_dropout: [0.1]
+
+other_grids:
+  - lr: [0.0001]
+    target_modules: ["query,key,value", "query", "value"]
+  - lora_r: [128]
+    lora_alpha: [128.0]
+    lr: [0.0005, 0.0001]
+    target_modules: ["query,value", "query,key,value", "query", "value"]

@@ -1,8 +1,10 @@
 import os
-import gc
+import wandb 
+import random
 from einops import rearrange
 import imageio
 import matplotlib.pyplot as plt
+import numpy as np
 from peft import LoraConfig, get_peft_model
 from copy import deepcopy
 import torchvision
@@ -46,6 +48,7 @@ dataset_args = {
             "n_ways": 2,
             "do_subsample": False,
             "add_box_noise": False,
+            "val_num_samples": 100,
         },
     },
     "common": {
@@ -115,6 +118,7 @@ class LoraEvaluator:
         print_folder,
         print_every=50,
         device="cuda",
+        run=None
     ):
         self.num_iterations = num_iterations
         self.lora_config = lora_config
@@ -124,6 +128,7 @@ class LoraEvaluator:
         self.device = device
         self.num_iterations = num_iterations
         self.lr = lr
+        self.run = run
 
         os.makedirs(print_folder, exist_ok=True)
         self.dataset_categories = next(
@@ -227,10 +232,23 @@ class LoraEvaluator:
         )
 
     def print_mious(self):
+        print("Printing mious")
         miou_values = [miou.compute().item() for miou in self.mious]
         for i, miou_value in enumerate(miou_values):
+            if i == 0:
+                self.run.log({"miou_orig": miou_value})
+            else:
+                self.run.log({f"miou_it_{i}": miou_value})
+                self.run.log({f"gain_it_{i}": miou_value - miou_values[0]})
+                self.run.log({"miou": miou_value})
+                self.run.log({"gain": miou_value - miou_values[0]})
             print(f"Iteration {i}: miou: {miou_value}")
         plt.plot(miou_values)
+        best_miou = max(miou_values)
+        self.run.log({"best_miou": best_miou})
+        best_gain = best_miou - miou_values[0]
+        self.run.log({"best_gain": best_gain})
+        
         plt.savefig(f"{self.print_folder}/mious.png")
         with open(f"{self.print_folder}/mious.txt", "w") as f:
             f.write("\n".join([str(m) for m in miou_values]))
@@ -252,9 +270,22 @@ class LoraEvaluator:
                 miou0=self.mious[0].compute().item(),
                 miouN=self.mious[-1].compute().item(),
             )
+        self.print_mious()
 
 
 def main(params):
+    foldername = random_foldername()
+    
+    # Set all the seeds
+    seed = 42
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # Numpy random seed
+    np.random.seed(seed)
+    # Python random seed
+    random.seed(seed)
+    
     num_iterations = params.get("num_iterations", 10)
     device = params.get("device", "cuda")
     lora_r = params.get("lora_r", 32)
@@ -287,17 +318,25 @@ def main(params):
         # modules_to_save=["classifier"],
     )
 
-    folder = "lora_evaluations"
+    folder = "offline"
+    os.makedirs(folder, exist_ok=True)
+    folder = "offline/lora"
     os.makedirs(folder, exist_ok=True)
     # Create a subfolder with the current time
-    subfolder = f"{folder}/{random_foldername()}"
+    subfolder = f"{folder}/{foldername}"
     os.makedirs(subfolder, exist_ok=True)
     
     # Print params as yaml
     with open(f"{subfolder}/params.yaml", "w") as f:
         yaml.dump(params, f)
+        
+    run = wandb.init(
+        project="lorafss",
+        config=params
+    )
 
     lora_evaluator = LoraEvaluator(
-        model, val, lora_config, num_iterations, lr, subfolder, device=device
+        model, val, lora_config, num_iterations, lr, subfolder, device=device, run=run
     )
     lora_evaluator.evaluate()
+    run.finish()

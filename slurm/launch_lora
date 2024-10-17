@@ -1,0 +1,17 @@
+#!/bin/bash
+
+#SBATCH -A IscrC_DELIGHT
+#SBATCH -p boost_usr_prod
+#SBATCH --qos normal
+#SBATCH --time=24:00:00
+#SBATCH -N 1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:1
+#SBATCH --mem=123000
+#SBATCH --exclusive
+#SBATCH --job-name=run
+#SBATCH --out=out/lora.log
+#SBATCH --err=out/lora.log
+
+srun ./slurm/launch_lora_exe $@
