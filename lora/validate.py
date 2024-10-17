@@ -168,10 +168,7 @@ class LoraEvaluator:
                 f"Iteration {k} gpu memory: {torch.cuda.memory_reserved() / 1e9:.2f}GB"
             )
             self.substitutor.reset(batch=batch_tuple)
-            num_examples = batch_tuple[0]["images"].shape[1]
             for i, (batch, gt) in enumerate(self.substitutor):
-                if i == num_examples:
-                    break
                 self.optimizer.zero_grad()
                 if i == 0:
                     with torch.no_grad():
