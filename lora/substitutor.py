@@ -50,6 +50,7 @@ class Substitutor:
         self.example_classes = None
         self.substitute = substitute
         self.it = 0
+        self.query_iteration = True
         self.prompt_processor = PromptsProcessor(long_side_length=long_side_length, custom_preprocess=custom_preprocess)
 
     def reset(self, batch: dict) -> None:
@@ -57,6 +58,7 @@ class Substitutor:
         self.batch, self.ground_truths = batch
         self.batch, self.query_image_gt_dim = self.first_divide_query_examples()
         self.example_classes = self.batch[BatchKeys.CLASSES]
+        self.query_iteration = True
 
     def __iter__(self):
         return self
@@ -96,15 +98,15 @@ class Substitutor:
         torch_keys_to_exchange = self.torch_keys_to_exchange.copy()
         if "images" in self.batch:
             torch_keys_to_exchange.append("images")
-            num_examples = self.batch["images"].shape[1]
+            num_images = self.batch["images"].shape[1]
             device = self.batch["images"].device
         if "embeddings" in self.batch:
             torch_keys_to_exchange.append("embeddings")
-            num_examples = self.batch["embeddings"].shape[1]
+            num_images = self.batch["embeddings"].shape[1]
             device = self.batch["embeddings"].device
 
-        if self.it == 0:
-            self.it = 1
+        if self.query_iteration:
+            self.query_iteration = False
             batch = {
                 **self.batch,
                 "images": torch.cat(
@@ -115,20 +117,20 @@ class Substitutor:
                 ),
             }
             return batch, self.query_image_gt_dim[1]
-        if self.it == 1:
-            self.it = 2
+        if self.it == 0:
+            self.it = 1
             return self.divide_query_examples_append_query_dim()
             
         if not self.substitute:
             raise StopIteration
-        if self.it == num_examples:
+        if self.it == num_images:
             raise StopIteration
         else:
             index_tensor = torch.cat(
                 [
                     torch.tensor([self.it], device=device),
                     torch.arange(0, self.it, device=device),
-                    torch.arange(self.it + 1, num_examples, device=device),
+                    torch.arange(self.it + 1, num_images, device=device),
                 ]
             ).long()
 
