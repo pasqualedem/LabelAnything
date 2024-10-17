@@ -12,7 +12,6 @@ from transformers import ViTMAEForPreTraining
 from tqdm import tqdm
 import yaml
 from label_anything.loss import LabelAnythingLoss
-from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.metrics import (
     DistributedMulticlassJaccardIndex,
     to_global_multiclass,
@@ -25,6 +24,7 @@ from torch.optim import AdamW
 import lovely_tensors as lt
 import torch
 
+from lora.substitutor import Substitutor
 from lora.utils import (
     create_rgb_segmentation,
     print_trainable_parameters,
@@ -136,8 +136,6 @@ class LoraEvaluator:
         ).categories
 
         self.substitutor = Substitutor(
-            threshold=None,
-            num_points=1,
             substitute=True,
             long_side_length=480,
             custom_preprocess=False,
