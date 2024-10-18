@@ -1,5 +1,5 @@
 import os
-import wandb 
+import wandb
 import random
 from einops import rearrange
 import imageio
@@ -24,7 +24,7 @@ from torch.optim import AdamW
 import lovely_tensors as lt
 import torch
 
-from lora.substitutor import Substitutor
+from lora.substitutor import Substitutor, IncrementalSubstitutor
 from lora.utils import (
     create_rgb_segmentation,
     print_trainable_parameters,
@@ -34,9 +34,16 @@ from lora.utils import (
 lt.monkey_patch()
 
 
+substitutor_cls = {
+    "default": Substitutor,
+    "incremental": IncrementalSubstitutor,
+}
+
+
+DATASET_NAME = "val_coco20i"
 dataset_args = {
     "datasets": {
-        "val_coco20i_N2K5": {
+        DATASET_NAME: {
             "name": "coco",
             "instances_path": "data/coco/annotations/instances_val2014.json",
             "emb_dir": "data/coco/vit_b_sam_embeddings/last_block_state",
@@ -115,10 +122,11 @@ class LoraEvaluator:
         lora_config,
         num_iterations,
         lr,
+        substitutor,
         print_folder,
         print_every=50,
         device="cuda",
-        run=None
+        run=None,
     ):
         self.num_iterations = num_iterations
         self.lora_config = lora_config
@@ -135,11 +143,7 @@ class LoraEvaluator:
             iter(dataloader.dataset.datasets.values())
         ).categories
 
-        self.substitutor = Substitutor(
-            substitute=True,
-            long_side_length=480,
-            custom_preprocess=False,
-        )
+        self.substitutor = substitutor
         self.model = model
         self.lora_model = get_peft_model(deepcopy(model), lora_config)
         print_trainable_parameters(self.lora_model)
@@ -243,7 +247,7 @@ class LoraEvaluator:
         self.run.log({"best_miou": best_miou})
         best_gain = best_miou - miou_values[0]
         self.run.log({"best_gain": best_gain})
-        
+
         plt.savefig(f"{self.print_folder}/mious.png")
         with open(f"{self.print_folder}/mious.txt", "w") as f:
             f.write("\n".join([str(m) for m in miou_values]))
@@ -270,7 +274,7 @@ class LoraEvaluator:
 
 def main(params):
     foldername = random_foldername()
-    
+
     # Set all the seeds
     seed = 42
     torch.manual_seed(seed)
@@ -288,10 +292,16 @@ def main(params):
     lr = params.get("lr", 1e-4)
     target_modules = params.get("target_modules", ["query", "value"])
     lora_dropout = params.get("lora_dropout", 0.1)
+    substitutor = params.get("substitutor", "default")
+    n_ways = params.get("n_ways", 2)
+    k_shots = params.get("k_shots", 5)
+    
+    dataset_args["datasets"][DATASET_NAME]["n_ways"] = n_ways
+    dataset_args["datasets"][DATASET_NAME]["n_shots"] = k_shots
     train, val_dict, test = get_dataloaders(
         dataset_args, dataloader_args, num_processes=1
     )
-    val = val_dict["val_coco20i_N2K5"]
+    val = val_dict[DATASET_NAME]
     model = model_registry[name](**model_params)
     weights = torch_dict_load(path)
     weights = {k[6:]: v for k, v in weights.items()}
@@ -320,18 +330,31 @@ def main(params):
     # Create a subfolder with the current time
     subfolder = f"{folder}/{foldername}"
     os.makedirs(subfolder, exist_ok=True)
-    
+
     # Print params as yaml
     with open(f"{subfolder}/params.yaml", "w") as f:
         yaml.dump(params, f)
-        
-    run = wandb.init(
-        project="lorafss",
-        config=params
-    )
+
+    run = wandb.init(project="lorafss", config=params)
+
+    substitutor = substitutor_cls[substitutor](
+            substitute=True,
+            long_side_length=480,
+            custom_preprocess=False,
+            n_ways=n_ways,
+            k_shots=k_shots,
+        )
 
     lora_evaluator = LoraEvaluator(
-        model, val, lora_config, num_iterations, lr, subfolder, device=device, run=run
+        model,
+        val,
+        lora_config,
+        num_iterations,
+        lr,
+        print_folder=subfolder,
+        device=device,
+        run=run,
+        substitutor=substitutor,
     )
     lora_evaluator.evaluate()
     run.finish()

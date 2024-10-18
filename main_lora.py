@@ -11,7 +11,7 @@ from label_anything.experiment.run import ParallelRun
 
 
 class ParallelLoraRun(ParallelRun):
-    
+
     slurm_script = "slurm/launch_lora"
 
 
@@ -42,15 +42,15 @@ def parallel_experiment_lora(param_file):
                 list(dict(linearize(others) + dot).items())
                 for others, dot in zip(other_grids, dot_elements[1:])
             ]
-            
+
         for i, grid in enumerate(grids):
             print(f"Grid {i+1}:")
             for j, run_params in enumerate(grid):
                 print(f"Run {j+1}:")
-                run_params['experiment'] = {"group": "LoRa"}
+                run_params["experiment"] = {"group": "LoRa"}
                 run = ParallelLoraRun(run_params, experiment_timestamp=timestamp)
                 run.launch()
-                
+
 
 @click.command()
 @click.option("--num_iterations", default=10, help="Number of iterations to run.")
@@ -63,6 +63,20 @@ def parallel_experiment_lora(param_file):
     default="query,value",
     help="Comma-separated list of target modules.",
 )
+@click.option(
+    "--substitutor",
+    default="default",
+    help="Substitutor to use. (default or incremental)",
+)
+@click.option(
+    "--n_ways", default=2, help="Number of classes of the FSS validation", type=int
+)
+@click.option(
+    "--k_shots",
+    default=5,
+    help="Number of shots per class of the FSS validation",
+    type=int,
+)
 @click.option("--lora_dropout", default=0.1, help="LoRA dropout value.", type=float)
 @click.option(
     "--experiment_file",
@@ -72,9 +86,22 @@ def parallel_experiment_lora(param_file):
 @click.option(
     "--parameters",
     default=None,
-    help="Path to the file containing the parameters for a single run"
+    help="Path to the file containing the parameters for a single run",
 )
-def cli(num_iterations, device, lora_r, lora_alpha, lr, target_modules, lora_dropout, experiment_file, parameters):
+def cli(
+    num_iterations,
+    device,
+    lora_r,
+    lora_alpha,
+    lr,
+    target_modules,
+    lora_dropout,
+    substitutor,
+    n_ways,
+    k_shots,
+    experiment_file,
+    parameters,
+):
     """
     Command-line interface for setting parameters for LoRA training or testing.
     Collects parameters and passes them as a dictionary.
@@ -82,7 +109,7 @@ def cli(num_iterations, device, lora_r, lora_alpha, lr, target_modules, lora_dro
     if experiment_file is not None:
         parallel_experiment_lora(experiment_file)
         return
-    
+
     if parameters is not None:
         params = load_yaml(parameters)
         params["target_modules"] = params["target_modules"].split(",")
@@ -99,6 +126,9 @@ def cli(num_iterations, device, lora_r, lora_alpha, lr, target_modules, lora_dro
             "lr": lr,
             "target_modules": target_modules_list,
             "lora_dropout": lora_dropout,
+            "substitutor": substitutor,
+            "n_ways": n_ways,
+            "k_shots": k_shots,
         }
 
     # Call the main function with the dictionary of parameters
