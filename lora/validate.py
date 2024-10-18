@@ -146,7 +146,7 @@ class LoraEvaluator:
         self.substitutor = substitutor
         self.model = model
         self.lora_model = get_peft_model(deepcopy(model), lora_config)
-        print_trainable_parameters(self.lora_model)
+        self.trainable_params = print_trainable_parameters(self.lora_model)
         self.loss = LabelAnythingLoss(
             **{"class_weighting": True, "components": {"focal": {"weight": 1.0}}}
         )
@@ -356,5 +356,7 @@ def main(params):
         run=run,
         substitutor=substitutor,
     )
+    run.log({"trainable_params": lora_evaluator.trainable_params})
+    
     lora_evaluator.evaluate()
     run.finish()

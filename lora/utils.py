@@ -14,6 +14,7 @@ def print_trainable_parameters(model):
     print(
         f"trainable params: {trainable_params} || all params: {all_param} || trainable%: {100 * trainable_params / all_param:.2f}"
     )
+    return trainable_params
 
 
 def create_rgb_segmentation(segmentation, num_classes=None):
