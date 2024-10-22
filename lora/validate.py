@@ -295,9 +295,11 @@ def main(params):
     substitutor = params.get("substitutor", "default")
     n_ways = params.get("n_ways", 2)
     k_shots = params.get("k_shots", 5)
+    val_num_samples = params.get("val_num_samples", 100)
     
     dataset_args["datasets"][DATASET_NAME]["n_ways"] = n_ways
     dataset_args["datasets"][DATASET_NAME]["n_shots"] = k_shots
+    dataset_args["datasets"][DATASET_NAME]["val_num_samples"] = val_num_samples
     train, val_dict, test = get_dataloaders(
         dataset_args, dataloader_args, num_processes=1
     )

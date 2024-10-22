@@ -77,6 +77,7 @@ def parallel_experiment_lora(param_file):
     help="Number of shots per class of the FSS validation",
     type=int,
 )
+@click.option("--val_num_samples", default=100, help="Number of samples for validation.")
 @click.option("--lora_dropout", default=0.1, help="LoRA dropout value.", type=float)
 @click.option(
     "--experiment_file",
@@ -99,6 +100,7 @@ def cli(
     substitutor,
     n_ways,
     k_shots,
+    val_num_samples,
     experiment_file,
     parameters,
 ):
@@ -129,6 +131,7 @@ def cli(
             "substitutor": substitutor,
             "n_ways": n_ways,
             "k_shots": k_shots,
+            "val_num_samples": val_num_samples,
         }
 
     # Call the main function with the dictionary of parameters
