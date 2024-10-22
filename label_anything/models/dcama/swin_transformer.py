@@ -392,7 +392,8 @@ class BasicLayer(nn.Module):
                 x = checkpoint.checkpoint(blk, x)
             else:
                 x = blk(x)
-            feats.append(x.clone().detach())
+            # feats.append(x.clone().detach())
+            feats.append(x.clone())
         if self.downsample is not None:
             x = self.downsample(x)
         return feats, x

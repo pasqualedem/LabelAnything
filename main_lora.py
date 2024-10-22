@@ -58,6 +58,7 @@ def parallel_experiment_lora(param_file):
 @click.option("--lora_r", default=32, help="LoRA r parameter.", type=int)
 @click.option("--lora_alpha", default=32.0, help="LoRA alpha parameter.", type=float)
 @click.option("--lr", default=1e-4, help="Learning rate.", type=float)
+@click.option("--model", default="label_anything", help="Model to use.")
 @click.option(
     "--target_modules",
     default="query,value",
@@ -95,6 +96,7 @@ def cli(
     lora_r,
     lora_alpha,
     lr,
+    model,
     target_modules,
     lora_dropout,
     substitutor,
@@ -132,6 +134,7 @@ def cli(
             "n_ways": n_ways,
             "k_shots": k_shots,
             "val_num_samples": val_num_samples,
+            "model": model,
         }
 
     # Call the main function with the dictionary of parameters

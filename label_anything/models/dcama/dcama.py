@@ -41,7 +41,7 @@ class DCAMA(nn.Module):
             self.nlayers = [2, 2, 18, 2]
         else:
             raise Exception('Unavailable backbone: %s' % backbone)
-        self.feature_extractor.eval()
+        # self.feature_extractor.eval()
 
         # define model
         self.lids = reduce(add, [[i + 1] * x for i, x in enumerate(self.nlayers)])
@@ -111,12 +111,17 @@ class DCAMA(nn.Module):
         if nshot == 1:
             logit_mask = self.forward_1shot(query_img, support_imgs[:, 0], support_masks[:, 0])
         else:
-            with torch.no_grad():
-                query_feats = self.extract_feats(query_img)
-                n_support_feats = []
-                for k in range(nshot):
-                    support_feats = self.extract_feats(support_imgs[:, k])
-                    n_support_feats.append(support_feats)
+            # with torch.no_grad():
+            #     query_feats = self.extract_feats(query_img)
+            #     n_support_feats = []
+            #     for k in range(nshot):
+            #         support_feats = self.extract_feats(support_imgs[:, k])
+            #         n_support_feats.append(support_feats)
+            query_feats = self.extract_feats(query_img)
+            n_support_feats = []
+            for k in range(nshot):
+                support_feats = self.extract_feats(support_imgs[:, k])
+                n_support_feats.append(support_feats)
             logit_mask = self.model(query_feats, n_support_feats, support_masks.clone(), nshot)
 
         if self.use_original_imgsize:
