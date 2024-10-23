@@ -7,6 +7,7 @@ parameters:
   lr: [0.005, 0.001, 0.0001]
   target_modules: ["query,value"]
   lora_dropout: [0.1]
+  val_num_samples: [1000]
 
 other_grids:
   - lora_r: [32]
