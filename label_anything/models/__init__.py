@@ -6,6 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import namedtuple
+
+from .bam import build_bam
 from .sam import Sam, AdaptedSam
 from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
@@ -40,6 +42,7 @@ model_registry = {
     "asam_b": build_asam_vit_b,
     "dcama": build_dcama,
     "fptrans": build_fptrans,
+    "bam": build_bam,
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS

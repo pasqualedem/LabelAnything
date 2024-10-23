@@ -23,6 +23,7 @@ from torch.optim import AdamW
 
 import lovely_tensors as lt
 import torch
+import torch.nn as nn
 
 from lora.substitutor import Substitutor, IncrementalSubstitutor
 from lora.utils import (
@@ -80,7 +81,7 @@ dataloader_args = {
     "val_prompt_types": ["mask"],
 }
 
-model_params = {
+la_params = {
     "class_attention": True,
     "example_class_attention": True,
     "class_encoder": {
@@ -99,8 +100,59 @@ model_params = {
     "custom_preprocess": False,
 }
 
-name = "lam_mae_b"
-path = "offline/wandb/generated-run-y04k97k7/files/best/model.safetensors"
+def set_batchnorm_eval_mode(model):
+    for module in model.modules():
+        if isinstance(module, nn.BatchNorm2d):
+            module.eval()
+
+
+def get_la(*args, **kwargs):
+    name = "lam_mae_b"
+    path = "offline/wandb/generated-run-y04k97k7/files/best/model.safetensors"
+    image_size = 480
+    model = model_registry[name](**la_params)
+    weights = torch_dict_load(path)
+    weights = {k[6:]: v for k, v in weights.items()}
+
+    keys = model.load_state_dict(weights, strict=False)
+    for key in keys.missing_keys:
+        if key.startswith("image_encoder"):
+            continue
+        print(f"Missing key: {key}")
+    for key in keys.unexpected_keys:
+        print(f"Unexpected key: {key}")
+    return model, image_size
+
+
+def get_dcama(*args, **kwargs):
+    name = "dcama"
+    params = dict(
+        backbone_checkpoint="checkpoints/swin_base_patch4_window12_384.pth",
+        model_checkpoint="checkpoints/swin_fold3.pt"
+    )
+    image_size = 384
+    return model_registry[name](**params), image_size
+
+
+def get_bam(k_shots, val_fold_idx, **kwargs):
+    name = "bam"
+    params = dict(
+        shots=k_shots,
+        val_fold_idx=val_fold_idx,
+    )
+    image_size = 641
+    bam = model_registry[name](**params)
+    set_batchnorm_eval_mode(bam)
+    return bam, image_size
+
+
+def get_model(model_name, **kwargs):
+    supported_models = {
+        "label_anything": get_la,
+        "dcama": get_dcama,
+        "bam": get_bam,
+    }
+    return supported_models[model_name](**kwargs)
 
 
 class ViTModelWrapper(ViTMAEForPreTraining):
@@ -146,6 +198,9 @@ class LoraEvaluator:
         self.substitutor = substitutor
         self.model = model
         self.lora_model = get_peft_model(deepcopy(model), lora_config)
+        # Check target modules
+        print(f"Target modules: {self.lora_model.targeted_module_names}")
+        
         self.trainable_params = print_trainable_parameters(self.lora_model)
         self.loss = LabelAnythingLoss(
             **{"class_weighting": True, "components": {"focal": {"weight": 1.0}}}
@@ -213,9 +268,7 @@ class LoraEvaluator:
             [resize_images.cpu(), torch.cat(segmentation_gts)], dim=3
         )
         plotted_images.rgb.fig.savefig(f"{outfolder}/input_gt.png")
-        for j, (segmentation_pred, segmentation_gt) in enumerate(
-            zip(segmentation_preds, segmentation_gts)
-        ):
+        for j, segmentation_pred in enumerate(segmentation_preds):
             segmentation_pred.rgb.fig.savefig(f"{outfolder}/pred_{j}.png")
 
         # Create a gif from the generated segmentations
@@ -296,25 +349,20 @@ def main(params):
     n_ways = params.get("n_ways", 2)
     k_shots = params.get("k_shots", 5)
     val_num_samples = params.get("val_num_samples", 100)
+    model_name = params.get("model", "label_anything")
+    val_fold_idx = 3
+    
+    model, image_size = get_model(model_name, k_shots=k_shots, val_fold_idx=val_fold_idx)
     
     dataset_args["datasets"][DATASET_NAME]["n_ways"] = n_ways
     dataset_args["datasets"][DATASET_NAME]["n_shots"] = k_shots
     dataset_args["datasets"][DATASET_NAME]["val_num_samples"] = val_num_samples
+    dataset_args["common"]["image_size"] = image_size
+    
     train, val_dict, test = get_dataloaders(
         dataset_args, dataloader_args, num_processes=1
     )
     val = val_dict[DATASET_NAME]
-    model = model_registry[name](**model_params)
-    weights = torch_dict_load(path)
-    weights = {k[6:]: v for k, v in weights.items()}
-
-    keys = model.load_state_dict(weights, strict=False)
-    for key in keys.missing_keys:
-        if key.startswith("image_encoder"):
-            continue
-        print(f"Missing key: {key}")
-    for key in keys.unexpected_keys:
-        print(f"Unexpected key: {key}")
 
     lora_config = LoraConfig(
         r=lora_r,
