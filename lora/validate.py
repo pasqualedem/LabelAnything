@@ -84,14 +84,13 @@ dataloader_args = {
 la_params = {
     "class_attention": True,
     "example_class_attention": True,
+    "example_attention": True,
     "class_encoder": {
         "bank_size": 100,
         "embed_dim": 256,
         "name": "RandomMatrixEncoder",
     },
     "embed_dim": 256,
-    "example_attention": True,
-    "example_class_attention": True,
     "fusion_transformer": "TwoWayTransformer",
     "image_embed_dim": 768,
     "image_size": 480,
@@ -100,15 +99,21 @@ la_params = {
     "custom_preprocess": False,
 }
 
+
 def set_batchnorm_eval_mode(model):
     for module in model.modules():
         if isinstance(module, nn.BatchNorm2d):
             module.eval()
 
 
-def get_la(*args, **kwargs):
+def get_la(val_fold_idx, **kwargs):
     name = "lam_mae_b"
-    path = "offline/wandb/generated-run-y04k97k7/files/best/model.safetensors"
+    path = {
+        0: "checkpoints/la/mae256_fold0_sgqsatyi.safetensors",
+        1: "checkpoints/la/mae256_fold1_p470zqp0.safetensors",
+        2: "checkpoints/la/mae256_fold2_d2exzuiv.safetensors",
+        3: "checkpoints/la/mae256_fold3_y04k97k7.safetensors",
+    }[val_fold_idx]
     image_size = 480
     model = model_registry[name](**la_params)
     weights = torch_dict_load(path)
@@ -128,7 +133,7 @@ def get_dcama(*args, **kwargs):
     name = "dcama"
     params = dict(
         backbone_checkpoint="checkpoints/swin_base_patch4_window12_384.pth",
-        model_checkpoint="checkpoints/swin_fold3.pt"
+        model_checkpoint="checkpoints/swin_fold3.pt",
     )
     image_size = 384
     return model_registry[name](**params), image_size
@@ -200,7 +205,7 @@ class LoraEvaluator:
         self.lora_model = get_peft_model(deepcopy(model), lora_config)
         # Check target modules
         print(f"Target modules: {self.lora_model.targeted_module_names}")
-        
+
         self.trainable_params = print_trainable_parameters(self.lora_model)
         self.loss = LabelAnythingLoss(
             **{"class_weighting": True, "components": {"focal": {"weight": 1.0}}}
@@ -337,11 +342,11 @@ def main(params):
     np.random.seed(seed)
     # Python random seed
     random.seed(seed)
-    
+
     num_iterations = params.get("num_iterations", 10)
     device = params.get("device", "cuda")
     lora_r = params.get("lora_r", 32)
-    lora_alpha = params.get("lora_alpha", 32.0)
+    lora_alpha = params.get("lora_alpha", float(lora_r))
     lr = params.get("lr", 1e-4)
     target_modules = params.get("target_modules", ["query", "value"])
     lora_dropout = params.get("lora_dropout", 0.1)
@@ -350,15 +355,18 @@ def main(params):
     k_shots = params.get("k_shots", 5)
     val_num_samples = params.get("val_num_samples", 100)
     model_name = params.get("model", "label_anything")
-    val_fold_idx = 3
-    
-    model, image_size = get_model(model_name, k_shots=k_shots, val_fold_idx=val_fold_idx)
-    
+    val_fold_idx = params.get("val_fold_idx", 3)
+
+    model, image_size = get_model(
+        model_name, k_shots=k_shots, val_fold_idx=val_fold_idx
+    )
+
     dataset_args["datasets"][DATASET_NAME]["n_ways"] = n_ways
     dataset_args["datasets"][DATASET_NAME]["n_shots"] = k_shots
     dataset_args["datasets"][DATASET_NAME]["val_num_samples"] = val_num_samples
+    dataset_args["datasets"][DATASET_NAME]["val_fold_idx"] = val_fold_idx
     dataset_args["common"]["image_size"] = image_size
-    
+
     train, val_dict, test = get_dataloaders(
         dataset_args, dataloader_args, num_processes=1
     )
@@ -388,12 +396,12 @@ def main(params):
     run = wandb.init(project="lorafss", config=params)
 
     substitutor = substitutor_cls[substitutor](
-            substitute=True,
-            long_side_length=480,
-            custom_preprocess=False,
-            n_ways=n_ways,
-            k_shots=k_shots,
-        )
+        substitute=True,
+        long_side_length=480,
+        custom_preprocess=False,
+        n_ways=n_ways,
+        k_shots=k_shots,
+    )
 
     lora_evaluator = LoraEvaluator(
         model,
@@ -407,6 +415,6 @@ def main(params):
         substitutor=substitutor,
     )
     run.log({"trainable_params": lora_evaluator.trainable_params})
-    
+
     lora_evaluator.evaluate()
     run.finish()

@@ -29,34 +29,34 @@ def parallel_experiment_lora(param_file):
             for other_run in other_grids
         ]
 
-        grids, dot_elements = zip(
-            *[
-                make_grid(grid, return_cartesian_elements=True)
-                for grid in complete_grids
-            ]
-        )
-        # WARNING: Grids' objects have the same IDs!
-        dot_elements = list(dot_elements)
-        if len(dot_elements) > 1:
-            dot_elements[1:] = [
-                list(dict(linearize(others) + dot).items())
-                for others, dot in zip(other_grids, dot_elements[1:])
-            ]
+    grids, dot_elements = zip(
+        *[
+            make_grid(grid, return_cartesian_elements=True)
+            for grid in complete_grids
+        ]
+    )
+    # WARNING: Grids' objects have the same IDs!
+    dot_elements = list(dot_elements)
+    if len(dot_elements) > 1:
+        dot_elements[1:] = [
+            list(dict(linearize(others) + dot).items())
+            for others, dot in zip(other_grids, dot_elements[1:])
+        ]
 
-        for i, grid in enumerate(grids):
-            print(f"Grid {i+1}:")
-            for j, run_params in enumerate(grid):
-                print(f"Run {j+1}:")
-                run_params["experiment"] = {"group": "LoRa"}
-                run = ParallelLoraRun(run_params, experiment_timestamp=timestamp)
-                run.launch()
+    for i, grid in enumerate(grids):
+        print(f"Grid {i+1}:")
+        for j, run_params in enumerate(grid):
+            print(f"Run {j+1}:")
+            run_params["experiment"] = {"group": "LoRa"}
+            run = ParallelLoraRun(run_params, experiment_timestamp=timestamp)
+            run.launch()
 
 
 @click.command()
 @click.option("--num_iterations", default=10, help="Number of iterations to run.")
 @click.option("--device", default="cuda", help="Device to use (e.g., cuda or cpu).")
 @click.option("--lora_r", default=32, help="LoRA r parameter.", type=int)
-@click.option("--lora_alpha", default=32.0, help="LoRA alpha parameter.", type=float)
+@click.option("--lora_alpha", default=None, help="LoRA alpha parameter. If None will be set to r", type=float)
 @click.option("--lr", default=1e-4, help="Learning rate.", type=float)
 @click.option("--model", default="label_anything", help="Model to use.")
 @click.option(
@@ -79,6 +79,7 @@ def parallel_experiment_lora(param_file):
     type=int,
 )
 @click.option("--val_num_samples", default=100, help="Number of samples for validation.")
+@click.option("--val_fold_idx", default=3, help="Fold index for validation.", type=int)
 @click.option("--lora_dropout", default=0.1, help="LoRA dropout value.", type=float)
 @click.option(
     "--experiment_file",
@@ -103,6 +104,7 @@ def cli(
     n_ways,
     k_shots,
     val_num_samples,
+    val_fold_idx,
     experiment_file,
     parameters,
 ):
@@ -134,6 +136,7 @@ def cli(
             "n_ways": n_ways,
             "k_shots": k_shots,
             "val_num_samples": val_num_samples,
+            "val_fold_idx": val_fold_idx,
             "model": model,
         }
 
