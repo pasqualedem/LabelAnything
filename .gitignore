@@ -79,9 +79,6 @@ target/
 # Jupyter NB Checkpoints
 .ipynb_checkpoints/
 
-# exclude data from source control by default
-/data/
-
 # Mac OS-specific storage files
 .DS_Store
 
@@ -101,11 +98,16 @@ target/
 *.pkl
 *.safetensors
 
-/label_anything/data/*.json
+/data/*.json
 exp_log.csv
-/label_anything/data/raw/annotations
+/data/annotations/
+/data/pascal/
+/data/brain
+/data/kvasir
+/data/coco/
+data/raw
 notebooks/demo
-label_anything/data/annotations/instances_voc12.json
+7data/
 tmp
 out
 offline

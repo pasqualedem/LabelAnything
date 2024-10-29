@@ -69,17 +69,17 @@ python main.py rename_coco20i_json --instances_path data/coco/annotations/instan
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_val2014.json
 ```
 
-Setting up PASCAL VOC 2012 Dataset with augmented data.
+Setting up [PASCAL VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/) Dataset with augmented data.
 
 ### 1. Instruction to download
 ``` bash
-bash data/setup_voc12.sh data/pascal
+bash data/script/setup_voc12.sh data/pascal
 ``` 
-``` 
-/VOCdevkit
-└── VOC2012
+```bash
+data/
+└── pascal/
     ├── Annotations
-    ├── ImageSets
+    ├── ImageSets/
     │   └── Segmentation
     ├── JPEGImages
     ├── SegmentationObject
@@ -87,21 +87,38 @@ bash data/setup_voc12.sh data/pascal
 ``` 
 ### 2. Add SBD Augmentated training data
 - Convert by yourself ([here](https://github.com/shelhamer/fcn.berkeleyvision.org/tree/master/data/pascal)).
-- Or download pre-converted files ([here](https://github.com/DrSleep/tensorflow-deeplab-resnet#evaluation)), **(I prefer this method)**.
+- Or download pre-converted files ([here](https://github.com/DrSleep/tensorflow-deeplab-resnet#evaluation)), **(Prefer this method)**.
 
-After the download move it into the VOC2012 folder.
+After the download move it into the pascal folder.
+
+```bash
+data/
+└── pascal/
+    ├── Annotations
+    ├── ImageSets/
+    │   └── Segmentation
+    ├── JPEGImages
+    ├── SegmentationObject
+    ├── SegmentationClass
+    └── SegmentationClassAug #ADDED
+``` 
 
 ### 3. Download official sets as ImageSets/SegmentationAug list
 From: https://github.com/kazuto1011/deeplab-pytorch/files/2945588/list.zip
 
-```sh
+```bash
+# Unzip the file
 unzip list.zip -d data/pascal/ImageSets/
+# Move file into Segmentation folder
 mv data/pascal/ImageSets/list/train_aug.txt data/pascal/ImageSets/trainaug.txt
+mv data/pascal/ImageSets/list/trainval_aug.txt data/pascal/ImageSets/trainvalaug.txt
+mv data/pascal/ImageSets/list/val.txt data/pascal/ImageSets/val.txt
+mv data/pascal/ImageSets/list/test.txt data/pascal/ImageSets/
 rm -rf data/pascal/ImageSets/list
 ```
 
 This is how the dataset should look like
-```sh
+```bash
 /data
 └── pascal
     ├── Annotations
@@ -120,6 +137,11 @@ This is how the dataset should look like
     └── SegmentationClassAug # ADDED!!
         └── 2007_000032.png
 ```
+### 4. Rename
+Now run the rename.sh script.
+``` bash
+bash data/script/rename.sh path/to/file
+``` 
 
 ## Preprocess
 
