@@ -12,9 +12,9 @@ parameters:
   # Each value should be a dict or a list
 
   logger:
-    log_frequency: [10]
-    train_image_log_frequency: [100000]
-    val_image_log_frequency: [100]
+    log_frequency: [100]
+    train_image_log_frequency: [250]
+    val_image_log_frequency: [25]
     experiment_save_delta: [null] # save experiment every n seconds
     tmp_dir: [tmp]
     wandb:
@@ -41,7 +41,7 @@ parameters:
       num_warmup_steps: 1000
     substitute: [False]
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-    validation_reruns: [5]
+    # validation_reruns: [5]
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
@@ -64,7 +64,7 @@ parameters:
       pascal5i:
         name: [pascal]
         data_dir: [data/pascal]
-        emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480 ]
+        emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
@@ -100,7 +100,7 @@ parameters:
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[2, 1]]] 
+    val_possible_batch_example_nums: [[[8, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]

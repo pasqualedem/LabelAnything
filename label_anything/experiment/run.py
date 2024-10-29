@@ -365,14 +365,14 @@ class Run:
         gt: torch.tensor,
         tot_steps: int,
     ):
+        metrics_dict = {}
         with self.accelerator.no_sync(model=metrics):
-            metrics_dict = metrics(preds, gt)
+            metrics.update(preds, gt)
         if tot_steps % self.plat_logger.log_frequency == 0:
+            metrics_dict = metrics.compute()
             for metric_name, metric_value in metrics_dict.items():
-                metric_value = torch.mean(self.accelerator.gather(metric_value))
-                self.plat_logger.log_metric(metric_name, metric_value)
-        # .item() to all values
-        metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
+                metrics_dict[metric_name] = torch.mean(self.accelerator.gather(metric_value))
+            metrics_dict = {k: v.item() for k, v in metrics_dict.items()}
         return metrics_dict
 
     def _update_val_metrics(
@@ -396,7 +396,7 @@ class Run:
     ):
         self.plat_logger.log_metric("step", self.global_train_step)
         if step == 0:
-            metric_values = self._update_metrics(metrics, preds, gt, tot_steps)
+            metric_values = self._update_metrics(metrics, preds, gt, tot_steps) or previous_metric_values
         else:
             metric_values = previous_metric_values
         if tot_steps % self.plat_logger.log_frequency == 0:
@@ -438,7 +438,6 @@ class Run:
                     ignore_index=-100,
                 ),
             },
-            prefix="batch_",
         )
         metrics = self.accelerator.prepare(metrics)
         loss_avg = RunningAverage()
@@ -548,13 +547,13 @@ class Run:
             self.plat_logger.save_experiment_timed()
             tot_images += cur_batch_size
 
-        logger.info(f"Waiting for everyone")
+        logger.info("Waiting for everyone")
         self.accelerator.wait_for_everyone()
         logger.info(f"Finished Epoch {epoch}")
-        logger.info(f"Metrics")
+        logger.info("Metrics")
         metric_dict = {
             **{
-                "avg_" + k: v
+                f"avg_{k}": v
                 for k, v in {**metrics.compute(), **metrics.compute()}.items()
             },
             "avg_loss": loss_avg.compute(),
@@ -582,10 +581,7 @@ class Run:
         metrics = []
         for name, dataloader in self.val_loaders.items():
             names = name.split("_")
-            if len(names) > 1:
-                name = names[-1]
-            else:
-                name = ""
+            name = names[-1] if len(names) > 1 else ""
             dataloader_metrics = self.validate_dataloader(
                 name, dataloader, epoch, generate_json=generate_json
             )
@@ -603,7 +599,7 @@ class Run:
         logger.info(f"Validation of {name} epoch {epoch} started")
         if generate_json:
             self.validation_json = {
-                "file": self.plat_logger.local_dir + f"/validation_image_ids.json",
+                "file": f"{self.plat_logger.local_dir}/validation_image_ids.json",
                 "json": {},
             }
         if self.train_params.get("validation_reruns", None) is None:
@@ -618,8 +614,7 @@ class Run:
                 for k in overall_metrics[0].keys()
             }
             self.plat_logger.log_metrics(
-                {**{"avg_" + k + name: v for k, v in metrics.items()}},
-                epoch=epoch,
+                {**{f"avg_{k}{name}": v for k, v in metrics.items()}}, epoch=epoch
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {name} - {k}: {v}")
@@ -656,7 +651,6 @@ class Run:
                     ignore_index=-100,
                 ),
             },
-            prefix="batch_",
         )
         metrics = self.accelerator.prepare(metrics)
 
@@ -689,7 +683,7 @@ class Run:
 
                 metrics_value = self._update_val_metrics(
                     metrics, glob_preds, glob_gt, tot_steps
-                )
+                ) or metrics_value
                 loss = result_dict["loss"]
 
                 avg_loss.update(loss.item())
@@ -721,7 +715,7 @@ class Run:
 
             self.plat_logger.log_metrics(
                 {
-                    **{"avg_" + k + name: v for k, v in metrics.compute().items()},
+                    **{f"avg_{k}{name}": v for k, v in metrics.compute().items()},
                     "avg_loss": avg_loss.compute(),
                 },
                 epoch=epoch,
@@ -737,9 +731,9 @@ class Run:
             f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
         )
         return {
-            "miou": metrics_value[f"batch_mIoU{metrics_suffix}"],
+            "miou": metrics_value[f"mIoU{metrics_suffix}"],
             "loss": avg_loss.compute(),
-            "fbiou": metrics_value[f"batch_FBIoU{metrics_suffix}"],
+            "fbiou": metrics_value[f"FBIoU{metrics_suffix}"],
         }
 
     def test(self):
