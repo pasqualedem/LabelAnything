@@ -150,44 +150,77 @@ class PascalDataset(Dataset):
             custom_preprocess=custom_preprocess,
         )
 
-    def __get_seg(self, image_name: str, with_random_choice: bool = True):
+    def __get_seg(self, input_str: str, with_random_choice: bool = True):
+        image_path, seg_path = input_str.split()
+        image_name = os.path.splitext(os.path.basename(image_path))[0]
         seg = None
         seg_aug = None
-        if image_name + ".png" in self.masks_dir_list:
-            seg_filename = os.path.join(self.masks_dir, image_name + ".png")
+        
+        if os.path.basename(seg_path) in self.masks_dir_list:
+            seg_filename = os.path.join(self.masks_dir, os.path.basename(seg_path))
             seg = Image.open(seg_filename)
             seg = np.array(seg, dtype=np.int64)
+        
         if self.split == "val":
             return seg
-        if image_name + ".png" in self.aug_masks_dir_list:
-            seg_filename = os.path.join(self.masks_dir + "Aug", image_name + ".png")
-            seg_aug = Image.open(seg_filename)
+        
+        aug_seg_path = os.path.join(self.masks_dir + "Aug", os.path.basename(seg_path))
+        if os.path.basename(seg_path) in self.aug_masks_dir_list:
+            seg_aug = Image.open(aug_seg_path)
             seg_aug = np.array(seg_aug, dtype=np.int64)
 
         if self.remove_small_annotations:
             if seg is not None:
                 for cat_id in np.unique(seg):
-                    # count number of pixels of cat_id
                     mask = seg == cat_id
                     if np.sum(mask) < 2 * 32 * 32:
                         seg[mask] = 0
             if seg_aug is not None:
                 for cat_id in np.unique(seg_aug):
-                    # count number of pixels of cat_id
                     mask = seg_aug == cat_id
                     if np.sum(mask) < 2 * 32 * 32:
                         seg_aug[mask] = 0
+        
+        return seg, seg_aug
 
-        if seg is None and seg_aug is not None:
-            return seg_aug
-        elif seg is not None and seg_aug is None:
-            return seg
-        else:
-            # randomly choose between seg and seg_aug
-            if with_random_choice:
-                return seg if random.random() < 0.5 else seg_aug
-            else:
-                return seg
+    # def __get_seg(self, image_name: str, with_random_choice: bool = True):
+    #     seg = None
+    #     seg_aug = None
+    #     if image_name + ".png" in self.masks_dir_list:
+    #         seg_filename = os.path.join(self.masks_dir, image_name + ".png")
+    #         seg = Image.open(seg_filename)
+    #         seg = np.array(seg, dtype=np.int64)
+    #     if self.split == "val":
+    #         return seg
+    #     if image_name + ".png" in self.aug_masks_dir_list:
+    #         seg_filename = os.path.join(self.masks_dir + "Aug", image_name + ".png")
+    #         seg_aug = Image.open(seg_filename)
+    #         seg_aug = np.array(seg_aug, dtype=np.int64)
+
+    #     if self.remove_small_annotations:
+    #         if seg is not None:
+    #             for cat_id in np.unique(seg):
+    #                 # count number of pixels of cat_id
+    #                 mask = seg == cat_id
+    #                 if np.sum(mask) < 2 * 32 * 32:
+    #                     seg[mask] = 0
+    #         if seg_aug is not None:
+    #             for cat_id in np.unique(seg_aug):
+    #                 # count number of pixels of cat_id
+    #                 mask = seg_aug == cat_id
+    #                 if np.sum(mask) < 2 * 32 * 32:
+    #                     seg_aug[mask] = 0
+
+    #     if seg is None and seg_aug is not None:
+    #         return seg_aug
+    #     elif seg is not None and seg_aug is None:
+    #         return seg
+    #     else:
+    #         # randomly choose between seg and seg_aug
+    #         if with_random_choice:
+    #             return seg if random.random() < 0.5 else seg_aug
+    #         else:
+    #             return seg
 
     def _load_annotation_dicts(self):
         img2cat = {}
