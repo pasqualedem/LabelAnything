@@ -33,7 +33,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00005]
+    initial_lr: [0.0005, 0.0001, 0.00005, 0.00001]
     optimizer: [AdamW]
     scheduler:
     - type: constant_with_warmup
@@ -101,7 +101,7 @@ parameters:
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
     val_possible_batch_example_nums: [[[8, 1]]] 
-    prompt_types: [["point", "bbox", "mask"]]
+    prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
 

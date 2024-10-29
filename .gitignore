@@ -99,6 +99,7 @@ target/
 *.pth
 *.bin
 *.pkl
+*.safetensors
 
 /label_anything/data/*.json
 exp_log.csv

@@ -188,6 +188,7 @@ def create_image_embeddings_huggingface(
         datefmt="%Y-%m-%d %H-%M-%S",
     )
     n_steps = len(dataloader)
+    print("Number of steps needed: ", n_steps)
 
     for idx, batch in enumerate(dataloader):
         img, image_id = batch

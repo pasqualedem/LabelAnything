@@ -69,6 +69,58 @@ python main.py rename_coco20i_json --instances_path data/coco/annotations/instan
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_val2014.json
 ```
 
+Setting up PASCAL VOC 2012 Dataset with augmented data.
+
+### 1. Instruction to download
+``` bash
+bash data/setup_voc12.sh data/pascal
+``` 
+``` 
+/VOCdevkit
+└── VOC2012
+    ├── Annotations
+    ├── ImageSets
+    │   └── Segmentation
+    ├── JPEGImages
+    ├── SegmentationObject
+    └── SegmentationClass
+``` 
+### 2. Add SBD Augmentated training data
+- Convert by yourself ([here](https://github.com/shelhamer/fcn.berkeleyvision.org/tree/master/data/pascal)).
+- Or download pre-converted files ([here](https://github.com/DrSleep/tensorflow-deeplab-resnet#evaluation)), **(I prefer this method)**.
+
+After the download move it into the VOC2012 folder.
+
+### 3. Download official sets as ImageSets/SegmentationAug list
+From: https://github.com/kazuto1011/deeplab-pytorch/files/2945588/list.zip
+
+```sh
+unzip list.zip -d data/pascal/ImageSets/
+mv data/pascal/ImageSets/list/train_aug.txt data/pascal/ImageSets/trainaug.txt
+rm -rf data/pascal/ImageSets/list
+```
+
+This is how the dataset should look like
+```sh
+/data
+└── pascal
+    ├── Annotations
+    ├── ImageSets
+    │   ├── Segmentation
+    │   └── SegmentationAug # ADDED!!
+    │       ├── test.txt
+    │       ├── train_aug.txt
+    │       ├── train.txt
+    │       ├── trainval_aug.txt
+    │       ├── trainval.txt
+    │       └── val.txt
+    ├── JPEGImages
+    ├── SegmentationObject
+    ├── SegmentationClass
+    └── SegmentationClassAug # ADDED!!
+        └── 2007_000032.png
+```
+
 ## Preprocess
 
 We use [Segment Anything](https://github.com/facebookresearch/segment-anything) pretrained models to extract image features. Enter the `checkpoints` directory and download the pretrained models from the Segment Anything repository:
@@ -107,6 +159,8 @@ For PASCAL
 mkdir -p data/pascal/vit_sam_embeddings/last_hidden_state
 mkdir data/pascal/vit_sam_embeddings/last_block_state
 python main.py generate_embeddings --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/pascal/JPEGImages --batch_size 16 --num_workers=8 --outfolder data/pascal/pascal_embeddings_vit_b_sam/last_hidden_state --last_block_dir data/pascal/pascal_embeddings_vit_b_sam/last_block_state --custom_preprocess
+
+python main.py generate_embeddings --encoder vit_b_mae --directory data/pascal/JPEGImages --batch_size 64 --num_workers 8 --outfolder data/pascal/embeddings_vit_mae_480 --model_name facebook/vit-mae-base --image_resolution 480 --mean_std default --huggingface
 ```
 
 ## Train and Test
