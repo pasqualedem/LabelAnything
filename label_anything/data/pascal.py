@@ -258,6 +258,7 @@ class PascalDataset(Dataset):
         return len(self.image_data)
 
     def load_and_preprocess_images(self, image_names: list[str]) -> torch.Tensor:
+        image_names = [x[0] if isinstance(x, tuple) else x for x in image_names]
         images = [
             Image.open(f"{self.img_dir}/{image_name}.jpg") for image_name in image_names
         ]
