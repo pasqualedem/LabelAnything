@@ -92,6 +92,10 @@ data/
 After the download move it into the pascal folder.
 
 ```bash
+unzip SegmentationClassAug.zip -d data/pascal
+```
+
+```bash
 data/
 └── pascal/
     ├── Annotations
@@ -110,10 +114,7 @@ From: https://github.com/kazuto1011/deeplab-pytorch/files/2945588/list.zip
 # Unzip the file
 unzip list.zip -d data/pascal/ImageSets/
 # Move file into Segmentation folder
-mv data/pascal/ImageSets/list/train_aug.txt data/pascal/ImageSets/trainaug.txt
-mv data/pascal/ImageSets/list/trainval_aug.txt data/pascal/ImageSets/trainvalaug.txt
-mv data/pascal/ImageSets/list/val.txt data/pascal/ImageSets/val.txt
-mv data/pascal/ImageSets/list/test.txt data/pascal/ImageSets/
+mv data/pascal/ImageSets/list/* data/pascal/ImageSets/Segmentation/
 rm -rf data/pascal/ImageSets/list
 ```
 
@@ -123,12 +124,11 @@ This is how the dataset should look like
 └── pascal
     ├── Annotations
     ├── ImageSets
-    │   ├── Segmentation
-    │   └── SegmentationAug # ADDED!!
+    │   └── Segmentation 
     │       ├── test.txt
-    │       ├── train_aug.txt
+    │       ├── trainaug.txt # ADDED!!
     │       ├── train.txt
-    │       ├── trainval_aug.txt
+    │       ├── trainvalaug.txt # ADDED!!
     │       ├── trainval.txt
     │       └── val.txt
     ├── JPEGImages
@@ -140,7 +140,9 @@ This is how the dataset should look like
 ### 4. Rename
 Now run the rename.sh script.
 ``` bash
-bash data/script/rename.sh path/to/file
+bash data/script/rename.sh data/pascal/ImageSets/Segmentation/train.txt
+bash data/script/rename.sh data/pascal/ImageSets/Segmentation/trainval.txt
+bash data/script/rename.sh data/pascal/ImageSets/Segmentation/val.txt
 ``` 
 
 ## Preprocess

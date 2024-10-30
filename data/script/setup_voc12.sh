@@ -7,3 +7,6 @@ wget -nc -P $DATASET_DIR http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCtrain
 
 # Extract images, annotations, etc.
 tar -xvf $DATASET_DIR/VOCtrainval_11-May-2012.tar -C $DATASET_DIR
+mv $DATASET_DIR/VOCdevkit/VOC2012/* $DATASET_DIR
+rm -r $DATASET_DIR/VOCdevkit
+rm $DATASET_DIR/VOCtrainval_11-May-2012.tar

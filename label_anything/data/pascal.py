@@ -12,6 +12,7 @@ from label_anything.data.coco20i import Coco20iDataset
 from safetensors.torch import load_file
 import itertools
 from torchvision.transforms import PILToTensor, ToTensor
+from tqdm import tqdm
 
 import label_anything.data.utils as utils
 from label_anything.data.utils import (
@@ -49,6 +50,7 @@ class PascalDataset(Dataset):
         all_example_categories: bool = True,
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
+        load_annotation_dicts: bool = True,
     ):
         super().__init__()
         print(f"Loading image filenames from {split}...")
@@ -84,28 +86,34 @@ class PascalDataset(Dataset):
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
 
         # read the image names
-        self.image_names = []
+        self.image_data = []
+        self.mask_names = []
         if split == "train":
             filenames_path1 = os.path.join(
                 os.path.join(data_dir, "ImageSets/Segmentation/train.txt")
             )
             filenames_path2 = os.path.join(
-                os.path.join(data_dir, "ImageSets/Segmentation/trainaug.txt")
+                os.path.join(data_dir, "ImageSets/Segmentation/train_aug.txt")
             )
             filenames_paths = [filenames_path1, filenames_path2]
             for filenames_path in filenames_paths:
                 with open(filenames_path) as f:
                     for line in f:
-                        image_name = line.rstrip()
-                        self.image_names.append(image_name)
+                        image_mask_name = line.rstrip()
+                        image_path, mask_path = image_mask_name.split()
+                        image_name = os.path.splitext(os.path.basename(image_path))[0]
+                        self.image_data.append((image_name, mask_path))
+
             # remove duplicates without changing the order
-            self.image_names = list(dict.fromkeys(self.image_names))
+            self.image_data = list(dict.fromkeys(self.image_data))
         elif split == "val":
             filenames_path = os.path.join(data_dir, "ImageSets/Segmentation/val.txt")
             with open(filenames_path) as f:
                 for line in f:
-                    image_name = line.rstrip()
-                    self.image_names.append(image_name)
+                    image_mask_name = line.rstrip()
+                    image_path, mask_path = image_mask_name.split()
+                    image_name = os.path.splitext(os.path.basename(image_path))[0]
+                    self.image_data.append((image_name, mask_path))
 
         # read the categories
         self.categories = {
@@ -131,7 +139,11 @@ class PascalDataset(Dataset):
             20: {"name": "tvmonitor"},
         }
 
-        self.img2cat, self.cat2img = self._load_annotation_dicts()
+        if load_annotation_dicts:
+            self.img2cat, self.cat2img = self._load_annotation_dicts()
+        else:
+            self.img2cat = None
+            self.cat2img = None
 
         # example generator/selector
         self.example_generator = build_example_generator(
@@ -151,37 +163,41 @@ class PascalDataset(Dataset):
         )
 
     def __get_seg(self, input_str: str, with_random_choice: bool = True):
-        image_path, seg_path = input_str.split()
-        image_name = os.path.splitext(os.path.basename(image_path))[0]
+        _, seg_path = input_str
         seg = None
         seg_aug = None
-        
-        if os.path.basename(seg_path) in self.masks_dir_list:
+
+        if (
+            "SegmentationClassAug" not in seg_path
+            and os.path.basename(seg_path) in self.masks_dir_list
+        ):
             seg_filename = os.path.join(self.masks_dir, os.path.basename(seg_path))
             seg = Image.open(seg_filename)
             seg = np.array(seg, dtype=np.int64)
-        
+
         if self.split == "val":
             return seg
-        
+
         aug_seg_path = os.path.join(self.masks_dir + "Aug", os.path.basename(seg_path))
-        if os.path.basename(seg_path) in self.aug_masks_dir_list:
+        if (
+            "SegmentationClassAug" in seg_path
+            and os.path.basename(seg_path) in self.aug_masks_dir_list
+        ):
             seg_aug = Image.open(aug_seg_path)
             seg_aug = np.array(seg_aug, dtype=np.int64)
 
-        if self.remove_small_annotations:
-            if seg is not None:
-                for cat_id in np.unique(seg):
-                    mask = seg == cat_id
-                    if np.sum(mask) < 2 * 32 * 32:
-                        seg[mask] = 0
-            if seg_aug is not None:
-                for cat_id in np.unique(seg_aug):
-                    mask = seg_aug == cat_id
-                    if np.sum(mask) < 2 * 32 * 32:
-                        seg_aug[mask] = 0
+        assert seg is not None or seg_aug is not None, "seg and seg_aug are BOTH None"
+        assert seg is None or seg_aug is None, "seg and seg_aug are BOTH NOT None"
         
-        return seg, seg_aug
+        selected_seg = seg if seg is not None else seg_aug
+
+        if self.remove_small_annotations:
+            for cat_id in np.unique(selected_seg):
+                mask = selected_seg == cat_id
+                if np.sum(mask) < 2 * 32 * 32:
+                    selected_seg[mask] = 0
+                    
+        return selected_seg
 
     # def __get_seg(self, image_name: str, with_random_choice: bool = True):
     #     seg = None
@@ -226,25 +242,24 @@ class PascalDataset(Dataset):
         img2cat = {}
         cat2img = {}
 
-        for image_name in self.image_names:
-            seg = self.__get_seg(image_name, with_random_choice=False)
+        for image_data in tqdm(self.image_data, desc="Loading annotations..."):
+            seg = self.__get_seg(image_data, with_random_choice=False)
             categories = np.unique(seg[(seg != 0) & (seg != 255)]).tolist()
             categories = [cat for cat in categories if cat in self.categories]
-            img2cat[image_name] = categories
+            img2cat[image_data] = categories
             for cat in categories:
                 if cat not in cat2img:
                     cat2img[cat] = set()
-                cat2img[cat].add(image_name)
+                cat2img[cat].add(image_data)
 
         return img2cat, cat2img
 
     def __len__(self):
-        return len(self.image_names)
-    
+        return len(self.image_data)
+
     def load_and_preprocess_images(self, image_names: list[str]) -> torch.Tensor:
         images = [
-            Image.open(f"{self.img_dir}/{image_name}.jpg")
-            for image_name in image_names
+            Image.open(f"{self.img_dir}/{image_name}.jpg") for image_name in image_names
         ]
         if self.preprocess is not None:
             images = [self.preprocess(image) for image in images]
@@ -290,9 +305,7 @@ class PascalDataset(Dataset):
         assert self.emb_dir is not None, "emb_dir must be provided."
         gt = None
 
-        f = load_file(
-            f"{self.emb_dir}/{img_name}.safetensors"
-        )
+        f = load_file(f"{self.emb_dir}/{img_name}.safetensors")
         embedding = f["embedding"]
         if self.load_gts:
             gt = f[f"{self.name}_gt"]
@@ -310,10 +323,7 @@ class PascalDataset(Dataset):
             (torch.Tensor, str, Optional[torch.Tensor]): Returns a tuple containing the images or the embeddings, the key of the returned tensor and the ground truths.
         """
         if self.load_embeddings:
-            embeddings_gts = [
-                self._load_safe(image_name)
-                for image_name in image_names
-            ]
+            embeddings_gts = [self._load_safe(image_name) for image_name in image_names]
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
@@ -329,30 +339,30 @@ class PascalDataset(Dataset):
             return torch.stack(images), BatchKeys.IMAGES, gts
 
     def _get_prompts(
-        self, image_names: list, cat_ids: list, with_random_choice: bool = True
+        self, image_data: list, cat_ids: list, with_random_choice: bool = True
     ) -> (list, list, list, list, list):
         """Get the annotations for the chosen examples.
 
         Args:
-            image_names (list): A list of image ids of the examples.
+            image_names (list): A list of image_names, mask_name of the examples.
             cat_ids (list): A list of sets of category ids of the examples.
 
         Returns:
             (list, list, list, list, list): Returns five lists:
                 2. masks: A list of dictionaries mapping category ids to masks.
         """
-        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_names]
+        masks = [{cat_id: [] for cat_id in cat_ids} for _ in image_data]
 
-        classes = [[] for _ in range(len(image_names))]
+        classes = [[] for _ in range(len(image_data))]
         # it wont work if we have more than one example per image
         segs = [
             self.__get_seg(image_name, with_random_choice=with_random_choice)
-            for image_name in image_names
+            for image_name in image_data
         ]
         img_sizes = [image.shape[-2:] for image in segs]
 
         # process annotations
-        for i, (img_name, img_size) in enumerate(zip(image_names, img_sizes)):
+        for i, (img_name, img_size) in enumerate(zip(image_data, img_sizes)):
             for cat_id in cat_ids:
                 # for each pair (image img_id and category cat_id)
                 if cat_id not in self.img2cat[img_name]:
@@ -369,13 +379,17 @@ class PascalDataset(Dataset):
                 masks[i][cat_id].append(mask)
 
         # convert the lists of prompts to arrays
-        for i in range(len(image_names)):
+        for i in range(len(image_data)):
             for cat_id in cat_ids:
                 masks[i][cat_id] = np.array((masks[i][cat_id]))
         return masks, classes, img_sizes
 
     def compute_ground_truths(
-        self, image_names: list[str], img_sizes, cat_ids: list[int], with_random_choice: bool = True
+        self,
+        image_data: list[str],
+        img_sizes,
+        cat_ids: list[int],
+        with_random_choice: bool = True,
     ) -> list[torch.Tensor]:
         """Compute the ground truths for the given image ids and category ids.
 
@@ -389,7 +403,7 @@ class PascalDataset(Dataset):
         ground_truths = []
 
         # generate masks
-        for i, image_name in enumerate(image_names):
+        for i, image_name in enumerate(image_data):
             img_size = img_sizes[i]
             ground_truths.append(np.zeros(img_size, dtype=np.int64))
             seg = self.__get_seg(image_name, with_random_choice=with_random_choice)
@@ -419,14 +433,15 @@ class PascalDataset(Dataset):
             possible_prompt_types = random.choice(possible_prompt_types)
         num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
 
-        image_name = self.image_names[idx]
-        image_names, aux_cat_ids = self._extract_examples(
-            image_name, num_examples, num_classes
+        image_data = self.image_data[idx]
+        images_data, aux_cat_ids = self._extract_examples(
+            image_data, num_examples, num_classes
         )
+        image_names, _ = zip(*images_data)
 
         if self.all_example_categories:
             aux_cat_ids = [aux_cat_ids[0]] + [
-                set(self.img2cat[img]) for img in image_names[1:]
+                set(self.img2cat[img]) for img in images_data[1:]
             ]  # check if self.images must be called before
 
         cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
@@ -435,14 +450,14 @@ class PascalDataset(Dataset):
         # load, stack and preprocess the images
         images, image_key, ground_truths = self._get_images_or_embeddings(image_names)
 
-        masks, classes, img_sizes = self._get_prompts(image_names, cat_ids)
+        masks, classes, img_sizes = self._get_prompts(images_data, cat_ids)
 
         masks, flag_masks = utils.annotations_to_tensor(
             self.prompts_processor, masks, img_sizes, PromptType.MASK
         )
 
         if ground_truths is None:
-            ground_truths = self.compute_ground_truths(image_names, img_sizes, cat_ids)
+            ground_truths = self.compute_ground_truths(images_data, img_sizes, cat_ids)
 
         # stack ground truths
         dims = torch.tensor(img_sizes)
@@ -464,18 +479,18 @@ class PascalDataset(Dataset):
 
         # make zeroes tensors for boxes, points and flags
         prompt_bboxes = torch.zeros(
-            (len(image_names), len(cat_ids), 1, 4), dtype=torch.float32
+            (len(images_data), len(cat_ids), 1, 4), dtype=torch.float32
         )
         flag_bboxes = torch.zeros(
-            (len(image_names), len(cat_ids), 1), dtype=torch.uint8
+            (len(images_data), len(cat_ids), 1), dtype=torch.uint8
         )
         prompt_points = torch.zeros(
-            (len(image_names), len(cat_ids), 1, 2), dtype=torch.float32
+            (len(images_data), len(cat_ids), 1, 2), dtype=torch.float32
         )
         flag_points = torch.zeros(
-            (len(image_names), len(cat_ids), 1), dtype=torch.uint8
+            (len(images_data), len(cat_ids), 1), dtype=torch.uint8
         )
-        
+
         flag_examples = flags_merge(flag_masks, flag_points, flag_bboxes)
 
         data_dict = {
@@ -489,7 +504,7 @@ class PascalDataset(Dataset):
             BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.DIMS: dims,
             BatchKeys.CLASSES: classes,
-            BatchKeys.IMAGE_IDS: image_names,
+            BatchKeys.IMAGE_IDS: images_data,
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }
         return data_dict
