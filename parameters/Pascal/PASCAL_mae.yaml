@@ -96,6 +96,7 @@ parameters:
       load_embeddings: [True]
       load_gts: [False]
       image_size: *image_size
+      custom_preprocess: [False]
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
