@@ -18,6 +18,7 @@ from .build_encoder import ENCODERS, build_vit_b, build_vit_h, build_vit_l
 from .samfew import SAMFewShotModel
 from .dcama import build_dcama
 from .fptrans import build_fptrans
+from .panet import build_panet
 from .dummy import build_dummy
 
 
@@ -40,6 +41,7 @@ model_registry = {
     "asam_b": build_asam_vit_b,
     "dcama": build_dcama,
     "fptrans": build_fptrans,
+    "panet": build_panet,
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS
