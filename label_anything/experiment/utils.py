@@ -59,12 +59,15 @@ def get_scheduler(optimizer, num_training_steps, scheduler_params):
         raise ValueError("step_moment must be specified, choose (batch, epoch)")
     step_moment = SchedulerStepMoment(step_moment)
     num_warmup_steps = scheduler_params.pop("num_warmup_steps", None)
+    if scheduler_params:
+        logger.warning(
+            f"Unused scheduler parameters: {', '.join(list(scheduler_params.keys()))}"
+        )
     return (
         get_transformers_scheduler(
             scheduler_type,
             optimizer=optimizer,
             num_warmup_steps=num_warmup_steps,
-            scheduler_specific_kwargs=scheduler_params,
             num_training_steps=num_training_steps,
         ),
         step_moment,
