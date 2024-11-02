@@ -21,7 +21,7 @@ from label_anything.data.transforms import (
     PromptsProcessor,
     Resize,
 )
-from label_anything.models import model_registry
+from label_anything.models import model_registry, build_encoder
 from label_anything.utils.utils import ResultDict
 
 
@@ -240,7 +240,11 @@ def preprocess_images_to_embeddings_huggingface(
         )
         if custom_preprocess
         else Compose(
-            [Resize((image_resolution, image_resolution)), ToTensor(), Normalize(mean, std)]
+            [
+                Resize((image_resolution, image_resolution)),
+                ToTensor(),
+                Normalize(mean, std),
+            ]
         )
     )
     dataset = LabelAnyThingOnlyImageDataset(
@@ -254,6 +258,70 @@ def preprocess_images_to_embeddings_huggingface(
     create_image_embeddings_huggingface(
         model, dataloader, outfolder, device=device, image_resolution=image_resolution
     )
+
+
+@torch.no_grad()
+def preprocess_images_to_feature_pyramids(
+    encoder_name,
+    directory,
+    batch_size=1,
+    num_workers=0,
+    outfolder="data/processed/embeddings",
+    device="cuda",
+    compile=False,
+    image_resolution=384,
+    custom_preprocess=True,
+    out_features=("stage2", "stage3", "stage4"),
+    mean_std="default",
+):
+    os.makedirs(outfolder, exist_ok=True)
+    encoder = build_encoder(encoder_name)
+    print("Model loaded")
+    encoder = encoder.to(device)
+    print("Model moved to device")
+    if compile:
+        encoder = torch.compile(encoder, dynamic=True)
+        print("Model compiled")
+    mean, std = get_mean_std(mean_std, mean_std)
+    preprocess_image = (
+        Compose(
+            [
+                CustomResize(image_resolution),
+                ToTensor(),
+                CustomNormalize(image_resolution, mean, std),
+            ]
+        )
+        if custom_preprocess
+        else Compose(
+            [
+                Resize((image_resolution, image_resolution)),
+                ToTensor(),
+                Normalize(mean, std),
+            ]
+        )
+    )
+    dataset = LabelAnyThingOnlyImageDataset(
+        directory=directory, preprocess=preprocess_image
+    )
+    print("Dataset created")
+    dataloader = torch.utils.data.DataLoader(
+        dataset=dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+    )
+    print("Dataloader created")
+    for idx, batch in enumerate(tqdm(dataloader)):
+        img, image_id = batch
+        img = img.to(device)
+        out = encoder(img).cpu()
+        for i in range(img.shape[0]):
+            feature_maps = {}
+            for j, stage in enumerate(out_features):
+                feature_maps[stage] = out.feature_maps[j][i]
+            save_file(
+                feature_maps,
+                os.path.join(outfolder, f"{image_id[i]}.safetensors"),
+            )
+        if idx % 10 == 0:
+            logging.info(f"Step {idx}/{len(dataloader)}")
 
 
 def rename_coco20i_json(instances_path: str):

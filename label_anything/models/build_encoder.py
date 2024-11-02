@@ -2,7 +2,7 @@ from einops import rearrange
 import torch
 from functools import partial
 
-from transformers import ViTModel, AutoModel
+from transformers import ViTModel, AutoModel, AutoBackbone
 
 from .image_encoder import ImageEncoderViT
 
@@ -81,11 +81,22 @@ def _build_vit(
 
 
 class ViTModelWrapper(ViTModel):
-    def forward(self, x):
-        h, w = x.shape[-2:]
-        output = super().forward(x, interpolate_pos_encoding=True)
+    def forward(self, pixel_values):
+        """We edit the forward method to return the last hidden state of the model
+
+        Differently from HF implementation, we preserve spatial information of the patches
+        and remove the [CLS] token from the output.
+
+        Args:
+            x (torch.Tensor): Input tensor
+
+        Returns:
+            torch.Tensor: Last hidden state of the model
+        """
+        h, w = pixel_values.shape[-2:]
+        output = super().forward(pixel_values, interpolate_pos_encoding=True)
         hs = output.last_hidden_state[:, 1:, :]
-        out = rearrange(hs, "b (h w) c -> b c h w", h=h//16).contiguous()
+        out = rearrange(hs, "b (h w) c -> b c h w", h=h // 16).contiguous()
         return out
 
 
@@ -106,6 +117,16 @@ def build_vit_dino_b8(project_last_hidden=False):
     return vit_dino_b8
 
 
+def build_resnet50(project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]):
+    resnet50 = AutoBackbone.from_pretrained("microsoft/resnet-50", out_features=out_features)
+    return resnet50
+    
+
+def build_swin_b(project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]):
+    swin_b = AutoBackbone.from_pretrained("microsoft/swin-base-patch4-window12-384", out_features=out_features)
+    return swin_b
+
+
 def build_encoder(name, **kwargs):
     if name in ENCODERS:
         return ENCODERS[name](**kwargs)
@@ -118,4 +139,16 @@ ENCODERS = {
     "vit_b": build_vit_b,
     "vit_b_mae": build_vit_b_mae,
     "vit_dino_b8": build_vit_dino_b8,
+    "resnet50": build_resnet50,
+    "swin_b": build_swin_b,
 }
+
+
+resnet50 = build_resnet50()
+pixel_values = torch.randn(4, 3, 384, 384)
+resnet_output = resnet50(pixel_values)
+print(resnet_output)
+
+swin_b = build_swin_b()
+swin_output = swin_b(pixel_values)
+print(swin_output)
