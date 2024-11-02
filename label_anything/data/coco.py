@@ -60,6 +60,7 @@ class CocoLVISDataset(Dataset):
         all_example_categories: bool = True,
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
+        is_pyramids: bool = False,
     ):
         """Initialize the dataset.
 
@@ -80,6 +81,7 @@ class CocoLVISDataset(Dataset):
             all_example_categories (bool, optional): Specify if all exaple categories are taken into account.
             sample_function (str, optional): Specify strategy to sample support images.
             custom_preprocess (bool, optional): Specify if custom preprocessing is used. Defaults to True.
+            is_pyramids (bool, optional): Specify if the embeddings are pyramids. Defaults to False.
         """
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
@@ -116,6 +118,7 @@ class CocoLVISDataset(Dataset):
         self.remove_small_annotations = remove_small_annotations
         self.all_example_categories = all_example_categories
         self.sample_function = sample_function
+        self.is_pyramids = is_pyramids
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -248,7 +251,13 @@ class CocoLVISDataset(Dataset):
         f = load_file(
             f"{self.emb_dir}/{str(img_data[AnnFileKeys.ID]).zfill(12)}.safetensors"
         )
-        embedding = f["embedding"]
+        if not self.is_pyramids:
+            embedding = f["embedding"]
+        else:
+            # embedding is the subset of f with keys starting with "stage"
+            embedding = {
+                k: v for k, v in f.items() if k.startswith("stage")
+            }
         if self.load_gts:
             gt = f[f"{self.name}_gt"]
         return embedding, gt
@@ -454,7 +463,14 @@ class CocoLVISDataset(Dataset):
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
-            return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
+
+            if not self.is_pyramids:
+                embeddings = torch.stack(embeddings)
+            else:
+                embeddings = {
+                    k: torch.stack([v[k] for v in embeddings]) for k in embeddings[0]
+                }
+            return embeddings, BatchKeys.EMBEDDINGS, gts
         else:
             images = [
                 self._load_and_preprocess_image(image_data)
@@ -789,7 +805,14 @@ class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
         self, batched_input: list[dict[str, Any]]
     ) -> (dict[str, Any], torch.Tensor):
         data_key = "images" if "images" in batched_input[0].keys() else "embeddings"
-        images = torch.stack([x[data_key] for x in batched_input])
+        
+        if not self.is_pyramids:
+            images = torch.stack([x[data_key] for x in batched_input])
+        else:
+            images = {
+                k: torch.stack([x[data_key][k] for x in batched_input])
+                for k in batched_input[0][data_key].keys()
+            }
 
         dims = torch.stack([x["dim"] for x in batched_input])
 
