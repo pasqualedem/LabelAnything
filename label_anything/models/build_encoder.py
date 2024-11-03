@@ -117,13 +117,21 @@ def build_vit_dino_b8(project_last_hidden=False):
     return vit_dino_b8
 
 
-def build_resnet50(project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]):
-    resnet50 = AutoBackbone.from_pretrained("microsoft/resnet-50", out_features=out_features)
+def build_resnet50(
+    project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]
+):
+    resnet50 = AutoBackbone.from_pretrained(
+        "microsoft/resnet-50", out_features=out_features
+    )
     return resnet50
-    
 
-def build_swin_b(project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]):
-    swin_b = AutoBackbone.from_pretrained("microsoft/swin-base-patch4-window12-384", out_features=out_features)
+
+def build_swin_b(
+    project_last_hidden=False, out_features=["stage2", "stage3", "stage4"]
+):
+    swin_b = AutoBackbone.from_pretrained(
+        "microsoft/swin-base-patch4-window12-384", out_features=out_features
+    )
     return swin_b
 
 
@@ -142,13 +150,3 @@ ENCODERS = {
     "resnet50": build_resnet50,
     "swin_b": build_swin_b,
 }
-
-
-resnet50 = build_resnet50()
-pixel_values = torch.randn(4, 3, 384, 384)
-resnet_output = resnet50(pixel_values)
-print(resnet_output)
-
-swin_b = build_swin_b()
-swin_output = swin_b(pixel_values)
-print(swin_output)
