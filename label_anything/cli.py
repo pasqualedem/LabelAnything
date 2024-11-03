@@ -217,7 +217,7 @@ def generate_embeddings(
 )
 @click.option(
     "--out_features",
-    default=["stage2", "stage3", "stage4"],
+    default="stage2,stage3,stage4",
     help="Output features to use",
 )
 @click.option(
@@ -238,6 +238,8 @@ def generate_feature_pyramids(
     out_features,
     mean_std,
 ):
+    out_features = out_features.split(",")
+
     from label_anything.preprocess import preprocess_images_to_feature_pyramids
     preprocess_images_to_feature_pyramids(
         encoder_name=encoder_name,

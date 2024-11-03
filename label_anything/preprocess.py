@@ -271,11 +271,11 @@ def preprocess_images_to_feature_pyramids(
     compile=False,
     image_resolution=384,
     custom_preprocess=True,
-    out_features=("stage2", "stage3", "stage4"),
+    out_features=["stage2", "stage3", "stage4"],
     mean_std="default",
 ):
     os.makedirs(outfolder, exist_ok=True)
-    encoder = build_encoder(encoder_name)
+    encoder = build_encoder.build_encoder(encoder_name)
     print("Model loaded")
     encoder = encoder.to(device)
     print("Model moved to device")
@@ -311,11 +311,11 @@ def preprocess_images_to_feature_pyramids(
     for idx, batch in enumerate(tqdm(dataloader)):
         img, image_id = batch
         img = img.to(device)
-        out = encoder(img).cpu()
+        out = encoder(img)
         for i in range(img.shape[0]):
             feature_maps = {}
             for j, stage in enumerate(out_features):
-                feature_maps[stage] = out.feature_maps[j][i]
+                feature_maps[stage] = out.feature_maps[j][i].cpu()
             save_file(
                 feature_maps,
                 os.path.join(outfolder, f"{image_id[i]}.safetensors"),
