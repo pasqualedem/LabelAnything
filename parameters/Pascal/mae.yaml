@@ -16,16 +16,13 @@ parameters:
     reruns: [1]
 
   logger:
-    log_frequency: [100]
+    log_frequency: [500]
     train_image_log_frequency: [250]
-    val_image_log_frequency: [25]
-    experiment_save_delta: [null] # save experiment every n seconds
+    val_image_log_frequency: [50]
     tmp_dir: [tmp]
-    wandb:
-      offline: [False]
-      entity: [cilabuniba]
-      tags: [[MAE]]
-      offline_directory: [offline]
+    entity: [cilabuniba]
+    tags: [[MAE]]
+    offline_directory: [offline]
 
   train_params:
     loss:

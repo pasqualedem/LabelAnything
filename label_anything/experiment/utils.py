@@ -11,7 +11,6 @@ from transformers import get_scheduler as get_transformers_scheduler
 
 from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
-from label_anything.logger.abstract_logger import AbstractLogger
 from label_anything.utils.utils import find_divisor_pairs, get_divisors, torch_dict_load
 
 logger = get_logger(__name__)
@@ -74,18 +73,6 @@ def get_scheduler(optimizer, num_training_steps, scheduler_params):
         ),
         step_moment,
     )
-
-
-def get_experiment_logger(accelerator: Accelerator, params: dict) -> AbstractLogger:
-    if params.get("logger", {}).get("comet") is not None:
-        from label_anything.logger.comet_logger import (
-            comet_experiment as platform_logger,
-        )
-    elif params.get("logger", {}).get("wandb") is not None:
-        from label_anything.logger.wandb_logger import (
-            wandb_experiment as platform_logger,
-        )
-    return platform_logger(accelerator, params)
 
 
 def get_batch_size(batch_tuple):
@@ -216,19 +203,18 @@ def set_class_embeddings(
                 )
             passed = True
         except RuntimeError as e:
-            if "out of memory" in str(e):
-                gc.collect()
-                torch.cuda.empty_cache()
-                logger.warning(
-                    f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}"
-                )
-                exc = e
-            else:
+            if "out of memory" not in str(e):
                 raise e
+            gc.collect()
+            torch.cuda.empty_cache()
+            logger.warning(
+                f"Out of memory while generating class embeddings with chunk size {chunk_sizes[i]}"
+            )
+            exc = e
         i += 1
     if not passed:
         logger.error(
-            f"Out of memory while generating class embeddings, raising exception"
+            "Out of memory while generating class embeddings, raising exception"
         )
         raise exc
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
@@ -292,7 +278,7 @@ def convert_no_vit_checkpoint(model, no_vit_state_dict):
 
     state_dict = {
         **{
-            "model.image_encoder." + k: v
+            f"model.image_encoder.{k}": v
             for k, v in model.image_encoder.state_dict().items()
         },
         **state_dict,

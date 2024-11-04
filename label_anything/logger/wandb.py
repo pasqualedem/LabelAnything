@@ -13,7 +13,6 @@ import torch
 import wandb
 from PIL import Image
 from matplotlib import pyplot as plt
-from label_anything.logger.abstract_logger import AbstractLogger, main_process_only
 
 from label_anything.logger.text_logger import get_logger
 from accelerate import Accelerator
@@ -29,14 +28,21 @@ WANDB_ID_PREFIX = "wandb_id."
 WANDB_INCLUDE_FILE_NAME = ".wandbinclude"
 
 
-def wandb_experiment(accelerator: Accelerator, params: dict):
+def main_process_only(func):
+    def wrapper(instance, *args, **kwargs):
+        accelerator = instance.accelerator
+        if accelerator.is_local_main_process:
+            return func(instance, *args, **kwargs)
+
+    return wrapper
+
+
+def wandb_tracker(accelerator: Accelerator, params: dict):
     logger_params = deepcopy(params.get("logger", {}))
-    wandb_params = logger_params.pop("wandb", {})
     wandb_information = {
         "accelerator": accelerator,
         "project_name": params["experiment"]["name"],
         "group": params["experiment"].get("group", None),
-        **wandb_params,
     }
     global logger
     tmp_dir = get_tmp_dir()
@@ -52,9 +58,6 @@ def wandb_experiment(accelerator: Accelerator, params: dict):
     os.makedirs(tmp_dir, exist_ok=True)
     logger_params["tmp_dir"] = tmp_dir
 
-    if wandb_information.pop("offline"):
-        os.environ["WANDB_MODE"] = "offline"
-
     wandb_logger = WandBLogger(**wandb_information, **logger_params)
     wandb_logger.log_parameters(params)
     wandb_logger.add_tags(logger_params.get("tags", ()))
@@ -62,48 +65,59 @@ def wandb_experiment(accelerator: Accelerator, params: dict):
     return wandb_logger
 
 
-class WandBLogger(AbstractLogger):
+class WandBLogger:
     MAX_CLASSES = 100000  # For negative classes
 
     def __init__(
         self,
         project_name: str,
+        accelerator: Accelerator,
+        tmp_dir: str,
         resume: bool = False,
         offline_directory: str = None,
         save_checkpoints_remote: bool = True,
         save_tensorboard_remote: bool = True,
         save_logs_remote: bool = True,
         entity: Optional[str] = None,
-        api_server: Optional[str] = None,
         save_code: bool = False,
         tags=None,
         run_id=None,
         resume_checkpoint_type: str = "best",
         group=None,
-        **kwargs,
+        log_frequency: int = 100,
+        train_image_log_frequency: int = 1000,
+        val_image_log_frequency: int = 1000,
+        test_image_log_frequency: int = 1000,
     ):
         """
-
-        :param experiment_name: Used for logging and loading purposes
-        :param s3_path: If set to 's3' (i.e. s3://my-bucket) saves the Checkpoints in AWS S3 otherwise saves the Checkpoints Locally
-        :param checkpoint_loaded: if true, then old tensorboard files will *not* be deleted when tb_files_user_prompt=True
-        :param max_epochs: the number of epochs planned for this training
-        :param tb_files_user_prompt: Asks user for Tensorboard deletion prompt.
-        :param launch_tensorboard: Whether to launch a TensorBoard process.
-        :param tensorboard_port: Specific port number for the tensorboard to use when launched (when set to None, some free port
-                    number will be used
-        :param save_checkpoints_remote: Saves checkpoints in s3.
-        :param save_tensorboard_remote: Saves tensorboard in s3.
-        :param save_logs_remote: Saves log files in s3.
-        :param save_code: save current code to wandb
+        :param project_name: The WandB project name.
+        :param accelerator: Accelerator instance.
+        :param tmp_dir: Temporary directory for local data.
+        :param resume: Whether to resume a previous run.
+        :param offline_directory: Local directory for offline WandB logging.
+        :param save_checkpoints_remote: Save checkpoints in remote storage.
+        :param save_tensorboard_remote: Save TensorBoard logs in remote storage.
+        :param save_logs_remote: Save general logs in remote storage.
+        :param entity: WandB entity for project ownership.
+        :param save_code: Save the current code to WandB.
+        :param tags: List of tags for the WandB run.
+        :param run_id: Unique ID to resume a WandB run.
+        :param resume_checkpoint_type: Type of checkpoint for resuming.
+        :param group: WandB group name for runs.
+        :param log_frequency: Frequency of general logging.
+        :param train_image_log_frequency: Frequency for logging train images.
+        :param val_image_log_frequency: Frequency for logging validation images.
+        :param test_image_log_frequency: Frequency for logging test images.
         """
+        
+        # Handle WandB-specific resume logic
         tracker_resume = "must" if resume else None
         self.resume = tracker_resume
         resume = run_id is not None
         if not tracker_resume and resume:
-            if tags is None:
-                tags = []
-            tags = tags + ["resume", run_id]
+            tags = (tags or []) + ["resume", run_id]
+
+        # Offline directory setup for WandB
         self.accelerator_state_dir = None
         if offline_directory:
             os.makedirs(offline_directory, exist_ok=True)
@@ -112,10 +126,14 @@ class WandBLogger(AbstractLogger):
             os.environ["WANDB_CACHE_DIR"] = offline_directory
             os.environ["WANDB_CONFIG_DIR"] = offline_directory
             os.environ["WANDB_DATA_DIR"] = offline_directory
+
+        # Resume WandB run if applicable
         if resume:
             self._resume(offline_directory, run_id, checkpoint_type=resume_checkpoint_type)
+
+        # Initialize WandB experiment only on local main process
         experiment = None
-        if kwargs["accelerator"].is_local_main_process:
+        if accelerator.is_local_main_process:
             experiment = wandb.init(
                 project=project_name,
                 entity=entity,
@@ -129,17 +147,25 @@ class WandBLogger(AbstractLogger):
             logger.info(f"wandb run name: {experiment.name}")
             logger.info(f"wandb run dir : {experiment.dir}")
             wandb.define_metric("train/step")
-            # set all other train/ metrics to use this step
             wandb.define_metric("train/*", step_metric="train/step")
-
             wandb.define_metric("validate/step")
-            # set all other validate/ metrics to use this step
             wandb.define_metric("validate/*", step_metric="validate/step")
-            
-        super().__init__(experiment=experiment, **kwargs)
+
+        self.experiment = experiment
+        self.accelerator = accelerator
+        self.tmp_dir = tmp_dir
+        self.local_dir = experiment.dir if hasattr(experiment, "dir") else None
+        os.makedirs(self.tmp_dir, exist_ok=True)
+        self.log_frequency = log_frequency
+        self.prefix_frequency_dict = {
+            "train": train_image_log_frequency,
+            "val": val_image_log_frequency,
+            "test": test_image_log_frequency,
+        }
+        
+        # Additional WandBLogger attributes
         if save_code:
             self._save_code()
-
         self.save_checkpoints_wandb = save_checkpoints_remote
         self.save_tensorboard_wandb = save_tensorboard_remote
         self.save_logs_wandb = save_logs_remote
@@ -432,6 +458,12 @@ class WandBLogger(AbstractLogger):
             return None
 
         return None
+    
+    def _get_class_ids(self, classes):
+        res_classes = []
+        for c in classes:
+            res_classes.append(sorted(list(set(sum(c, [])))))
+        return res_classes
 
     @main_process_only
     def log_batch(
@@ -462,8 +494,8 @@ class WandBLogger(AbstractLogger):
             ]
             categories = dataset.categories
             # sequence_name = f"image_{image_idx}_substep_{substitution_step}"
-            sequence_name = "predictions"
-            self.create_image_sequence(sequence_name, columns=["Epoch", "Dataset"])
+            sequence_name = filter(lambda x: "predictions" in x, self.sequences.keys())
+            sequence_name = next(sequence_name, None)
             self.log_prompts(
                 batch_idx=batch_idx,
                 epoch=epoch,
@@ -493,7 +525,6 @@ class WandBLogger(AbstractLogger):
                 prefix=phase,
                 sequence_name=sequence_name,
             )
-            self.add_image_sequence(sequence_name)
             
     @main_process_only
     def log_test_prediction(
@@ -898,6 +929,16 @@ class WandBLogger(AbstractLogger):
     def log_metrics(self, metrics: dict, epoch=None):
         wandb.log({f"{self.context}/{k}": v for k, v in metrics.items()})
 
+    def log_training_state(self, epoch, subfolder):
+        logger.info("Waiting for all processes to finish for saving training state")
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            subdir = os.path.join(self.local_dir, subfolder)
+            self.accelerator.save_state(output_dir=subdir)
+        self.accelerator.wait_for_everyone()
+        if self.accelerator.is_local_main_process:
+            self.log_asset_folder(subdir, step=epoch, base_path=self.local_dir)
+
     def __repr__(self):
         return "WandbLogger"
 
@@ -933,3 +974,16 @@ class WandBLogger(AbstractLogger):
 
         # Restore the old one
         self.context = old_context
+
+    @property
+    def name(self):
+        if self.accelerator.is_local_main_process:
+            return self.experiment.name
+        return None
+
+    @property
+    def url(self):
+        if self.accelerator.is_local_main_process:
+            return self.experiment.url
+        return None
+
