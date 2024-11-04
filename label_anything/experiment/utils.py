@@ -18,7 +18,8 @@ logger = get_logger(__name__)
 
 
 def parse_params(params_dict):
-    train_params = params_dict.get("train_params", {})
+    train_params = params_dict.get("train_params", None)
+    val_params = params_dict.get("val_params", {})
     dataset_params = params_dict.get("dataset", {})
     model_params = params_dict.get("model", {})
     prompt_encoder_params = params_dict.get("prompt_encoder", {})
@@ -26,6 +27,7 @@ def parse_params(params_dict):
 
     return (
         train_params,
+        val_params,
         dataset_params,
         dataloader_params,
         model_params,
@@ -253,6 +255,8 @@ class WrapperModule(torch.nn.Module):
 
     def forward(self, input_dict, gt):
         result_dict = self.model(input_dict)
+        if self.loss is None:
+            return result_dict
         loss = self.loss(compose_loss_input(input_dict, result_dict), gt)
         return {"loss": loss, **result_dict}
 

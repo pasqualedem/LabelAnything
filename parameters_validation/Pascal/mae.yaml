@@ -27,25 +27,6 @@ parameters:
       tags: [[MAE]]
       offline_directory: [offline]
 
-  train_params:
-    loss:
-      class_weighting: [True]
-      components:
-        focal:
-          weight: [1.0]
-    num_points: [1] # number of points for class after the substitution
-    max_epochs: [1]
-    compile: [False]
-    initial_lr: [0.0005]
-    optimizer: [AdamW]
-    scheduler:
-    - type: constant_with_warmup
-      step_moment: batch
-      num_warmup_steps: 1000
-    substitute: [False]
-    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-    watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
-    check_nan: [1] # check for nan every n batches
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
@@ -60,22 +41,14 @@ parameters:
       name: [RandomMatrixEncoder]
       bank_size: [100]
       embed_dim: *embed_dim
+    checkpoint: [offline/wandb/offline-run-20241104_165517-ai4gs9ig/files/best/model.safetensors]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
-      pascal5i:
-        name: [pascal]
-        data_dir: [data/pascal]
-        emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480]
-        split: ["train"]
-        val_fold_idx: [0]
-        n_folds: [4]
-        sample_function: [uniform]
-        all_example_categories: [False]
       val_pascal5i_N1K1: &val_pascal5i_N1K1
         name: [pascal]
         data_dir: &instance_dir [data/pascal]
-        emb_dir: *emb_dir
+        emb_dir: [data/pascal/embeddings_vit_mae_480]
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]

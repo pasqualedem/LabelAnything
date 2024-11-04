@@ -9,6 +9,7 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
+  seed: [42]
 
   logger:
     log_frequency: [10]
@@ -28,7 +29,6 @@ parameters:
       components:
         focal:
           weight: [1.0]
-    seed: &seed [42] # random seed to set
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]

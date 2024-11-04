@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import json
 import os
@@ -71,6 +72,7 @@ class Run:
         self.plat_logger = None
         self.dataset_params = None
         self.train_params = None
+        self.val_params = None
         self.model = None
         self.scheduler = None
         self.criterion = None
@@ -89,6 +91,7 @@ class Run:
 
         (
             self.train_params,
+            self.val_params,
             self.dataset_params,
             self.dataloader_params,
             self.model_params,
@@ -108,7 +111,7 @@ class Run:
         )
 
     def init(self, params: dict):
-        set_seed(params["train_params"]["seed"])
+        set_seed(params["seed"])
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -122,7 +125,6 @@ class Run:
             even_batches=False,
             kwargs_handlers=kwargs,
             split_batches=False,
-            mixed_precision=self.train_params.get("precision", None),
         )
         logger.info("Initiliazing tracker...")
         self.plat_logger = get_experiment_logger(self.accelerator, self.params)
@@ -149,14 +151,17 @@ class Run:
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
-        self.watch_metric = self.train_params["watch_metric"]
-
-        logger.info("Creating criterion")
-        self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        if self.train_params:
+            logger.info("Preparing for training")
+            self._prep_for_training()
+            logger.info("Creating criterion")
+            self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        else:
+            logger.info("No training parameters found, skipping training")
         self.model = WrapperModule(self.model, self.criterion)
         self.input_image_size = self.model_params.get("image_size", SIZE)
 
-        if self.train_params.get("compile", False):
+        if self.params.get("compile", False):
             logger.info("Compiling model")
             self.model = torch.compile(self.model)
         logger.info("Preparing model, optimizer, dataloaders and scheduler")
@@ -170,6 +175,7 @@ class Run:
         self._load_state()
 
     def _prep_for_training(self):
+        self.watch_metric = self.train_params["watch_metric"]
         logger.info("Creating optimizer")
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
             params = self.model.module.get_learnable_params(self.train_params)
@@ -180,8 +186,7 @@ class Run:
             lr=self.train_params["initial_lr"],
         )
 
-        scheduler_params = self.train_params.get("scheduler", None)
-        if scheduler_params:
+        if scheduler_params := self.train_params.get("scheduler", None):
             self.scheduler, self.scheduler_step_moment = get_scheduler(
                 scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
@@ -199,86 +204,88 @@ class Run:
         }
 
     def _load_state(self):
-        if self.plat_logger.accelerator_state_dir:
-            overwritten = False
-            # Merge image_encoder dict with the state dict
-            if (
+        if not self.plat_logger.accelerator_state_dir:
+            return
+        overwritten = False
+        if (
                 "checkpoint" in self.model_params
                 and self.params["model"]["name"] != "lam_no_vit"
             ) or self.params["model"]["name"] == "lam_mae_b":
-                if hasattr(self.model, "module"):
-                    model = self.model.module.model
-                else:
-                    model = self.model.model
-                model_filename = (
-                    "pytorch_model.bin"
-                    if "pytorch_model.bin"
-                    in os.listdir(self.plat_logger.accelerator_state_dir)
-                    else "model.safetensors"
-                )
-                shutil.copyfile(
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}.bak",
-                )
-                state_dict = torch_dict_load(
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}"
-                )
-                state_dict = {
-                    **{
-                        "model.image_encoder." + k: v
-                        for k, v in model.image_encoder.state_dict().items()
-                    },
-                    **state_dict,
-                }
-                torch_dict_save(
-                    state_dict,
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                )
-                overwritten = True
+            if hasattr(self.model, "module"):
+                model = self.model.module.model
+            else:
+                model = self.model.model
+            model_filename = (
+                "pytorch_model.bin"
+                if "pytorch_model.bin"
+                in os.listdir(self.plat_logger.accelerator_state_dir)
+                else "model.safetensors"
+            )
+            shutil.copyfile(
+                f"{self.plat_logger.accelerator_state_dir}/{model_filename}",
+                f"{self.plat_logger.accelerator_state_dir}/{model_filename}.bak",
+            )
+            state_dict = torch_dict_load(
+                f"{self.plat_logger.accelerator_state_dir}/{model_filename}"
+            )
+            state_dict = {
+                **{
+                    f"model.image_encoder.{k}": v
+                    for k, v in model.image_encoder.state_dict().items()
+                },
+                **state_dict,
+            }
+            torch_dict_save(
+                state_dict,
+                f"{self.plat_logger.accelerator_state_dir}/{model_filename}",
+            )
+            overwritten = True
 
-            try:
-                self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
-                # Ripristinate old state
-            finally:
-                if (
-                    "checkpoint" in self.model_params
-                    and self.params["model"]["name"] != "lam_no_vit"
-                    and overwritten
-                ):
-                    shutil.copyfile(
-                        self.plat_logger.accelerator_state_dir
-                        + f"/{model_filename}.bak",
-                        self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                    )
-                    os.remove(
-                        self.plat_logger.accelerator_state_dir
-                        + f"/{model_filename}.bak"
-                    )
+        try:
+            self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
+            # Ripristinate old state
+        finally:
+            if (
+                "checkpoint" in self.model_params
+                and self.params["model"]["name"] != "lam_no_vit"
+                and overwritten
+            ):
+                shutil.copyfile(
+                    self.plat_logger.accelerator_state_dir
+                    + f"/{model_filename}.bak",
+                    f"{self.plat_logger.accelerator_state_dir}/{model_filename}",
+                )
+                os.remove(
+                    self.plat_logger.accelerator_state_dir
+                    + f"/{model_filename}.bak"
+                )
 
     def launch(self):
-        logger.info("Start training loop...")
 
-        # Train the Model
-        with self.plat_logger.train():
-            logger.info(
-                f"Running Model Training {self.params.get('experiment').get('name')}"
-            )
-            for epoch in range(self.train_params["max_epochs"]):
+        if self.train_params:
+            # Train the Model
+            logger.info("Start training loop...")
+            with self.plat_logger.train():
                 logger.info(
-                    "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
+                    f"Running Model Training {self.params.get('experiment').get('name')}"
                 )
-                self.train_epoch(epoch)
+                for epoch in range(self.train_params["max_epochs"]):
+                    logger.info(f'Epoch: {epoch}/{self.train_params["max_epochs"]}')
+                    self.train_epoch(epoch)
 
-                metrics = None
-                if (
-                    self.val_loaders
-                    and epoch % self.train_params.get("val_frequency", 1) == 0
-                ):
-                    with self.plat_logger.validate():
-                        logger.info(f"Running Model Validation")
-                        metrics = self.validate(epoch)
-                        self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                self.save_training_state(epoch, metrics)
+                    metrics = None
+                    if (
+                        self.val_loaders
+                        and epoch % self.train_params.get("val_frequency", 1) == 0
+                    ):
+                        with self.plat_logger.validate():
+                            logger.info("Running Model Validation")
+                            metrics = self.validate(epoch)
+                            self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
+                    self.save_training_state(epoch, metrics)
+        elif self.val_loaders:
+            with self.plat_logger.validate():
+                self.validate(epoch=0)
 
         if self.test_loaders:
             self.test()
@@ -299,11 +306,9 @@ class Run:
     def _get_lr(self):
         if self.scheduler is None:
             return self.train_params["initial_lr"]
-        try:
+        with contextlib.suppress(NotImplementedError):
             if hasattr(self.scheduler, "get_lr"):
                 return self.scheduler.get_lr()[0]
-        except NotImplementedError:
-            pass
         if hasattr(self.scheduler, "optimizer"):
             return self.scheduler.optimizer.param_groups[0]["lr"]
         return self.scheduler.optimizers[0].param_groups[0]["lr"]
@@ -325,7 +330,6 @@ class Run:
         batch_idx: int,
     ):
         try:
-            pass
             outputs = self.model(input_dict, gt)
         except RuntimeError as e:
             if "out of memory" in str(e):
@@ -412,9 +416,9 @@ class Run:
         epoch: int,
     ):
         if epoch > 0:
-            set_seed(self.params["train_params"]["seed"] + epoch)
+            set_seed(self.params["seed"] + epoch)
             logger.info(
-                f"Setting seed to {self.params['train_params']['seed'] + epoch}"
+                f"Setting seed to {self.params['seed'] + epoch}"
             )
         self.plat_logger.log_metric("start_epoch", epoch)
         self.model.train()
@@ -606,7 +610,7 @@ class Run:
                 "file": f"{self.plat_logger.local_dir}/validation_image_ids.json",
                 "json": {},
             }
-        if self.train_params.get("validation_reruns", None) is None:
+        if self.val_params.get("validation_reruns", None) is None:
             metrics = self.validate_run(name, val_dataloader, epoch, None)
         else:
             overall_metrics = []
@@ -633,15 +637,14 @@ class Run:
 
     def validate_run(self, name, val_loader, epoch, validation_run=None):
         if validation_run is None:
-            seed = self.params["train_params"]["seed"]
+            seed = self.params["seed"]
             metrics_suffix = ""
         else:
-            seed = self.params["train_params"]["seed"] + validation_run
+            seed = self.params["seed"] + validation_run
             metrics_suffix = f"_{validation_run}"
         set_seed(seed)
 
         self.model.eval()
-        avg_loss = RunningAverage()
         dataset_categories = next(iter(val_loader.dataset.datasets.values())).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
@@ -693,15 +696,7 @@ class Run:
                 metrics_value = self._update_val_metrics(
                     metrics, glob_preds, glob_gt, tot_steps
                 ) or metrics_value
-                loss = result_dict["loss"]
-
-                avg_loss.update(loss.item())
-                bar.set_postfix(
-                    {
-                        **metrics_value,
-                        "loss": loss.item(),
-                    }
-                )
+                bar.set_postfix(metrics_value)
                 self.plat_logger.log_batch(
                     batch_idx=batch_idx,
                     image_idx=tot_images,
@@ -723,10 +718,7 @@ class Run:
                 tot_images += cur_batch_size
 
             self.plat_logger.log_metrics(
-                {
-                    **{f"{k}_{name}": v for k, v in metrics.compute().items()},
-                    "avg_loss": avg_loss.compute(),
-                },
+                {f"{k}_{name}": v for k, v in metrics.compute().items()},
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
@@ -736,12 +728,8 @@ class Run:
             logger.info(
                 f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}"
             )
-        logger.info(
-            f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
-        )
         return {
             "miou": metrics_value[f"mIoU{metrics_suffix}"],
-            "loss": avg_loss.compute(),
             "fbiou": metrics_value[f"FBIoU{metrics_suffix}"],
         }
 
@@ -811,7 +799,7 @@ class Run:
             enumerate(dataloader),
             total=len(dataloader),
             postfix={"loss": 0},
-            desc=f"Test: ",
+            desc="Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
         self.plat_logger.create_image_sequence(dataset_name)
