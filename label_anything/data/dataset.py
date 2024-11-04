@@ -184,7 +184,10 @@ class LabelAnythingDataset(Dataset):
 
         # flag examples
         flag_examples = torch.stack(
-            [utils.collate_example_flags(x["flag_examples"], max_classes) for x in batched_input]
+            [
+                utils.collate_example_flags(x["flag_examples"], max_classes)
+                for x in batched_input
+            ]
         )
 
         # aux gts
@@ -201,7 +204,13 @@ class LabelAnythingDataset(Dataset):
         # images
         if "embeddings" in batched_input[0].keys():
             image_key = "embeddings"
-            images = torch.stack([x[image_key] for x in batched_input])
+            if isinstance(batched_input[0][image_key], torch.Tensor):
+                images = torch.stack([x[image_key] for x in batched_input])
+            else:
+                images = {
+                    k: torch.stack([x[image_key][k] for x in batched_input])
+                    for k in batched_input[0][image_key].keys()
+                }
         else:
             image_key = "images"
             images = torch.stack([x["images"] for x in batched_input])
@@ -225,7 +234,11 @@ class LabelAnythingDataset(Dataset):
 
 
 def get_batch_metadata(
-    dataset_len, possible_batch_example_nums, possible_prompts, prompt_choice_level, num_processes=1
+    dataset_len,
+    possible_batch_example_nums,
+    possible_prompts,
+    prompt_choice_level,
+    num_processes=1,
 ):
     """
     Returns a list of number of examples per batch and a list of batch sizes
@@ -272,14 +285,16 @@ def get_batch_metadata(
         val for tup in zip(*[prompt_types for i in range(num_processes)]) for val in tup
     ]
     if prompt_choice_level == "episode":
-            prompt_types = multi_combs
+        prompt_types = multi_combs
     batch_metadata = {
         utils.BatchMetadataKeys.NUM_EXAMPLES: examples_nums,
         utils.BatchMetadataKeys.PROMPT_TYPES: prompt_types,
     }
     if len(num_classes) > 0:
         num_classes = [
-            val for tup in zip(*[num_classes for i in range(num_processes)]) for val in tup
+            val
+            for tup in zip(*[num_classes for i in range(num_processes)])
+            for val in tup
         ]
         batch_metadata[utils.BatchMetadataKeys.NUM_CLASSES] = num_classes
 
@@ -362,11 +377,13 @@ class VariableBatchSampler(BatchSampler):
 
     def __len__(self):
         return len(self.batch_sizes)
-    
+
     def shuffle(self):
         # Remove th processes multiplication
-        batches = self.batch_sizes[::self.num_processes]
-        metadata = {k: v[::self.num_processes] for k, v in list(self.batch_metadata.items())}
+        batches = self.batch_sizes[:: self.num_processes]
+        metadata = {
+            k: v[:: self.num_processes] for k, v in list(self.batch_metadata.items())
+        }
         # Get permutation
         indices = torch.randperm(len(batches)).tolist()
         # Permute
@@ -374,13 +391,18 @@ class VariableBatchSampler(BatchSampler):
         # Multiply for the number of processes
         metadata = {k: [v[i] for i in indices] for k, v in metadata.items()}
         self.batch_sizes = [
-            val for tup in zip(*[batches for i in range(self.num_processes)]) for val in tup
+            val
+            for tup in zip(*[batches for i in range(self.num_processes)])
+            for val in tup
         ]
         self.batch_metadata = {
-            k: list(val for tup in zip(*[v for i in range(self.num_processes)]) for val in tup)
+            k: list(
+                val
+                for tup in zip(*[v for i in range(self.num_processes)])
+                for val in tup
+            )
             for k, v in metadata.items()
         }
-        
 
     def __iter__(self):
         if self.do_shuffle:
@@ -391,8 +413,14 @@ class VariableBatchSampler(BatchSampler):
 
         for i, batch_size in enumerate(self.batch_sizes):
             if self.prompt_choice_level == "episode":
-                metadata = {k: v[i] for k, v in self.batch_metadata.items() if k != utils.BatchMetadataKeys.PROMPT_TYPES}
-                metadata[utils.BatchMetadataKeys.PROMPT_TYPES] = self.batch_metadata[utils.BatchMetadataKeys.PROMPT_TYPES]
+                metadata = {
+                    k: v[i]
+                    for k, v in self.batch_metadata.items()
+                    if k != utils.BatchMetadataKeys.PROMPT_TYPES
+                }
+                metadata[utils.BatchMetadataKeys.PROMPT_TYPES] = self.batch_metadata[
+                    utils.BatchMetadataKeys.PROMPT_TYPES
+                ]
                 metadata[utils.BatchMetadataKeys.PROMPT_CHOICE_LEVEL] = "episode"
             else:
                 metadata = {k: v[i] for k, v in self.batch_metadata.items()}

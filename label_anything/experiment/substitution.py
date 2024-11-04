@@ -218,8 +218,14 @@ class Substitutor:
             device = self.batch["images"].device
         if "embeddings" in self.batch:
             torch_keys_to_exchange.append("embeddings")
-            num_examples = self.batch["embeddings"].shape[1]
-            device = self.batch["embeddings"].device
+            if isinstance(self.batch["embeddings"], dict):
+                # get the first key of the dict
+                key = list(self.batch["embeddings"].keys())[0]
+                num_examples = self.batch["embeddings"][key].shape[1]
+                device = self.batch["embeddings"][key].device
+            else:
+                num_examples = self.batch["embeddings"].shape[1]
+                device = self.batch["embeddings"].device
 
         if self.it == 0:
             self.it = 1
