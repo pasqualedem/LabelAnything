@@ -47,7 +47,7 @@ parameters:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
     class_attention: [False]
-    example_attention: [True]
+    example_attention: [False]
     example_class_attention: [False]
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
@@ -62,7 +62,7 @@ parameters:
     datasets:
       coco20i:
         name: [coco]
-        instances_path: [data/coco//annotations/instances_train2014.json]
+        instances_path: [data/coco/annotations/instances_train2014.json]
         emb_dir: &emb_dir [data/coco/embeddings_vit_mae]
         img_dir: &img_dir [data/coco//train_val_2017]
         split: ["train"]
@@ -100,6 +100,7 @@ parameters:
       max_points_per_annotation: [10]
       load_gts: [False]
       image_size: *image_size
+      custom_preprocess: [False]
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
