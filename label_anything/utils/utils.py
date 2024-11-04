@@ -115,11 +115,11 @@ def load_state_dict(model, state_dict, strict=True):
         model.load_state_dict(state_dict, strict=strict)
     except RuntimeError as e:
         try:
-            print(f"Error loading state_dict: {e}, trying to load without 'model.' prefix")
+            print("Error loading state_dict, trying to load without 'model.' prefix")
             state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
             model.load_state_dict(state_dict, strict=strict)
         except RuntimeError as e:
-            print(f"Error loading state_dict: {e}, trying to load without 'module.' prefix")
+            print("Error loading state_dict, trying to load without 'module.' prefix")
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
             model.load_state_dict(state_dict, strict=strict)
     print("State_dict loaded successfully")
