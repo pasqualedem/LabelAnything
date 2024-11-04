@@ -90,6 +90,10 @@ def get_batch_size(batch_tuple):
     if batch_tuple[0].get("images") is not None:
         return batch_tuple[0]["images"].shape[0]
     if batch_tuple[0].get("embeddings") is not None:
+        if isinstance(batch_tuple[0]["embeddings"], dict):
+            # get the first key of the dict
+            key = list(batch_tuple[0]["embeddings"].keys())[0]
+            return batch_tuple[0]["embeddings"][key].shape[0]
         return batch_tuple[0]["embeddings"].shape[0]
 
 
