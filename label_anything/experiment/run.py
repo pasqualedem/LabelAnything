@@ -25,7 +25,11 @@ from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
     DistributedBinaryJaccardIndex,
-    DistributedMulticlassJaccardIndex,
+    StrictMeanIoU,
+    MeanIoU,
+    DmIoU,
+    ImIoU,
+    PmIoU,
     to_global_multiclass,
 )
 from label_anything.utils.utils import (
@@ -429,7 +433,7 @@ class Run:
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
             {
-                "mIoU": DistributedMulticlassJaccardIndex(
+                "mIoU": StrictMeanIoU(
                     num_classes=num_classes + 1,
                     average="macro",
                     ignore_index=-100,
@@ -640,9 +644,17 @@ class Run:
         avg_loss = RunningAverage()
         dataset_categories = next(iter(val_loader.dataset.datasets.values())).categories
         num_classes = len(dataset_categories)
+        dataset = list(val_loader.dataset.datasets.values())[0]
+        n_ways = dataset.n_ways
+        class_ids = list(dataset_categories.keys())
         metrics = MetricCollection(
             {
-                f"mIoU{metrics_suffix}": DistributedMulticlassJaccardIndex(
+                f"mIoU{metrics_suffix}": StrictMeanIoU(
+                    num_classes=num_classes + 1,
+                    average="macro",
+                    ignore_index=-100,
+                ),
+                f"BmIoU{metrics_suffix}": MeanIoU(
                     num_classes=num_classes + 1,
                     average="macro",
                     ignore_index=-100,
@@ -767,7 +779,7 @@ class Run:
         metrics = MetricCollection(
             metrics=[
                 self.accelerator.prepare(
-                    DistributedMulticlassJaccardIndex(
+                    StrictMeanIoU(
                         # task="multiclass",
                         num_classes=dataloader.dataset.num_classes,
                         ignore_index=-100,

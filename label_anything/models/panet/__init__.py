@@ -8,6 +8,27 @@ from label_anything.utils.utils import ResultDict
 from .fewshot import FewShotSeg
 
 
+def unique_elements(structure):
+    # Flatten and get element frequency
+    all_elements = [elem for s in structure for elem in s]
+    element_count = {elem: all_elements.count(elem) for elem in all_elements}
+    
+    # Select unique element for each set based on count
+    result = []
+    for s in structure:
+        if len(s) == 1:
+            # Single element, take it directly
+            result.append(next(iter(s)))
+        else:
+            # Multiple elements, find the unique one (appears once in all sets)
+            try:
+                unique_elem = next(elem for elem in s if element_count[elem] == 1)
+            except StopIteration: # No element is unique
+                unique_elem = s.pop()
+            result.append(unique_elem)
+    
+    return result
+
 class PANet(FewShotSeg):
     def postprocess_masks(self, logits, dims):
         max_dims = torch.max(dims.view(-1, 2), 0).values.tolist()
@@ -57,8 +78,6 @@ class PANet(FewShotSeg):
             print(f"Loaded model from {pretrained_path}")
         
     def forward(self, batch: dict):
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
         qry_imgs = [batch[BatchKeys.IMAGES][:, 0]]
         supp_imgs_tensor = batch[BatchKeys.IMAGES][:, 1:]
         b, m, c, _, _ = batch[BatchKeys.PROMPT_MASKS].shape
@@ -66,52 +85,49 @@ class PANet(FewShotSeg):
         k = m // c_fg
         supp_imgs_tensor = rearrange(supp_imgs_tensor, '1 (k c) rgb h w -> c k rgb h w', k=k)
         
-        start.record()
         supp_imgs = []
         for way in supp_imgs_tensor:
             way_imgs = [shot.unsqueeze(0) for shot in way]
             supp_imgs.append(way_imgs)
         masks = batch[BatchKeys.PROMPT_MASKS]  # B x M x C x H x W
-        end.record()
-        torch.cuda.synchronize()
-        elapsed_phase_one = start.elapsed_time(end)
-
-        start.record()
 
         masks = masks.argmax(dim=2)
         masks = F.resize(masks, size=qry_imgs[0].shape[-2:], interpolation=F.InterpolationMode.NEAREST)
-        masks = rearrange(masks, "1 ... -> ...")
-        classes = masks.shape[1]
+        masks = rearrange(masks, "1 (k c) ... -> c k ...", k=k)
+        classes = masks.shape[0]
 
         assert b == 1, "This implementation of PANet only supports batch size of 1"
 
         fore_masks = []
         back_masks = []
-        for mask in masks:
+        class_ids = unique_elements([set(mask.unique()[1:].tolist()) for mask in masks])
+
+        done_classes = []
+        for class_id, mask_way in zip(class_ids, masks):
+            done_classes.append(class_id)
             fore_masks_class = []
             back_masks_class = []
-            for class_id in range(classes):
-                fore_mask = torch.where(mask == class_id, torch.ones_like(mask), torch.zeros_like(mask))
-                back_mask = torch.where(mask != class_id, torch.ones_like(mask), torch.zeros_like(mask))
-                for class_id_back in range(classes):
-                    back_mask[mask == class_id_back] = 0
-                fore_masks_class.append(fore_mask.unsqueeze(0))
-                back_masks_class.append(back_mask.unsqueeze(0))
-            fore_masks.append(fore_masks_class)
-            back_masks.append(back_masks_class) 
-        end.record()
-        torch.cuda.synchronize()
-        elapsed_phase_two = start.elapsed_time(end)
+            # Create the whole mask once for all classes
+            for mask_shot in mask_way:
+                # Foreground mask: where mask equals class_id
+                fore_mask = mask_shot.eq(class_id).float().unsqueeze(0)
+                
+                # Background mask: where mask does not equal class_id, excluding other class_ids
+                back_mask = mask_shot.ne(class_id).float().unsqueeze(0)
+                for j in range(1, classes+1):
+                    if j == class_id:
+                        continue
+                    back_mask = back_mask * (mask_shot.ne(j).float())
 
-        start.record()
+                fore_masks_class.append(fore_mask)
+                back_masks_class.append(back_mask)
+
+            fore_masks.append(fore_masks_class)
+            back_masks.append(back_masks_class)
+        assert len(set(done_classes)) == classes, "All classes should be processed"
+
         logits, loss = super().forward(supp_imgs, fore_masks, back_masks, qry_imgs)
         logits = self.postprocess_masks(logits, batch[BatchKeys.DIMS])
-        end.record()
-        torch.cuda.synchronize()
-        elapsed_phase_three = start.elapsed_time(end)
-        print(f"Elapsed time phase one: {elapsed_phase_one}")
-        print(f"Elapsed time phase two: {elapsed_phase_two}")
-        print(f"Elapsed time phase three: {elapsed_phase_three}")
         return {ResultDict.LOGITS: logits}
         
     
