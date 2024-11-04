@@ -727,7 +727,7 @@ class Run:
 
             self.plat_logger.log_metrics(
                 {
-                    **{f"avg_{k}{name}": v for k, v in metrics.compute().items()},
+                    **{f"{k}_{name}": v for k, v in metrics.compute().items()},
                     "avg_loss": avg_loss.compute(),
                 },
                 epoch=epoch,
