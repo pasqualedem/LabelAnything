@@ -644,9 +644,6 @@ class Run:
         avg_loss = RunningAverage()
         dataset_categories = next(iter(val_loader.dataset.datasets.values())).categories
         num_classes = len(dataset_categories)
-        dataset = list(val_loader.dataset.datasets.values())[0]
-        n_ways = dataset.n_ways
-        class_ids = list(dataset_categories.keys())
         metrics = MetricCollection(
             {
                 f"mIoU{metrics_suffix}": StrictMeanIoU(
