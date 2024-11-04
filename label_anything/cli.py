@@ -169,6 +169,93 @@ def generate_embeddings(
         )
 
 
+@main.command("generate_feature_pyramids")
+@click.option(
+    "--encoder_name",
+    default="resnet50",
+    help="Select the encoder to use",
+)
+@click.option(
+    "--directory",
+    default="data/raw/train2017",
+    help="Select the file to use as checkpoint",
+)
+@click.option(
+    "--batch_size",
+    default=1,
+    help="Batch size for the dataloader",
+)
+@click.option(
+    "--num_workers",
+    default=0,
+    help="Number of workers for the dataloader",
+)
+@click.option(
+    "--outfolder",
+    default="data/processed/embeddings",
+    help="Folder to save the embeddings",
+)
+@click.option(
+    "--device",
+    default="cuda",
+    help="Device to use for the model",
+)
+@click.option(
+    "--compile",
+    is_flag=True,
+    help="Select if the model should be compiled",
+)
+@click.option(
+    "--image_resolution",
+    default=384,
+    help="Image resolution for the model",
+)
+@click.option(
+    "--custom_preprocess",
+    is_flag=True,
+    help="Whether to use custom resize and normalize",
+)
+@click.option(
+    "--out_features",
+    default="stage2,stage3,stage4",
+    help="Output features to use",
+)
+@click.option(
+    "--mean_std",
+    default="default",
+    help="Mean and std for normalization (can be default or standard)",
+)
+def generate_feature_pyramids(
+    encoder_name,
+    directory,
+    batch_size,
+    num_workers,
+    outfolder,
+    device,
+    compile,
+    image_resolution,
+    custom_preprocess,
+    out_features,
+    mean_std,
+):
+    out_features = out_features.split(",")
+
+    from label_anything.preprocess import preprocess_images_to_feature_pyramids
+    preprocess_images_to_feature_pyramids(
+        encoder_name=encoder_name,
+        directory=directory,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        outfolder=outfolder,
+        device=device,
+        compile=compile,
+        image_resolution=image_resolution,
+        custom_preprocess=custom_preprocess,
+        out_features=out_features,
+        mean_std=mean_std,
+    )
+    
+
 @main.command("generate_gt")
 @click.option(
     "--dataset_name",
