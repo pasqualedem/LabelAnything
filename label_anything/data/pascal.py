@@ -51,6 +51,7 @@ class PascalDataset(Dataset):
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
         load_annotation_dicts: bool = True,
+        is_pyramids: bool = False,
     ):
         super().__init__()
         print(f"Loading image filenames from {split}...")
@@ -81,6 +82,7 @@ class PascalDataset(Dataset):
         self.do_subsample = do_subsample
         self.remove_small_annotations = remove_small_annotations
         self.sample_function = sample_function
+        self.is_pyramids = is_pyramids
 
         self.masks_dir_list = set(os.listdir(self.masks_dir))
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
@@ -307,7 +309,12 @@ class PascalDataset(Dataset):
         gt = None
 
         f = load_file(f"{self.emb_dir}/{img_name}.safetensors")
-        embedding = f["embedding"]
+        if not self.is_pyramids:
+            embedding = f["embedding"]
+        else:
+            embedding = {
+                k: v for k, v in f.items() if k.startswith("stage")
+            }
         if self.load_gts:
             gt = f[f"{self.name}_gt"]
         return embedding, gt
@@ -328,7 +335,14 @@ class PascalDataset(Dataset):
             embeddings, gts = zip(*embeddings_gts)
             if not self.load_gts:
                 gts = None
-            return torch.stack(embeddings), BatchKeys.EMBEDDINGS, gts
+
+            if not self.is_pyramids:
+                embeddings = torch.stack(embeddings)
+            else:
+                embeddings = {
+                    k: torch.stack([v[k] for v in embeddings]) for k in embeddings[0]
+                }
+            return embeddings, BatchKeys.EMBEDDINGS, gts
         else:
             images = [
                 Image.open(f"{self.img_dir}/{image_name}.jpg")
