@@ -1,6 +1,6 @@
 experiment:
   # It contains all the about the grids and the group of runs:
-  name: LabelAnythingRevise # name for the tracker experiment
+  name: LabelAnything # name for the tracker experiment
   group: COCO20i # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
