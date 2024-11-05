@@ -1,6 +1,6 @@
 experiment:
   # It contains all the about the grids and the group of runs:
-  name: LabelAnythingRevise # name of the logger platform experiment
+  name: LabelAnythingRevise # name for the tracker experiment
   group: COCO20i # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
@@ -14,14 +14,11 @@ parameters:
   logger:
     log_frequency: [10]
     train_image_log_frequency: [100000]
-    val_image_log_frequency: [100]
-    experiment_save_delta: [null] # save experiment every n seconds
+    val_image_log_frequency: [500]
     tmp_dir: [tmp]
-    wandb:
-      offline: [False]
-      entity: [cilabuniba]
-      tags: [[ViTMAE, emb256]]
-      offline_directory: [offline]
+    entity: [cilabuniba]
+    tags: [[ViTMAE, emb256]]
+    offline_directory: [offline]
 
   train_params:
     loss:
@@ -40,7 +37,6 @@ parameters:
       num_warmup_steps: 1000
     substitute: [False]
     accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-    # validation_reruns: [5] # number of reruns for validation
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
@@ -63,7 +59,7 @@ parameters:
       coco20i:
         name: [coco]
         instances_path: [data/coco/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [data/coco/embeddings_vit_mae]
+        emb_dir: &emb_dir [data/coco/embeddings_vit_mae_480]
         img_dir: &img_dir [data/coco/train_val_2017]
         split: ["train"]
         val_fold_idx: [0]

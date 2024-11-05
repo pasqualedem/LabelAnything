@@ -18,7 +18,7 @@ from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
-from label_anything.data.utils import BatchKeys
+from label_anything.data.utils import BatchKeys, to_global_multiclass
 from label_anything.experiment.substitution import Substitutor
 from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.text_logger import get_logger
@@ -32,7 +32,6 @@ from label_anything.utils.metrics import (
     DmIoU,
     ImIoU,
     PmIoU,
-    to_global_multiclass,
 )
 from label_anything.utils.utils import (
     FLOAT_PRECISIONS,
@@ -538,7 +537,7 @@ class Run:
                         input_dict=input_dict,
                         input_shape=self.input_image_size,
                         gt=gt,
-                        pred=outputs,
+                        pred=preds,
                         dataset=self.train_loader.dataset,
                         dataset_names=dataset_names,
                         phase="train",
@@ -700,7 +699,7 @@ class Run:
                     input_dict=image_dict,
                     input_shape=self.input_image_size,
                     gt=gt,
-                    pred=outputs,
+                    pred=preds,
                     dataset=val_loader.dataset,
                     dataset_names=dataset_names,
                     phase="val",

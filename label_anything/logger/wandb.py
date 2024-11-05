@@ -14,6 +14,7 @@ import wandb
 from PIL import Image
 from matplotlib import pyplot as plt
 
+from label_anything.data.utils import to_global_multiclass
 from label_anything.logger.text_logger import get_logger
 from accelerate import Accelerator
 from label_anything.logger.utils import get_tmp_dir, take_image
@@ -593,20 +594,20 @@ class WandBLogger:
     ):
         dims = input_dict["dims"]
         classes = self._get_class_ids(input_dict["classes"])
+        pred, gt = to_global_multiclass(input_dict["classes"], categories, pred, gt, compact=False)
 
         for b in range(gt.shape[0]):
             image = get_image(take_image(images[b], dims[b, 0], input_shape=input_shape))
             cur_dataset_categories = categories[dataset_names[b]]
             cur_sample_categories = {
-                k + 1: cur_dataset_categories[c]["name"]
-                for k, c in enumerate(classes[b])
+                c: cur_dataset_categories[c]["name"]
+                for c in classes[b]
             }
             cur_sample_categories[0] = "background"
 
             sample_gt = gt[b, : dims[b, 0, 0], : dims[b, 0, 1]].detach().cpu().numpy()
 
-            sample_pred = pred[b, :, : dims[b, 0, 0], : dims[b, 0, 1]]
-            sample_pred = torch.argmax(sample_pred, dim=0).detach().cpu().numpy()
+            sample_pred = pred[b, : dims[b, 0, 0], : dims[b, 0, 1]].detach().cpu().numpy()
 
             wandb_image = wandb.Image(
                 image,
@@ -768,7 +769,7 @@ class WandBLogger:
         sequence_name,
     ):
         all_masks = (
-            input_dict["prompt_masks"].argmax(dim=2)
+            to_global_multiclass(input_dict["classes"], categories, input_dict["prompt_masks"].argmax(dim=2), compact=False)[0]
             if input_dict["prompt_masks"] is not None
             else None
         )
@@ -782,20 +783,21 @@ class WandBLogger:
         for i in range(len(images)):
             cur_dataset_categories = categories[dataset_names[i]]
             cur_sample_categories = {
-                k + 1: cur_dataset_categories[c]["name"]
-                for k, c in enumerate(classes[i])
+                c: cur_dataset_categories[c]["name"]
+                for c in classes[i]
             }
             cur_sample_categories[0] = "background"
+            cur_sample_categories_dict = dict(enumerate(sorted(cur_sample_categories)))
             sample_images = images[i]
             for j in range(all_masks.shape[1]):
-                
+
                 mask_sample_categories = torch.argwhere(flags_masks[i, j])[:, 0].tolist()
                 mask_sample_categories = {
-                    k: cur_sample_categories[k] for k in mask_sample_categories
+                    cur_sample_categories_dict[k]: cur_sample_categories[cur_sample_categories_dict[k]] for k in mask_sample_categories
                 }
                 point_sample_categories = {}
                 box_sample_categories = {}
-                
+
                 image = get_image(sample_images[j])
                 # log masks, boxes and points
                 points_data = []
@@ -807,7 +809,7 @@ class WandBLogger:
                     points = all_points[i, j, c]
                     flag_boxes = flags_boxes[i, j, c]
                     flag_points = flags_points[i, j, c]
-                    label = cur_sample_categories[c]
+                    label = cur_sample_categories[cur_sample_categories_dict[c]]
 
                     for k in range(boxes.shape[0]):
                         if flag_boxes[k] == 1:
@@ -819,11 +821,11 @@ class WandBLogger:
                                     "maxX": box[2],
                                     "maxY": box[3],
                                 },
-                                "class_id": c,
+                                "class_id": cur_sample_categories_dict[c],
                                 "box_caption": f"{label}",
                                 "domain": "pixel",
                             }
-                            box_sample_categories[c] = label
+                            box_sample_categories[cur_sample_categories_dict[c]] = label
                             box_data.append(box)
 
                     for k in range(points.shape[0]):
@@ -833,12 +835,10 @@ class WandBLogger:
                             if flag_points[k] == 1:
                                 point_label = label
                                 class_id = c
-                                point_sample_categories[class_id] = point_label
                             else:
                                 point_label = f"Neg-{label}"
                                 class_id = self.MAX_CLASSES + c
-                                point_sample_categories[class_id] = point_label
-
+                            point_sample_categories[cur_sample_categories_dict[class_id]] = point_label
                             box = {
                                 "position": {
                                     "minX": x,
@@ -846,7 +846,7 @@ class WandBLogger:
                                     "maxX": x + 10,
                                     "maxY": y + 10,
                                 },
-                                "class_id": class_id,
+                                "class_id": cur_sample_categories_dict[class_id],
                                 "box_caption": "",
                                 "domain": "pixel",
                             }
@@ -868,12 +868,12 @@ class WandBLogger:
                         }
                     }
                 boxes = {}
-                if len(box_data) > 0:
+                if box_data:
                     boxes["boxes"] = {
                         "box_data": box_data,
                         "class_labels": box_sample_categories,
                     }
-                if len(points_data) > 0:
+                if points_data:
                     boxes["points"] = {
                         "box_data": points_data,
                         "class_labels": point_sample_categories,
@@ -886,10 +886,9 @@ class WandBLogger:
                     boxes=boxes,
                     classes=[
                         {"id": c, "name": name}
-                        for c, name in {
-                            **point_sample_categories,
-                            **cur_sample_categories,
-                        }.items()
+                        for c, name in (
+                            point_sample_categories | cur_sample_categories
+                        ).items()
                     ],
                 )
 

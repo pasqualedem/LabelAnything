@@ -1,7 +1,7 @@
 
 experiment:
   # It contains all the about the grids and the group of runs:
-  name: LabelAnything # name of the logger platform experiment
+  name: LabelAnythingRevise # name of the logger platform experiment
   group: pascal5i # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
@@ -17,8 +17,8 @@ parameters:
 
   logger:
     log_frequency: [500]
-    train_image_log_frequency: [250]
-    val_image_log_frequency: [50]
+    train_image_log_frequency: [1000]
+    val_image_log_frequency: [100]
     tmp_dir: [tmp]
     entity: [cilabuniba]
     tags: [[MAE]]
