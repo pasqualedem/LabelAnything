@@ -29,7 +29,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00005]
+    initial_lr: [0.00001, 0.00005]
     optimizer: [AdamW]
     scheduler:
     - type: cosine
@@ -100,27 +100,27 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [1]
-        val_coco20i_N1K1:
-          val_fold_idx: [1]
-        val_coco20i_N2K1:
-          val_fold_idx: [1]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [2]
-        val_coco20i_N1K1:
-          val_fold_idx: [2]
-        val_coco20i_N2K1:
-          val_fold_idx: [2]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [3]
-        val_coco20i_N1K1:
-          val_fold_idx: [3]
-        val_coco20i_N2K1:
-          val_fold_idx: [3]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [1]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [2]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [3]

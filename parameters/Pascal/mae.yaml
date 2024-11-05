@@ -31,9 +31,9 @@ parameters:
         focal:
           weight: [1.0]
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [1]
+    max_epochs: [100]
     compile: [False]
-    initial_lr: [0.0005]
+    initial_lr: [0.00001, 0.00005]
     optimizer: [AdamW]
     scheduler:
     - type: constant_with_warmup
