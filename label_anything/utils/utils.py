@@ -106,6 +106,24 @@ def torch_dict_save(data, file_path):
         save_file(data, file_path)
     else:
         raise ValueError("File extension not supported")
+    
+
+def load_state_dict(model, state_dict, strict=True):
+    """
+    """
+    try:
+        model.load_state_dict(state_dict, strict=strict)
+    except RuntimeError as e:
+        try:
+            print("Error loading state_dict, trying to load without 'model.' prefix")
+            state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
+            model.load_state_dict(state_dict, strict=strict)
+        except RuntimeError as e:
+            print("Error loading state_dict, trying to load without 'module.' prefix")
+            state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+            model.load_state_dict(state_dict, strict=strict)
+    print("State_dict loaded successfully")
+    return model
 
 
 # def unwrap_model_from_parallel(model, return_was_wrapped=False):

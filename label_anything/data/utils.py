@@ -561,3 +561,29 @@ def get_mean_std(mean, std):
     if isinstance(std, str):
         std = str_to_std[std]
     return mean, std
+
+
+def to_global_multiclass(
+    classes: list[list[list[int]]], categories: dict[int, dict], *tensors: list[torch.Tensor], compact=True
+) -> list[torch.Tensor]:
+    """Convert the classes of an episode to the global classes.
+
+    Args:
+        classes (list[list[list[int]]]): The classes corresponding to batch, episode and query.
+        categories (dict[int, dict]): The categories of the dataset.
+        compact (bool, optional): Whether to compact the categories. Defaults to True.
+
+    Returns:
+        list[Tensor]: The updated tensors.
+    """
+    batch_size = len(classes)
+    out_tensors = [tensor.clone() for tensor in tensors]
+    cats_map = {k: i + 1 for i, k in enumerate(categories.keys())}
+    for i in range(batch_size):
+        # assign to longest_classes the longest list in classes[i]
+        longest_classes = sorted(list(set(sum(classes[i], []))))
+        for j, v in enumerate(longest_classes):
+            for tensor in out_tensors:
+                value = cats_map[v] if compact else v
+                tensor[i] = torch.where(tensor[i] == j + 1, value, tensor[i])
+    return out_tensors

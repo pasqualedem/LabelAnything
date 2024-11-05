@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import json
 import os
@@ -17,10 +18,11 @@ from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
 from label_anything.data import get_dataloaders
-from label_anything.data.utils import BatchKeys
+from label_anything.data.utils import BatchKeys, to_global_multiclass
 from label_anything.experiment.substitution import Substitutor
 from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.text_logger import get_logger
+from label_anything.logger.wandb import WandBLogger, wandb_tracker
 from label_anything.loss import LabelAnythingLoss
 from label_anything.models import model_registry
 from label_anything.utils.metrics import (
@@ -30,7 +32,6 @@ from label_anything.utils.metrics import (
     DmIoU,
     ImIoU,
     PmIoU,
-    to_global_multiclass,
 )
 from label_anything.utils.utils import (
     FLOAT_PRECISIONS,
@@ -48,7 +49,6 @@ from .utils import (
     check_nan,
     compose_loss_input,
     get_batch_size,
-    get_experiment_logger,
     get_scheduler,
     handle_oom,
     nosync_accumulation,
@@ -68,9 +68,10 @@ class Run:
         self.params = None
         self.dataset = None
         self.experiment = None
-        self.plat_logger = None
+        self.tracker = None
         self.dataset_params = None
         self.train_params = None
+        self.val_params = None
         self.model = None
         self.scheduler = None
         self.criterion = None
@@ -89,6 +90,7 @@ class Run:
 
         (
             self.train_params,
+            self.val_params,
             self.dataset_params,
             self.dataloader_params,
             self.model_params,
@@ -108,7 +110,7 @@ class Run:
         )
 
     def init(self, params: dict):
-        set_seed(params["train_params"]["seed"])
+        set_seed(params["seed"])
         self.seg_trainer = None
         logger.info("Parameters: ")
         write_yaml(params, file=sys.stdout)
@@ -122,12 +124,11 @@ class Run:
             even_batches=False,
             kwargs_handlers=kwargs,
             split_batches=False,
-            mixed_precision=self.train_params.get("precision", None),
         )
         logger.info("Initiliazing tracker...")
-        self.plat_logger = get_experiment_logger(self.accelerator, self.params)
-        self.url = self.plat_logger.url
-        self.name = self.plat_logger.name
+        self.tracker: WandBLogger = wandb_tracker(self.accelerator, self.params)
+        self.url = self.tracker.url
+        self.name = self.tracker.name
         self.train_loader, self.val_loaders, self.test_loaders = get_dataloaders(
             self.dataset_params,
             self.dataloader_params,
@@ -149,14 +150,17 @@ class Run:
         # load pretrained prompt encoder parameters
         self._load_prompt_encoder_parameters()
 
-        self.watch_metric = self.train_params["watch_metric"]
-
-        logger.info("Creating criterion")
-        self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        if self.train_params:
+            logger.info("Preparing for training")
+            self._prep_for_training()
+            logger.info("Creating criterion")
+            self.criterion = LabelAnythingLoss(**self.train_params["loss"])
+        else:
+            logger.info("No training parameters found, skipping training")
         self.model = WrapperModule(self.model, self.criterion)
         self.input_image_size = self.model_params.get("image_size", SIZE)
 
-        if self.train_params.get("compile", False):
+        if self.params.get("compile", False):
             logger.info("Compiling model")
             self.model = torch.compile(self.model)
         logger.info("Preparing model, optimizer, dataloaders and scheduler")
@@ -170,6 +174,7 @@ class Run:
         self._load_state()
 
     def _prep_for_training(self):
+        self.watch_metric = self.train_params["watch_metric"]
         logger.info("Creating optimizer")
         if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
             params = self.model.module.get_learnable_params(self.train_params)
@@ -180,8 +185,7 @@ class Run:
             lr=self.train_params["initial_lr"],
         )
 
-        scheduler_params = self.train_params.get("scheduler", None)
-        if scheduler_params:
+        if scheduler_params := self.train_params.get("scheduler", None):
             self.scheduler, self.scheduler_step_moment = get_scheduler(
                 scheduler_params=scheduler_params,
                 optimizer=self.optimizer,
@@ -199,86 +203,88 @@ class Run:
         }
 
     def _load_state(self):
-        if self.plat_logger.accelerator_state_dir:
-            overwritten = False
-            # Merge image_encoder dict with the state dict
-            if (
+        if not self.tracker.accelerator_state_dir:
+            return
+        overwritten = False
+        if (
                 "checkpoint" in self.model_params
                 and self.params["model"]["name"] != "lam_no_vit"
             ) or self.params["model"]["name"] == "lam_mae_b":
-                if hasattr(self.model, "module"):
-                    model = self.model.module.model
-                else:
-                    model = self.model.model
-                model_filename = (
-                    "pytorch_model.bin"
-                    if "pytorch_model.bin"
-                    in os.listdir(self.plat_logger.accelerator_state_dir)
-                    else "model.safetensors"
-                )
-                shutil.copyfile(
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}.bak",
-                )
-                state_dict = torch_dict_load(
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}"
-                )
-                state_dict = {
-                    **{
-                        "model.image_encoder." + k: v
-                        for k, v in model.image_encoder.state_dict().items()
-                    },
-                    **state_dict,
-                }
-                torch_dict_save(
-                    state_dict,
-                    self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                )
-                overwritten = True
+            if hasattr(self.model, "module"):
+                model = self.model.module.model
+            else:
+                model = self.model.model
+            model_filename = (
+                "pytorch_model.bin"
+                if "pytorch_model.bin"
+                in os.listdir(self.tracker.accelerator_state_dir)
+                else "model.safetensors"
+            )
+            shutil.copyfile(
+                f"{self.tracker.accelerator_state_dir}/{model_filename}",
+                f"{self.tracker.accelerator_state_dir}/{model_filename}.bak",
+            )
+            state_dict = torch_dict_load(
+                f"{self.tracker.accelerator_state_dir}/{model_filename}"
+            )
+            state_dict = {
+                **{
+                    f"model.image_encoder.{k}": v
+                    for k, v in model.image_encoder.state_dict().items()
+                },
+                **state_dict,
+            }
+            torch_dict_save(
+                state_dict,
+                f"{self.tracker.accelerator_state_dir}/{model_filename}",
+            )
+            overwritten = True
 
-            try:
-                self.accelerator.load_state(self.plat_logger.accelerator_state_dir)
-                # Ripristinate old state
-            finally:
-                if (
-                    "checkpoint" in self.model_params
-                    and self.params["model"]["name"] != "lam_no_vit"
-                    and overwritten
-                ):
-                    shutil.copyfile(
-                        self.plat_logger.accelerator_state_dir
-                        + f"/{model_filename}.bak",
-                        self.plat_logger.accelerator_state_dir + f"/{model_filename}",
-                    )
-                    os.remove(
-                        self.plat_logger.accelerator_state_dir
-                        + f"/{model_filename}.bak"
-                    )
+        try:
+            self.accelerator.load_state(self.tracker.accelerator_state_dir)
+            # Ripristinate old state
+        finally:
+            if (
+                "checkpoint" in self.model_params
+                and self.params["model"]["name"] != "lam_no_vit"
+                and overwritten
+            ):
+                shutil.copyfile(
+                    self.tracker.accelerator_state_dir
+                    + f"/{model_filename}.bak",
+                    f"{self.tracker.accelerator_state_dir}/{model_filename}",
+                )
+                os.remove(
+                    self.tracker.accelerator_state_dir
+                    + f"/{model_filename}.bak"
+                )
 
     def launch(self):
-        logger.info("Start training loop...")
 
-        # Train the Model
-        with self.plat_logger.train():
-            logger.info(
-                f"Running Model Training {self.params.get('experiment').get('name')}"
-            )
-            for epoch in range(self.train_params["max_epochs"]):
+        if self.train_params:
+            # Train the Model
+            logger.info("Start training loop...")
+            with self.tracker.train():
                 logger.info(
-                    "Epoch: {}/{}".format(epoch, self.train_params["max_epochs"])
+                    f"Running Model Training {self.params.get('experiment').get('name')}"
                 )
-                self.train_epoch(epoch)
+                for epoch in range(self.train_params["max_epochs"]):
+                    logger.info(f'Epoch: {epoch}/{self.train_params["max_epochs"]}')
+                    self.train_epoch(epoch)
 
-                metrics = None
-                if (
-                    self.val_loaders
-                    and epoch % self.train_params.get("val_frequency", 1) == 0
-                ):
-                    with self.plat_logger.validate():
-                        logger.info(f"Running Model Validation")
-                        metrics = self.validate(epoch)
-                        self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
-                self.save_training_state(epoch, metrics)
+                    metrics = None
+                    if (
+                        self.val_loaders
+                        and epoch % self.train_params.get("val_frequency", 1) == 0
+                    ):
+                        with self.tracker.validate():
+                            logger.info("Running Model Validation")
+                            metrics = self.validate(epoch)
+                            self._scheduler_step(SchedulerStepMoment.EPOCH, metrics)
+                    self.save_training_state(epoch, metrics)
+        elif self.val_loaders:
+            with self.tracker.validate():
+                self.validate(epoch=0)
 
         if self.test_loaders:
             self.test()
@@ -293,17 +299,15 @@ class Run:
                     f"Saving best model with metric {metrics[self.watch_metric]} as given that metric is greater than {self.best_metric}"
                 )
                 self.best_metric = metrics[self.watch_metric]
-                self.plat_logger.log_training_state(epoch=epoch, subfolder="best")
-        self.plat_logger.log_training_state(epoch=epoch, subfolder="latest")
+                self.tracker.log_training_state(epoch=epoch, subfolder="best")
+        self.tracker.log_training_state(epoch=epoch, subfolder="latest")
 
     def _get_lr(self):
         if self.scheduler is None:
             return self.train_params["initial_lr"]
-        try:
+        with contextlib.suppress(NotImplementedError):
             if hasattr(self.scheduler, "get_lr"):
                 return self.scheduler.get_lr()[0]
-        except NotImplementedError:
-            pass
         if hasattr(self.scheduler, "optimizer"):
             return self.scheduler.optimizer.param_groups[0]["lr"]
         return self.scheduler.optimizers[0].param_groups[0]["lr"]
@@ -325,7 +329,6 @@ class Run:
         batch_idx: int,
     ):
         try:
-            pass
             outputs = self.model(input_dict, gt)
         except RuntimeError as e:
             if "out of memory" in str(e):
@@ -372,7 +375,7 @@ class Run:
         metrics_dict = {}
         with self.accelerator.no_sync(model=metrics):
             metrics.update(preds, gt)
-        if tot_steps % self.plat_logger.log_frequency == 0:
+        if tot_steps % self.tracker.log_frequency == 0:
             metrics_dict = metrics.compute()
             for metric_name, metric_value in metrics_dict.items():
                 metrics_dict[metric_name] = torch.mean(self.accelerator.gather(metric_value))
@@ -386,7 +389,7 @@ class Run:
         gt: torch.tensor,
         tot_steps,
     ):
-        self.plat_logger.log_metric("step", self.global_val_step)
+        self.tracker.log_metric("step", self.global_val_step)
         return self._update_metrics(metrics, preds, gt, tot_steps)
 
     def _update_train_metrics(
@@ -398,13 +401,13 @@ class Run:
         tot_steps: int,
         step: int,
     ):
-        self.plat_logger.log_metric("step", self.global_train_step)
+        self.tracker.log_metric("step", self.global_train_step)
         if step == 0:
             metric_values = self._update_metrics(metrics, preds, gt, tot_steps) or previous_metric_values
         else:
             metric_values = previous_metric_values
-        if tot_steps % self.plat_logger.log_frequency == 0:
-            self.plat_logger.log_metric("lr", self._get_lr())
+        if tot_steps % self.tracker.log_frequency == 0:
+            self.tracker.log_metric("lr", self._get_lr())
         return metric_values
 
     def train_epoch(
@@ -412,11 +415,11 @@ class Run:
         epoch: int,
     ):
         if epoch > 0:
-            set_seed(self.params["train_params"]["seed"] + epoch)
+            set_seed(self.params["seed"] + epoch)
             logger.info(
-                f"Setting seed to {self.params['train_params']['seed'] + epoch}"
+                f"Setting seed to {self.params['seed'] + epoch}"
             )
-        self.plat_logger.log_metric("start_epoch", epoch)
+        self.tracker.log_metric("start_epoch", epoch)
         self.model.train()
         accumulate_substitution = self.train_params.get(
             "accumulate_substitution", False
@@ -479,6 +482,8 @@ class Run:
                 p.requires_grad = epoch >= self.train_params.get(
                     "freeze_params_max_epoch", 0
                 )
+        
+        self.tracker.create_image_sequence("predictions", columns=["Epoch", "Dataset"])
 
         for batch_idx, batch_tuple in bar:
             batch_tuple, dataset_names = batch_tuple
@@ -509,7 +514,7 @@ class Run:
                         self.optimizer.zero_grad()
 
                     loss_avg.update(loss.item())
-                    self.plat_logger.log_metric("loss", loss.item())
+                    self.tracker.log_metric("loss", loss.item())
                     glob_preds, glob_gt = to_global_multiclass(
                         input_dict["classes"], dataset_categories, preds, gt
                     )
@@ -522,7 +527,7 @@ class Run:
                         tot_steps,
                         i,
                     )
-                    self.plat_logger.log_batch(
+                    self.tracker.log_batch(
                         batch_idx=batch_idx,
                         image_idx=tot_images,
                         batch_size=cur_batch_size,
@@ -532,7 +537,7 @@ class Run:
                         input_dict=input_dict,
                         input_shape=self.input_image_size,
                         gt=gt,
-                        pred=outputs,
+                        pred=preds,
                         dataset=self.train_loader.dataset,
                         dataset_names=dataset_names,
                         phase="train",
@@ -548,11 +553,12 @@ class Run:
                     )
                     tot_steps += 1
                     self.global_train_step += 1
-            self.plat_logger.save_experiment_timed()
             tot_images += cur_batch_size
 
         logger.info("Waiting for everyone")
         self.accelerator.wait_for_everyone()
+        logger.info("Sending images to Wandb")
+        self.tracker.add_image_sequence("predictions")
         logger.info(f"Finished Epoch {epoch}")
         logger.info("Metrics")
         metric_dict = {
@@ -565,7 +571,7 @@ class Run:
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
 
-        self.plat_logger.log_metrics(
+        self.tracker.log_metrics(
             metrics=metric_dict,
             epoch=epoch,
         )
@@ -581,14 +587,13 @@ class Run:
             input_dict[BatchKeys.IMAGE_IDS]
         )
 
-    def validate(self, epoch: int, generate_json=False):
+    def validate(self, epoch: int):
         metrics = []
         for name, dataloader in self.val_loaders.items():
             names = name.split("_")
             name = names[-1] if len(names) > 1 else ""
             dataloader_metrics = self.validate_dataloader(
-                name, dataloader, epoch, generate_json=generate_json
-            )
+                name, dataloader, epoch         )
             metrics.append(dataloader_metrics)
         mean_metrics = {
             k: torch.stack([torch.tensor(m[k]) for m in metrics]).mean()
@@ -598,15 +603,10 @@ class Run:
         return mean_metrics
 
     def validate_dataloader(
-        self, name, val_dataloader, epoch: int, generate_json=False
+        self, name, val_dataloader, epoch: int
     ):
         logger.info(f"Validation of {name} epoch {epoch} started")
-        if generate_json:
-            self.validation_json = {
-                "file": f"{self.plat_logger.local_dir}/validation_image_ids.json",
-                "json": {},
-            }
-        if self.train_params.get("validation_reruns", None) is None:
+        if self.val_params.get("validation_reruns", None) is None:
             metrics = self.validate_run(name, val_dataloader, epoch, None)
         else:
             overall_metrics = []
@@ -617,31 +617,25 @@ class Run:
                 k: torch.stack([torch.tensor(m[k]) for m in overall_metrics]).mean()
                 for k in overall_metrics[0].keys()
             }
-            self.plat_logger.log_metrics(
+            self.tracker.log_metrics(
                 {**{f"avg_{k}{name}": v for k, v in metrics.items()}}, epoch=epoch
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {name} - {k}: {v}")
-
-        if generate_json:
-            with open(self.validation_json["file"], "w") as f:
-                json.dump(self.validation_json["json"], f)
-            self.validation_json = None
 
         logger.info(f"Validation of {name} epoch {epoch} finished")
         return metrics
 
     def validate_run(self, name, val_loader, epoch, validation_run=None):
         if validation_run is None:
-            seed = self.params["train_params"]["seed"]
+            seed = self.params["seed"]
             metrics_suffix = ""
         else:
-            seed = self.params["train_params"]["seed"] + validation_run
+            seed = self.params["seed"] + validation_run
             metrics_suffix = f"_{validation_run}"
         set_seed(seed)
 
         self.model.eval()
-        avg_loss = RunningAverage()
         dataset_categories = next(iter(val_loader.dataset.datasets.values())).categories
         num_classes = len(dataset_categories)
         metrics = MetricCollection(
@@ -673,6 +667,7 @@ class Run:
             disable=not self.accelerator.is_local_main_process,
         )
         substitutor = Substitutor(substitute=False)
+        self.tracker.create_image_sequence(f"predictions_{name}", columns=["Epoch", "Dataset"])
 
         with torch.no_grad():
             for batch_idx, batch_tuple in bar:
@@ -693,16 +688,8 @@ class Run:
                 metrics_value = self._update_val_metrics(
                     metrics, glob_preds, glob_gt, tot_steps
                 ) or metrics_value
-                loss = result_dict["loss"]
-
-                avg_loss.update(loss.item())
-                bar.set_postfix(
-                    {
-                        **metrics_value,
-                        "loss": loss.item(),
-                    }
-                )
-                self.plat_logger.log_batch(
+                bar.set_postfix(metrics_value)
+                self.tracker.log_batch(
                     batch_idx=batch_idx,
                     image_idx=tot_images,
                     batch_size=cur_batch_size,
@@ -712,7 +699,7 @@ class Run:
                     input_dict=image_dict,
                     input_shape=self.input_image_size,
                     gt=gt,
-                    pred=outputs,
+                    pred=preds,
                     dataset=val_loader.dataset,
                     dataset_names=dataset_names,
                     phase="val",
@@ -722,31 +709,25 @@ class Run:
                 self.global_val_step += 1
                 tot_images += cur_batch_size
 
-            self.plat_logger.log_metrics(
-                {
-                    **{f"{k}_{name}": v for k, v in metrics.compute().items()},
-                    "avg_loss": avg_loss.compute(),
-                },
+            self.tracker.log_metrics(
+                {f"{k}_{name}": v for k, v in metrics.compute().items()},
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
+        self.tracker.add_image_sequence(f"predictions_{name}")
 
         metrics_value = metrics.compute()
         for k, v in metrics_value.items():
             logger.info(
                 f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}"
             )
-        logger.info(
-            f"Validation {metrics_suffix[1:]} epoch {epoch} - Loss: {avg_loss.compute()}"
-        )
         return {
             "miou": metrics_value[f"mIoU{metrics_suffix}"],
-            "loss": avg_loss.compute(),
             "fbiou": metrics_value[f"FBIoU{metrics_suffix}"],
         }
 
     def test(self):
-        with self.plat_logger.test():
+        with self.tracker.test():
             for name, dataloader in self.test_loaders.items():
                 dataloader = self.accelerator.prepare(dataloader)
                 self.test_dataset(dataset_name=name, dataloader=dataloader)
@@ -805,16 +786,16 @@ class Run:
             self.model = set_class_embeddings(self.accelerator, self.model, examples)
         else:
             self.model = self.model.model
-        self.plat_logger.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
+        self.tracker.log_test_prompts(examples, dataloader.dataset.id2class, dataset_name)
 
         bar = tqdm(
             enumerate(dataloader),
             total=len(dataloader),
             postfix={"loss": 0},
-            desc=f"Test: ",
+            desc="Test: ",
             disable=not self.accelerator.is_local_main_process,
         )
-        self.plat_logger.create_image_sequence(dataset_name)
+        self.tracker.create_image_sequence(dataset_name)
         with torch.no_grad():
             for batch_idx, batch_dict in bar:
                 image_dict, gt = batch_dict
@@ -825,7 +806,7 @@ class Run:
                         self.merge_dicts(prompts=examples, imgs=image_dict)
                     )[ResultDict.LOGITS]
                 )
-                self.plat_logger.log_test_prediction(
+                self.tracker.log_test_prediction(
                     batch_idx=batch_idx,
                     input_dict=image_dict,
                     gt=gt,
@@ -841,14 +822,14 @@ class Run:
                 metrics.update(outputs, gt)
             metrics_values = metrics.compute()
 
-            self.plat_logger.log_metrics(metrics=metrics_values)
+            self.tracker.log_metrics(metrics=metrics_values)
             for k, v in metrics_values.items():
                 logger.info(f"Test - {k}: {v}")
-            self.plat_logger.add_image_sequence(dataset_name)
+            self.tracker.add_image_sequence(dataset_name)
 
     def end(self):
         logger.info("Ending run")
-        self.plat_logger.end()
+        self.tracker.end()
         logger.info("Run ended")
 
 

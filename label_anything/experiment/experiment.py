@@ -10,11 +10,6 @@ from typing import Mapping
 from easydict import EasyDict
 
 from label_anything.experiment.run import Run, ParallelRun
-from label_anything.experiment.resume import (
-    ExpLog,
-    get_interrupted_run,
-    retrieve_run_to_resume,
-)
 from label_anything.utils.utils import get_timestamp, load_yaml, nested_dict_update, update_collection
 from label_anything.utils.grid import linearize, linearized_to_string, make_grid
 from label_anything.utils.optuna import Optunizer
@@ -211,9 +206,6 @@ class Experimenter:
                 for others, dot in zip(other_grids, dot_elements[1:])
             ]
 
-        # Modify starting grid and run to manage the resume
-        self.manage_resume()
-
         for i, grid in enumerate(self.grids):
             info = f"Found {len(grid)} runs from grid {i}"
             last_grid = (
@@ -253,58 +245,8 @@ class Experimenter:
         )
 
     def execute_runs_generator(self):
-        exp_log = ExpLog(
-            self.exp_settings["tracking_dir"],
-            self.exp_settings.name,
-            self.exp_settings.group,
-        )
         starting_run = self.exp_settings.start_from_run
         status_manager = StatusManager(len(self.grids))
-        if self.exp_settings.resume_last and self.exp_settings.search == "grid":
-            logger.info("+ another run to finish!")
-            grid_list = [
-                (i, j)
-                for i in range(len(self.grids))
-                for j in range(len(self.grids[i]))
-            ]
-            if self.exp_settings.start_from_grid is None:
-                grid_len = len(self.grids[-1])
-                sg, sr = grid_list[-1]
-            else:
-                grid_len = len(self.grids[self.exp_settings.start_from_grid])
-                index = grid_list.index(
-                    (
-                        self.exp_settings.start_from_grid,
-                        self.exp_settings.start_from_run,
-                    )
-                )
-                sg, sr = grid_list[index - 1]
-            try:
-                exp_log.insert_run(sg, sr)
-                run = get_interrupted_run(self.exp_settings)
-                yield status_manager.new_run(
-                    sg,
-                    sr,
-                    run.params,
-                    grid_len,
-                    run.seg_trainer.sg_logger.name,
-                    run.seg_trainer.sg_logger.url,
-                )
-                logger.info(f"Running grid {sg} out of {len(self.grids) - 1}")
-                logger.info(
-                    f"Running run {sr - 1} out of {grid_len} ({sum(len(self.grids[k]) for k in range(sg)) + sr} / {self.gs.total_runs - 1})"
-                )
-                run.launch()
-                print(self.EXP_FINISH_SEP)
-                exp_log.finish_run(sg, sr)
-                yield status_manager.finish_run()
-            except Exception as ex:
-                logger.error(f"Experiment {sg} failed with error {ex}")
-                print(self.EXP_CRASHED_SEP)
-                exp_log.finish_run(sg, sr, crashed=True)
-                if not self.exp_settings.continue_with_errors:
-                    raise ex
-                yield status_manager.crash_run(ex)
         for i in range(self.exp_settings.start_from_grid, len(self.grids)):
             grid = self.grids[i]
             if i != self.exp_settings.start_from_grid:
@@ -312,7 +254,6 @@ class Experimenter:
             for j in range(starting_run, len(grid)):
                 params = grid[j]
                 try:
-                    exp_log.insert_run(i, j)
                     yield status_manager.new_run(i, j, params, len(grid))
                     logger.info(f"Running grid {i} out of {len(self.grids) - 1}")
                     logger.info(
@@ -320,15 +261,12 @@ class Experimenter:
                     )
                     run = Run()
                     run.init({"experiment": {**self.exp_settings}, **params})
-                    run._prep_for_training()
-                    run._prep_for_validation()
                     yield status_manager.update_run(
                         run.name,
                         run.url,
                     )
                     metric = run.launch()
                     print(self.EXP_FINISH_SEP)
-                    exp_log.finish_run(i, j)
                     if self.exp_settings.search == "optim":
                         self.grids[i].report_result(metric)
                     gc.collect()
@@ -336,7 +274,6 @@ class Experimenter:
                 except Exception as ex:
                     logger.error(f"Experiment {i} failed with error {ex}")
                     print(self.EXP_CRASHED_SEP)
-                    exp_log.finish_run(i, j, crashed=True)
                     if not self.exp_settings.continue_with_errors:
                         raise ex
                     yield status_manager.crash_run(ex)
@@ -344,16 +281,6 @@ class Experimenter:
     def execute_runs(self, only_create=False):
         for _ in self.execute_runs_generator():
             pass
-
-    def manage_resume(self):
-        if self.exp_settings.resume:
-            (
-                self.exp_settings.start_from_grid,
-                self.exp_settings.start_from_run,
-                self.exp_settings.resume_last,
-            ) = retrieve_run_to_resume(self.exp_settings, self.grids)
-        else:
-            self.exp_settings.resume_last = False
 
     def update_settings(self, d):
         self.exp_settings = update_collection(self.exp_settings, d)
@@ -373,61 +300,12 @@ class ParallelExperimenter(Experimenter):
         super().__init__()
 
     def execute_runs_generator(self, only_create=False):
-        exp_log = ExpLog(
-            self.exp_settings["tracking_dir"],
-            self.exp_settings.name,
-            self.exp_settings.group,
-        )
         starting_run = self.exp_settings.start_from_run
         self.exp_settings.uuid = self.exp_settings.uuid or str(uuid.uuid4())[:8]
         status_manager = StatusManager(
             len(self.grids), self.exp_settings.max_parallel_runs
         )
-        if self.exp_settings.resume_last and self.exp_settings.search == "grid":
-            logger.info("+ another run to finish!")
-            grid_list = [
-                (i, j)
-                for i in range(len(self.grids))
-                for j in range(len(self.grids[i]))
-            ]
-            if self.exp_settings.start_from_grid is None:
-                grid_len = len(self.grids[-1])
-                sg, sr = grid_list[-1]
-            else:
-                grid_len = len(self.grids[self.exp_settings.start_from_grid])
-                index = grid_list.index(
-                    (
-                        self.exp_settings.start_from_grid,
-                        self.exp_settings.start_from_run,
-                    )
-                )
-                sg, sr = grid_list[index - 1]
-            try:
-                exp_log.insert_run(sg, sr)
-                run = get_interrupted_run(self.exp_settings)
-                yield status_manager.new_run(
-                    sg,
-                    sr,
-                    run.params,
-                    grid_len,
-                    None,
-                    None,
-                )
-                logger.info(f"Running grid {sg} out of {len(self.grids) - 1}")
-                logger.info(
-                    f"Running run {sr - 1} out of {grid_len} ({sum(len(self.grids[k]) for k in range(sg)) + sr} / {self.gs.total_runs - 1})"
-                )
-                run.launch(only_create=only_create)
-                print(self.EXP_FINISH_SEP)
-                exp_log.finish_run(sg, sr)
-                yield status_manager.finish_run()
-            except Exception as ex:
-                logger.error(f"Experiment {sg} failed with error {ex}")
-                print(self.EXP_CRASHED_SEP)
-                exp_log.finish_run(sg, sr, crashed=True)
-                if not self.exp_settings.continue_with_errors:
-                    raise ex
-                yield status_manager.crash_run(ex)
+                
         for i in range(self.exp_settings.start_from_grid, len(self.grids)):
             grid = self.grids[i]
             if i != self.exp_settings.start_from_grid:
@@ -435,7 +313,6 @@ class ParallelExperimenter(Experimenter):
             for j in range(starting_run, len(grid)):
                 params = grid[j]
                 try:
-                    exp_log.insert_run(i, j)
                     yield status_manager.new_run(i, j, params, len(grid))
                     logger.info(f"Running grid {i} out of {len(self.grids) - 1}")
                     logger.info(
@@ -447,7 +324,6 @@ class ParallelExperimenter(Experimenter):
                     )
                     metric = run.launch(only_create=only_create)
                     print(self.EXP_FINISH_SEP)
-                    exp_log.finish_run(i, j)
                     if self.exp_settings.search == "optim":
                         self.grids[i].report_result(metric)
                     gc.collect()
@@ -455,7 +331,6 @@ class ParallelExperimenter(Experimenter):
                 except Exception as ex:
                     logger.error(f"Experiment {i} failed with error {ex}")
                     print(self.EXP_CRASHED_SEP)
-                    exp_log.finish_run(i, j, crashed=True)
                     if not self.exp_settings.continue_with_errors:
                         raise ex
                     yield status_manager.crash_run(ex)
@@ -487,21 +362,18 @@ def run(param_path: str = "parameters.yaml"):
     logger.info(f"Loaded parameters from {param_path}")
     single_run = Run()
     single_run.init(settings)
-    single_run._prep_for_training()
-    single_run._prep_for_validation()
     single_run.launch()
     
     
-def validate(param_path: str = "parameters.yaml", generate_json: bool = False):
+def validate(param_path: str = "parameters.yaml"):
     logger.info("Running run")
     settings = load_yaml(param_path)
     logger.info(f"Loaded parameters from {param_path}")
     single_run = Run()
     single_run.init(settings)
-    single_run._prep_for_validation()
     epoch = 0
-    with single_run.plat_logger.validate():
-        single_run.validate(epoch=epoch, generate_json=generate_json)
+    with single_run.tracker.validate():
+        single_run.validate(epoch=epoch)
     
     
 def test(param_path: str = "parameters.yaml"):
