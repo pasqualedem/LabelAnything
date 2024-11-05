@@ -10,18 +10,18 @@ experiment:
 parameters:
   # Contains the parameters to build the grid.
   # Each value should be a dict or a list
-
+  seed: [42]
+  
+  validation:
+    reruns: [1]
   logger:
     log_frequency: [10]
     train_image_log_frequency: [100000]
     val_image_log_frequency: [100]
-    experiment_save_delta: [null] # save experiment every n seconds
     tmp_dir: [tmp]
-    wandb:
-      offline: [False]
-      entity: [cilabuniba]
-      tags: [[embed256,resnet]]
-      offline_directory: [offline]
+    entity: [cilabuniba]
+    tags: [[embed256,resnet]]
+    offline_directory: [offline]
 
   train_params:
     loss:
@@ -29,7 +29,6 @@ parameters:
       components:
         focal:
           weight: [1.0]
-    seed: &seed [42] # random seed to set
     num_points: [1] # number of points for class after the substitution
     max_epochs: [25]
     compile: [False]

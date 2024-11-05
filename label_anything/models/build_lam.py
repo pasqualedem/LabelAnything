@@ -17,11 +17,8 @@ from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
 from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
 from label_anything.models.transformer import AffinityTransformer
-<<<<<<< HEAD
 from label_anything.models.pyramids import PyramidNeck
-=======
 from label_anything.utils.utils import load_state_dict, torch_dict_load
->>>>>>> cd98972f0a26a8feef43d5b08243dba7e17a5332
 
 from . import (
     ImageEncoderViT,

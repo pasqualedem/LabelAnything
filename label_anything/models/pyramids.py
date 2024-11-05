@@ -92,6 +92,9 @@ class PyramidNeck(nn.Module):
             )
 
         self.level_embed = nn.Parameter(torch.Tensor(len(feature_levels), d_model))
+        self.final_conv = nn.Conv2d(
+            len(feature_levels) * d_model, d_model, kernel_size=1
+        )
 
     def forward(self, feature_pyramid):
         key0 = next(iter(feature_pyramid.keys()))
@@ -146,5 +149,9 @@ class PyramidNeck(nn.Module):
             )
 
         # make a single tensor by summing all the feature maps
-        feature_maps = torch.stack(feature_maps, dim=0).sum(dim=0)
+        # feature_maps = torch.stack(feature_maps, dim=0).sum(dim=0)
+
+        # concatenate the feature maps
+        feature_maps = torch.cat(feature_maps, dim=1)
+        feature_maps = self.final_conv(feature_maps)
         return feature_maps
