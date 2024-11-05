@@ -17,6 +17,7 @@ from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
 from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
 from label_anything.models.transformer import AffinityTransformer
+from label_anything.models.pyramids import PyramidNeck
 
 from . import (
     ImageEncoderViT,
@@ -120,6 +121,8 @@ def _build_lam(
     dropout: float = 0.0,
     binary=False,
     custom_preprocess=True,
+    is_pyramids=False,
+    intermediate_channel_sizes=None,
 ):
 
     image_embedding_size = image_size // vit_patch_size
@@ -132,27 +135,35 @@ def _build_lam(
     else:
         class_encoder = lambda x, y: (x, y)
 
-    neck = (
-        None
-        if image_embed_dim == embed_dim
-        else nn.Sequential(
-            nn.Conv2d(
-                image_embed_dim,
-                embed_dim,
-                kernel_size=1,
-                bias=False,
-            ),
-            LayerNorm2d(embed_dim),
-            nn.Conv2d(
-                embed_dim,
-                embed_dim,
-                kernel_size=3,
-                padding=1,
-                bias=False,
+    if not is_pyramids:
+        neck = (
+            None
+            if image_embed_dim == embed_dim
+            else nn.Sequential(
+                nn.Conv2d(
+                    image_embed_dim,
+                    embed_dim,
+                    kernel_size=1,
+                    bias=False,
+                ),
+                LayerNorm2d(embed_dim),
+                nn.Conv2d(
+                    embed_dim,
+                    embed_dim,
+                    kernel_size=3,
+                    padding=1,
+                    bias=False,
+                ),
+                LayerNorm2d(embed_dim),
+            )
+        )
+    else:
+        neck = nn.Sequential(
+            PyramidNeck(
+                intermediate_channel_sizes=intermediate_channel_sizes, d_model=embed_dim
             ),
             LayerNorm2d(embed_dim),
         )
-    )
     lam_class = BinaryLam if binary else Lam
 
     lam = lam_class(

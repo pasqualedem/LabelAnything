@@ -48,7 +48,7 @@ class PyramidNeck(nn.Module):
         feature_levels=["stage2", "stage3", "stage4"],
         image_resolution=384,
         d_model=512,
-        positional_embedding_temperature=10,
+        positional_embedding_temperature=20,
     ):
         super().__init__()
         self.image_resolution = image_resolution
@@ -132,7 +132,7 @@ class PyramidNeck(nn.Module):
 
         # apply pixel masks (it's useless but i keep it as in HF)
         for i in range(len(feature_maps)):
-            feature_maps[i] = feature_maps[i] * masks[i].unsqueeze(0).to(
+            feature_maps[i] = feature_maps[i] * masks[i].unsqueeze(1).to(
                 feature_maps[i].dtype
             )
 

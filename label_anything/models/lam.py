@@ -135,9 +135,20 @@ class Lam(nn.Module):
     def prepare_query_example_embeddings(self, batched_input):
         if "embeddings" in batched_input:
             embeddings = batched_input["embeddings"]
-            B, N, C, H, W = embeddings.shape
-            if self.neck is not None:
-                embeddings = rearrange(embeddings, "b n c h w -> (b n) c h w", b=B)
+            if not isinstance(embeddings, dict):
+                B, N, C, H, W = embeddings.shape
+                if self.neck is not None:
+                    embeddings = rearrange(embeddings, "b n c h w -> (b n) c h w", b=B)
+                    embeddings = self.neck(embeddings)
+                    embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
+            else:
+                key0 = next(iter(embeddings.keys()))
+                B, N, C, H, W = embeddings[key0].shape
+                if self.neck is None:
+                    raise ValueError("Feature pyramids require a PyramidNeck")
+                embeddings = {
+                    k: rearrange(v, "b n c h w -> (b n) c h w", b=B) for k, v in embeddings.items()
+                }
                 embeddings = self.neck(embeddings)
                 embeddings = rearrange(embeddings, "(b n) c h w -> b n c h w", b=B)
         elif "images" in batched_input:
