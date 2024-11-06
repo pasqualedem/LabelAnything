@@ -29,10 +29,10 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00001, 0.00005]
+    initial_lr: [0.00001, 0.000005]
     optimizer: [AdamW]
     scheduler:
-    - type: cosine
+    - type: constant_with_warmup
       step_moment: batch
       num_warmup_steps: 1000
     substitute: [False]
