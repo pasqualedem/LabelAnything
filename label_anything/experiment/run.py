@@ -606,11 +606,12 @@ class Run:
         self, name, val_dataloader, epoch: int
     ):
         logger.info(f"Validation of {name} epoch {epoch} started")
-        if self.val_params.get("validation_reruns", None) is None:
+        if self.val_params.get("reruns", None) is None:
             metrics = self.validate_run(name, val_dataloader, epoch, None)
         else:
+            validation_runs = self.val_params["reruns"]
             overall_metrics = []
-            for validation_run in range(self.train_params["validation_reruns"]):
+            for validation_run in range(validation_runs):
                 metrics = self.validate_run(name, val_dataloader, epoch, validation_run)
                 overall_metrics.append(metrics)
             metrics = {
