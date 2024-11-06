@@ -29,7 +29,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00001, 0.000005]
+    initial_lr: [0.00005, 0.00001, 0.000005]
     optimizer: [AdamW]
     scheduler:
     - type: constant_with_warmup
@@ -49,10 +49,6 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
-    class_encoder:
-      name: [RandomMatrixEncoder]
-      bank_size: [100]
-      embed_dim: *embed_dim
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
