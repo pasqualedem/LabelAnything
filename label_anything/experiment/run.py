@@ -619,7 +619,7 @@ class Run:
                 for k in overall_metrics[0].keys()
             }
             self.tracker.log_metrics(
-                {**{f"avg_{k}{name}": v for k, v in metrics.items()}}, epoch=epoch
+                {**{f"avg_{k}_{name}": v for k, v in metrics.items()}}, epoch=epoch
             )
             for k, v in metrics.items():
                 logger.info(f"Validation epoch {epoch} - {name} - {k}: {v}")
@@ -710,14 +710,14 @@ class Run:
                 self.global_val_step += 1
                 tot_images += cur_batch_size
 
+            metrics_value = metrics.compute()
             self.tracker.log_metrics(
-                {f"{k}_{name}": v for k, v in metrics.compute().items()},
+                {f"{k}_{name}": v for k, v in metrics_value.items()},
                 epoch=epoch,
             )
         self.accelerator.wait_for_everyone()
         self.tracker.add_image_sequence(f"predictions_{name}")
 
-        metrics_value = metrics.compute()
         for k, v in metrics_value.items():
             logger.info(
                 f"Validation {metrics_suffix[1:]} - {name} - epoch {epoch} - {k}: {v}"
@@ -725,6 +725,7 @@ class Run:
         return {
             "miou": metrics_value[f"mIoU{metrics_suffix}"],
             "fbiou": metrics_value[f"FBIoU{metrics_suffix}"],
+            "bmiou": metrics_value[f"BmIoU{metrics_suffix}"],
         }
 
     def test(self):

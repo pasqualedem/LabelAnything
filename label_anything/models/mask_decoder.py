@@ -269,7 +269,7 @@ class MaskDecoderLam(nn.Module):
     
     def _classify(self, query_embeddings, class_embeddings, flag_examples):
         b, d, h, w = query_embeddings.shape
-        _, c, _ = class_embeddings.shape
+        b, n, c = flag_examples.shape
         seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(
             b, -1, h, w
         )
