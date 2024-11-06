@@ -53,10 +53,10 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
-    class_encoder:
-      name: [RandomMatrixEncoder]
-      bank_size: [100]
-      embed_dim: *embed_dim
+    # class_encoder:
+    #   name: [RandomMatrixEncoder]
+    #   bank_size: [100]
+    #   embed_dim: *embed_dim
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -106,6 +106,9 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
+    - train_params:
+        initial_lr: [0.00005]
+        max_epochs: [30]
   # - dataset: # parameters depending on the class you defined for the dataset
   #     datasets:
   #       pascal5i:
