@@ -18,7 +18,7 @@ parameters:
     val_image_log_frequency: [100]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE]]
+    tags: [[MAE, Ablation]]
     offline_directory: [offline]
 
   train_params:
@@ -46,7 +46,7 @@ parameters:
     class_attention: [False]
     example_attention: [False]
     example_class_attention: [False]
-    fusion_transformer: [TwoWayTransformer]
+    fusion_transformer: [OneWayTransformer, IdentityTransformer]
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
