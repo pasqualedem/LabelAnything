@@ -12,9 +12,6 @@ parameters:
   # Each value should be a dict or a list
   seed: [42]
 
-  validation:
-    reruns: [1]
-
   logger:
     log_frequency: [500]
     train_image_log_frequency: [1000]

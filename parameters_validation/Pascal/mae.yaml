@@ -12,7 +12,7 @@ parameters:
   # Each value should be a dict or a list
   seed: [42]
 
-  validation:
+  val_params:
     reruns: [5]
 
   logger:
