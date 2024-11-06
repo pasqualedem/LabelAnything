@@ -13,7 +13,7 @@ parameters:
   seed: [42]
 
   validation:
-    reruns: [1]
+    reruns: [5]
 
   logger:
     log_frequency: [100]
@@ -21,7 +21,7 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE]]
+    tags: [[MAE, Validation]]
     offline_directory: [offline]
 
   model:
@@ -38,7 +38,7 @@ parameters:
       name: [RandomMatrixEncoder]
       bank_size: [100]
       embed_dim: *embed_dim
-    checkpoint: [offline/wandb/offline-run-20241104_165517-ai4gs9ig/files/best/model.safetensors]
+    checkpoint: [checkpoints/pascal/fold0_mae_s9x81bsj.safetensors]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -52,16 +52,16 @@ parameters:
         n_shots: [1]
         n_ways: [1]
         do_subsample: [False]
-      # val_pascal5i_N1K5:
-      #   <<: *val_pascal5i_N1K1
-      #   n_shots: [5]
+      val_pascal5i_N1K5:
+        <<: *val_pascal5i_N1K1
+        n_shots: [5]
       val_pascal5i_N2K1:
         <<: *val_pascal5i_N1K1
         n_ways: [2]
-      # val_pascal5i_N2K5:
-      #   <<: *val_pascal5i_N1K1
-      #   n_ways: [2]
-      #   n_shots: [5]
+      val_pascal5i_N2K5:
+        <<: *val_pascal5i_N1K1
+        n_ways: [2]
+        n_shots: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
@@ -73,7 +73,7 @@ parameters:
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[8, 1]]] 
+    val_possible_batch_example_nums: [[[64, 1]]] 
     prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
