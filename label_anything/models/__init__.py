@@ -7,7 +7,6 @@
 
 from collections import namedtuple
 
-from label_anything.models.denet import build_denet
 from .sam import Sam, AdaptedSam
 from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
@@ -21,6 +20,9 @@ from .samfew import SAMFewShotModel
 from .dcama import build_dcama
 from .fptrans import build_fptrans
 from .panet import build_panet
+from .bam import build_bam
+from.hdmnet import build_hdmnet
+from .denet import build_denet
 from .dummy import build_dummy
 
 
@@ -45,6 +47,9 @@ model_registry = {
     "fptrans": build_fptrans,
     "panet": build_panet,
     "denet": build_denet,
+    "hdmnet": build_hdmnet,
+    "bam": build_bam,
+    "hdmnet": build_hdmnet,
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS
