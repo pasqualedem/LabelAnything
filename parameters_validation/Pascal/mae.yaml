@@ -38,7 +38,7 @@ parameters:
       name: [RandomMatrixEncoder]
       bank_size: [100]
       embed_dim: *embed_dim
-    checkpoint: [checkpoints/pascal/fold0_mae_s9x81bsj.safetensors]
+    checkpoint: [checkpoints/pascal/fold0_mae_5juz3bim.safetensors]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -79,39 +79,45 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [1]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [2]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [3]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        pascal5i:
+          val_fold_idx: [1]
+        val_pascal5i_N1K1:
+          val_fold_idx: [1]
+        val_pascal5i_N1K5:
+          val_fold_idx: [1]
+        val_pascal5i_N2K1:
+          val_fold_idx: [1]
+        val_pascal5i_N2K5:
+          val_fold_idx: [1]
+    model:
+      checkpoint: [checkpoints/pascal/fold1_mae_oa6hslb5.safetensors]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        pascal5i:
+          val_fold_idx: [2]
+        val_pascal5i_N1K1:
+          val_fold_idx: [2]
+        val_pascal5i_N1K5:
+          val_fold_idx: [2]
+        val_pascal5i_N2K1:
+          val_fold_idx: [2]
+        val_pascal5i_N2K5:
+          val_fold_idx: [2]
+    model:
+      checkpoint: [checkpoints/pascal/fold2_mae_hupmfr07.safetensors]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        pascal5i:
+          val_fold_idx: [3]
+        val_pascal5i_N1K1:
+          val_fold_idx: [3]
+        val_pascal5i_N1K5:
+          val_fold_idx: [3]
+        val_pascal5i_N2K1:
+          val_fold_idx: [3]
+        val_pascal5i_N2K5:
+          val_fold_idx: [3]
+    model:
+      checkpoint: [checkpoints/pascal/fold3_mae_pzl98ldo.safetensors]
