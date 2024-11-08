@@ -102,7 +102,7 @@ def test_lam():
     }
 
     seg = lam(batch)
-    print(seg.shape, "si cazzo")
+    print(seg.shape, "seg.shape")
 
 
 @pytest.mark.lam
@@ -152,7 +152,7 @@ def test_embedding():
     }
 
     seg = lam(batch)
-    print(seg.shape, "si cazzo")
+    print(seg.shape, "seg.shape")
     assert seg.shape == (1, 2, 480, 640)
 
 
@@ -177,5 +177,5 @@ def test_embedding_predict():
     }
 
     seg = lam.predict(batch, class_embeddings)
-    print(seg.shape, "si cazzo")
+    print(seg.shape, "seg.shape")
     assert seg.shape == (1, 5, 480, 640)
