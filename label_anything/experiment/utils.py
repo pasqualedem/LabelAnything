@@ -234,14 +234,18 @@ def nosync_accumulation(accumulate=False, accelerator=None, model=None):
             yield
 
 
+def raise_not_implemented_error(*args, **kwargs):
+    raise NotImplementedError
+
+
 class WrapperModule(torch.nn.Module):
     def __init__(self, model, loss) -> None:
         super().__init__()
         self.model = model
         self.loss = loss
 
-        self.predict = self.model.predict
-        self.generate_class_embeddings = self.model.generate_class_embeddings
+        self.predict = self.model.predict if hasattr(self.model, "predict") else raise_not_implemented_error
+        self.generate_class_embeddings = self.model.generate_class_embeddings if hasattr(self.model, "generate_class_embeddings") else raise_not_implemented_error
 
     def forward(self, input_dict, gt):
         result_dict = self.model(input_dict)
