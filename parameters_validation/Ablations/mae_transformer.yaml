@@ -16,12 +16,12 @@ parameters:
     reruns: [5]
 
   logger:
-    log_frequency: [100]
-    train_image_log_frequency: [250]
-    val_image_log_frequency: [25]
+    log_frequency: [500]
+    train_image_log_frequency: [1000]
+    val_image_log_frequency: [100]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE, Validation]]
+    tags: [[MAE, Ablation, Validation]]
     offline_directory: [offline]
 
   model:
@@ -30,22 +30,27 @@ parameters:
     class_attention: [False]
     example_attention: [False]
     example_class_attention: [False]
-    fusion_transformer: [TwoWayTransformer]
+    fusion_transformer: [IdentityTransformer]
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
-    class_encoder:
-      name: [RandomMatrixEncoder]
-      bank_size: [100]
-      embed_dim: *embed_dim
-    checkpoint: [checkpoints/pascal/fold0_mae_5juz3bim.safetensors]
+    checkpoint: [checkpoints/pascal/fold0_maeid_qukw2kqw.safetensors]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
+      pascal5i:
+        name: [pascal]
+        data_dir: [data/pascal]
+        emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480]
+        split: ["train"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        sample_function: [uniform]
+        all_example_categories: [False]
       val_pascal5i_N1K1: &val_pascal5i_N1K1
         name: [pascal]
         data_dir: &instance_dir [data/pascal]
-        emb_dir: [data/pascal/embeddings_vit_mae_480]
+        emb_dir: *emb_dir
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
@@ -79,45 +84,6 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        pascal5i:
-          val_fold_idx: [1]
-        val_pascal5i_N1K1:
-          val_fold_idx: [1]
-        val_pascal5i_N1K5:
-          val_fold_idx: [1]
-        val_pascal5i_N2K1:
-          val_fold_idx: [1]
-        val_pascal5i_N2K5:
-          val_fold_idx: [1]
-    model:
-      checkpoint: [checkpoints/pascal/fold1_mae_oa6hslb5.safetensors]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        pascal5i:
-          val_fold_idx: [2]
-        val_pascal5i_N1K1:
-          val_fold_idx: [2]
-        val_pascal5i_N1K5:
-          val_fold_idx: [2]
-        val_pascal5i_N2K1:
-          val_fold_idx: [2]
-        val_pascal5i_N2K5:
-          val_fold_idx: [2]
-    model:
-      checkpoint: [checkpoints/pascal/fold2_mae_hupmfr07.safetensors]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        pascal5i:
-          val_fold_idx: [3]
-        val_pascal5i_N1K1:
-          val_fold_idx: [3]
-        val_pascal5i_N1K5:
-          val_fold_idx: [3]
-        val_pascal5i_N2K1:
-          val_fold_idx: [3]
-        val_pascal5i_N2K5:
-          val_fold_idx: [3]
-    model:
-      checkpoint: [checkpoints/pascal/fold3_mae_pzl98ldo.safetensors]
+  - model:
+      fusion_transformer: [OneWayTransformer]
+      checkpoint: [checkpoints/pascal/fold0_maeow_m8scz8pw.safetensors]
