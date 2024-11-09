@@ -53,7 +53,7 @@ parameters:
       remove_small_annotations: [True]
       do_subsample: [False]
       load_gts: [False]
-      image_size: [321]
+      image_size: [417]
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
