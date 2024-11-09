@@ -21,7 +21,7 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE, Validation]]
+    tags: [[Competitors, Validation]]
     offline_directory: [offline]
 
   model:
