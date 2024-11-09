@@ -108,6 +108,8 @@ class DeNet(OriginalDENet):
                 X_list[i][idx].append(Is[i, j])
         Y_list = nested_stack(Y_list)
         X_list = nested_stack(X_list)
+        if c_fg == 1:
+            label = label.squeeze(-1)
         out = super().forward(X_list, Y_list, Iq, label)
         fb_logits = rearrange(out[1], "(b c) fb h w -> b c fb h w", c=c_fg)
         bg_logits = fb_logits[:, :, 0, ...]
