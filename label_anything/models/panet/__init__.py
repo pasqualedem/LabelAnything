@@ -20,11 +20,10 @@ def unique_elements(structure):
             # Single element, take it directly
             result.append(next(iter(s)))
         else:
-            # Multiple elements, find the unique one (appears once in all sets)
-            try:
-                unique_elem = next(elem for elem in s if element_count[elem] == 1)
-            except StopIteration: # No element is unique
-                unique_elem = s.pop()
+            # Take the element that appears least in all sets
+            unique_elem = min(s, key=lambda x: element_count[x])
+            # Update the count
+            element_count[unique_elem] += 1
             result.append(unique_elem)
     
     return result
