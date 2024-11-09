@@ -19,6 +19,7 @@ from .samfew import SAMFewShotModel
 from .dcama import build_dcama
 from .fptrans import build_fptrans
 from .panet import build_panet
+from .ppnet import build_ppnet
 from .dummy import build_dummy
 
 
@@ -42,6 +43,7 @@ model_registry = {
     "dcama": build_dcama,
     "fptrans": build_fptrans,
     "panet": build_panet,
+    "ppnet": build_ppnet,
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS
