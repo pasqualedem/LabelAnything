@@ -87,3 +87,7 @@ other_grids:
   - model:
       fusion_transformer: [OneWayTransformer]
       checkpoint: [checkpoints/pascal/fold0_maeow_m8scz8pw.safetensors]
+  - model:
+      fusion_transformer: [TwoWayTransformer]
+      spatial_convs: [null]
+      checkpoint: [checkpoints/pascal/fold0_mae_nosp_1wigchgr.safetensors]
