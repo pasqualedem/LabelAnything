@@ -47,14 +47,11 @@ model_registry = {
     "dcama": build_dcama,
     "fptrans": build_fptrans,
     "panet": build_panet,
-<<<<<<< HEAD
     "ppnet": build_ppnet,
-=======
     "denet": build_denet,
     "hdmnet": build_hdmnet,
     "bam": build_bam,
     "hdmnet": build_hdmnet,
->>>>>>> de3be57cc3cc49e3ed0141fe8aad8fd8881f946c
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS
