@@ -20,6 +20,7 @@ from .samfew import SAMFewShotModel
 from .dcama import build_dcama
 from .fptrans import build_fptrans
 from .panet import build_panet
+from .ppnet import build_ppnet
 from .bam import build_bam
 from.hdmnet import build_hdmnet
 from .denet import build_denet
@@ -46,6 +47,7 @@ model_registry = {
     "dcama": build_dcama,
     "fptrans": build_fptrans,
     "panet": build_panet,
+    "ppnet": build_ppnet,
     "denet": build_denet,
     "hdmnet": build_hdmnet,
     "bam": build_bam,

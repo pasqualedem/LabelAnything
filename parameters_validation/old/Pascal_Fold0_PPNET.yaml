@@ -1,0 +1,81 @@
+seed: 42
+dataloader:
+  num_workers: 8
+  possible_batch_example_nums:
+  - - 2
+    - 1
+    - 4
+  - - 1
+    - 2
+    - 4
+  - - 8
+    - 2
+    - 1
+  - - 16
+    - 1
+    - 1
+  prefetch_factor: 2
+  prompt_choice_level:
+  - episode
+  prompt_types:
+  - mask
+  val_possible_batch_example_nums:
+  - - 1
+    - 1
+  val_prompt_types:
+  - mask
+dataset:
+  common:
+    custom_preprocess: false
+    do_subsample: false
+    image_size: 417
+    load_gts: false
+    remove_small_annotations: true
+  datasets:
+    # val_pascal5i_N1K1:
+    #   data_dir: data/pascal
+    #   do_subsample: false
+    #   n_folds: 4
+    #   n_shots: 1
+    #   n_ways: 1
+    #   name: pascal
+    #   split: val
+    #   val_fold_idx: 0
+    val_pascal5i_N2K1:
+      data_dir: data/pascal
+      do_subsample: false
+      n_folds: 4
+      n_shots: 1
+      n_ways: 2
+      name: pascal
+      split: val
+      val_fold_idx: 0
+experiment:
+  continue_with_errors: false
+  direction: null
+  excluded_files: ''
+  group: pascal5i
+  logger: null
+  max_parallel_runs: 1
+  n_trials: null
+  name: LabelAnything
+  resume: false
+  resume_last: false
+  search: grid
+  start_from_grid: 0
+  start_from_run: 0
+  timestamp: '20241031_153620'
+  tracking_dir: ''
+  uuid: null
+logger:
+  log_frequency: 10
+  tmp_dir: tmp
+  train_image_log_frequency: 250
+  val_image_log_frequency: 25
+  entity: cilabuniba
+  offline_directory: offline
+  tags:
+  - MAE
+model:
+  name: ppnet
+  fold: 0
