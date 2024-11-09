@@ -11,34 +11,18 @@ parameters:
   # Each value should be a dict or a list
   seed: [42]
 
+  val_params:
+    reruns: [5]
+
   logger:
     log_frequency: [10]
     train_image_log_frequency: [100000]
     val_image_log_frequency: [500]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[ViTMAE, emb256]]
+    tags: [[ViTMAE, emb256, Validation]]
     offline_directory: [offline]
 
-  train_params:
-    loss:
-      class_weighting: [True]
-      components:
-        focal:
-          weight: [1.0]
-    num_points: [1] # number of points for class after the substitution
-    max_epochs: [50]
-    compile: [False]
-    initial_lr: [0.00005]
-    optimizer: [AdamW]
-    scheduler:
-    - type: constant_with_warmup
-      step_moment: batch
-      num_warmup_steps: 1000
-    substitute: [False]
-    accumulate_substitution: [False] # Perform gradient accumulation over the substitution sub-batch
-    watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
-    check_nan: [1] # check for nan every n batches
   model:
     name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
     spatial_convs: [3]
@@ -49,6 +33,7 @@ parameters:
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
+    checkpoint: [checkpoints/coco/fold0_mae_7a5p0t63.safetensors]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -77,6 +62,13 @@ parameters:
       val_coco20i_N2K1:
         <<: *val_coco20i_N1K1
         n_ways: [2]
+      val_coco20i_N1K5:
+        <<: *val_coco20i_N1K1
+        n_shots: [5]
+      val_coco20i_N2K5:
+        <<: *val_coco20i_N1K1
+        n_ways: [2]
+        n_shots: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
@@ -96,27 +88,27 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [1]
-        val_coco20i_N1K1:
-          val_fold_idx: [1]
-        val_coco20i_N2K1:
-          val_fold_idx: [1]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [2]
-        val_coco20i_N1K1:
-          val_fold_idx: [2]
-        val_coco20i_N2K1:
-          val_fold_idx: [2]
-  - dataset: # parameters depending on the class you defined for the dataset
-      datasets:
-        coco20i:
-          val_fold_idx: [3]
-        val_coco20i_N1K1:
-          val_fold_idx: [3]
-        val_coco20i_N2K1:
-          val_fold_idx: [3]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [1]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [1]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [2]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [2]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       coco20i:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N1K1:
+  #         val_fold_idx: [3]
+  #       val_coco20i_N2K1:
+  #         val_fold_idx: [3]

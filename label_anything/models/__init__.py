@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from collections import namedtuple
+
 from .sam import Sam, AdaptedSam
 from .lam import Lam, BinaryLam
 from .image_encoder import ImageEncoderViT
@@ -20,6 +21,9 @@ from .dcama import build_dcama
 from .fptrans import build_fptrans
 from .panet import build_panet
 from .ppnet import build_ppnet
+from .bam import build_bam
+from.hdmnet import build_hdmnet
+from .denet import build_denet
 from .dummy import build_dummy
 
 
@@ -43,7 +47,14 @@ model_registry = {
     "dcama": build_dcama,
     "fptrans": build_fptrans,
     "panet": build_panet,
+<<<<<<< HEAD
     "ppnet": build_ppnet,
+=======
+    "denet": build_denet,
+    "hdmnet": build_hdmnet,
+    "bam": build_bam,
+    "hdmnet": build_hdmnet,
+>>>>>>> de3be57cc3cc49e3ed0141fe8aad8fd8881f946c
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS

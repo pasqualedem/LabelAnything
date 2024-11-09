@@ -136,7 +136,7 @@ class PmIoU(Metric):
                 specify a subset of labels to compute mean IoU, default is using all classes
         """
         if labels is None:
-            labels = self.labels
+            labels = self.labels[1:]  # exclude BG
         # Sum TP, FP, FN statistic of all samples
         if n_run is None:
             tp_sum = [np.nansum(np.vstack(self.tp_lst[run]), axis=0).take(labels)
