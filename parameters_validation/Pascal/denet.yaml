@@ -21,13 +21,13 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE, Validation]]
+    tags: [[Competitors, Validation]]
     offline_directory: [offline]
 
   model:
     name: [denet]
     maximum_num_classes: [21]
-    checkpoint: [checkpoints/DENet/Pascal/fold0.bin]
+    checkpoint: [checkpoints/DENet/pascal/fold0.bin]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -66,39 +66,39 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [1]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [2]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [3]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [1]
+        val_pascal5i_N1K5:
+          val_fold_idx: [1]
+        val_pascal5i_N2K1:
+          val_fold_idx: [1]
+        val_pascal5i_N2K5:
+          val_fold_idx: [1]
+    model:
+      checkpoint: [checkpoints/DENet/pascal/fold1.bin]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [2]
+        val_pascal5i_N1K5:
+          val_fold_idx: [2]
+        val_pascal5i_N2K1:
+          val_fold_idx: [2]
+        val_pascal5i_N2K5:
+          val_fold_idx: [2]
+    model:
+      checkpoint: [checkpoints/DENet/pascal/fold2.bin]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [3]
+        val_pascal5i_N1K5:
+          val_fold_idx: [3]
+        val_pascal5i_N2K1:
+          val_fold_idx: [3]
+        val_pascal5i_N2K5:
+          val_fold_idx: [3]
+    model:  
+      checkpoint: [checkpoints/DENet/pascal/fold3.bin]
