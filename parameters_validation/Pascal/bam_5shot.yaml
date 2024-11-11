@@ -27,7 +27,7 @@ parameters:
   model:
     name: [bam]
     val_fold_idx: [0]
-    shots: [1]
+    shots: [5]
     dataset: [pascal]
 
   dataset: # parameters depending on the class you defined for the dataset
@@ -66,21 +66,21 @@ other_grids:
           val_fold_idx: [1]
         val_pascal5i_N2K5:
           val_fold_idx: [1]
-      model:
-        val_fold_idx: [1]
+    model:
+      val_fold_idx: [1]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_pascal5i_N1K5:
           val_fold_idx: [2]
         val_pascal5i_N2K5:
           val_fold_idx: [2]
-      model:
-        val_fold_idx: [2]
+    model:
+      val_fold_idx: [2]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_pascal5i_N1K5:
           val_fold_idx: [3]
         val_pascal5i_N2K5:
           val_fold_idx: [3]
-      model:
-        val_fold_idx: [3]
+    model:
+      val_fold_idx: [3]

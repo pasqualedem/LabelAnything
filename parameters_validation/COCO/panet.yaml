@@ -20,7 +20,7 @@ parameters:
     val_image_log_frequency: [500]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[ViTMAE, emb256, Validation]]
+    tags: [[Competitors, Validation]]
     offline_directory: [offline]
 
   model:
@@ -32,7 +32,6 @@ parameters:
       val_coco20i_N1K1: &val_coco20i_N1K1
         name: [coco]
         instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
-        emb_dir: &emb_dir [data/coco/embeddings_vit_mae_480]
         img_dir: &img_dir [data/coco/train_val_2017]
         split: ["val"]
         val_fold_idx: [0]
@@ -64,7 +63,7 @@ parameters:
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[2, 1]]] 
+    val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
