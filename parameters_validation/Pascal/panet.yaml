@@ -26,7 +26,7 @@ parameters:
 
   model:
     name: [panet]
-    pretrained_path: [checkpoints/panet_fold0.pth]
+    pretrained_path: [checkpoints/panet/fold0_1shot.pth]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -53,7 +53,7 @@ parameters:
       remove_small_annotations: [True]
       do_subsample: [False]
       load_gts: [False]
-      image_size: [321]
+      image_size: [417]
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
@@ -65,39 +65,39 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [1]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [2]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [3]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [1]
+        val_pascal5i_N1K5:
+          val_fold_idx: [1]
+        val_pascal5i_N2K1:
+          val_fold_idx: [1]
+        val_pascal5i_N2K5:
+          val_fold_idx: [1]
+    model:
+      pretrained_path: [checkpoints/panet/fold1_1shot.pth]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [2]
+        val_pascal5i_N1K5:
+          val_fold_idx: [2]
+        val_pascal5i_N2K1:
+          val_fold_idx: [2]
+        val_pascal5i_N2K5:
+          val_fold_idx: [2]
+      model:
+        pretrained_path: [checkpoints/panet/fold2_1shot.pth]
+  - dataset: # parameters depending on the class you defined for the dataset
+      datasets:
+        val_pascal5i_N1K1:
+          val_fold_idx: [3]
+        val_pascal5i_N1K5:
+          val_fold_idx: [3]
+        val_pascal5i_N2K1:
+          val_fold_idx: [3]
+        val_pascal5i_N2K5:
+          val_fold_idx: [3]
+      model:
+        pretrained_path: [checkpoints/panet/fold3_1shot.pth]
