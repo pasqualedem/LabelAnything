@@ -58,7 +58,7 @@ parameters:
       max_points_annotations: [70]
       max_points_per_annotation: [10]
       load_gts: [False]
-      image_size: *image_size
+      image_size: [417]
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
