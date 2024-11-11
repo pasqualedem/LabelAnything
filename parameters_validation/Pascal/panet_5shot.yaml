@@ -21,12 +21,12 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[Competitors, Validation]]
+    tags: [[Competitors, Validation, 5shot]]
     offline_directory: [offline]
 
   model:
     name: [panet]
-    pretrained_path: [checkpoints/panet/pascal/fold0_1shot.pth]
+    pretrained_path: [checkpoints/panet/pascal/fold0_5shot.pth]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
@@ -76,7 +76,7 @@ other_grids:
         val_pascal5i_N2K5:
           val_fold_idx: [1]
     model:
-      pretrained_path: [checkpoints/panet/pascal/fold1_1shot.pth]
+      pretrained_path: [checkpoints/panet/pascal/fold1_5shot.pth]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_pascal5i_N1K1:
@@ -88,7 +88,7 @@ other_grids:
         val_pascal5i_N2K5:
           val_fold_idx: [2]
       model:
-        pretrained_path: [checkpoints/panet/pascal/fold2_1shot.pth]
+        pretrained_path: [checkpoints/panet/pascal/fold2_5shot.pth]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_pascal5i_N1K1:
@@ -100,4 +100,4 @@ other_grids:
         val_pascal5i_N2K5:
           val_fold_idx: [3]
       model:
-        pretrained_path: [checkpoints/panet/pascal/fold3_1shot.pth]
+        pretrained_path: [checkpoints/panet/pascal/fold3_5shot.pth]
