@@ -21,7 +21,7 @@ cfg = {
     "eval": 1,
     "eval_dir": ".",
     "center": 5,
-    "ckpt_dir": "checkpoints/ppnet/2024-11-09-voc-50-fix-w2-s1-lr5e-4-cen5-base0.1-size417-semshare4-F",
+    # "ckpt_dir": "checkpoints/ppnet/2024-11-09-voc-50-fix-w2-s1-lr5e-4-cen5-base0.1-size417-semshare4-F",
     "skip_ways": "v1",
     "output_sem_size": 417,
     "infer_max_iters": 1000,
@@ -49,5 +49,5 @@ cfg = {
             "data_split": "trainaug",
         },
     },
-    "resnet_init_path": "checkpoints/ppnet/resnet",
+    # "resnet_init_path": "checkpoints/ppnet/resnet",
 }
