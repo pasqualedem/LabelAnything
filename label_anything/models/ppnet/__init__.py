@@ -1,35 +1,18 @@
-from .SemiFewShotPartGraph import SemiFewShotSegPartGraph
-from .FewShotSegPartResnetSem import FewShotSegPart
-from .cfg import cfg
-from label_anything.data.utils import BatchKeys
-from label_anything.utils.utils import ResultDict
-from einops import rearrange
+import os
+from pathlib import Path
+
 import torch
 import torch.nn.functional as Ft
+from einops import rearrange
 from torchvision.transforms import functional as F
-import os
 
+from label_anything.data.utils import BatchKeys
+from label_anything.utils.utils import ResultDict
 
-def unique_elements(structure):
-    # Flatten and get element frequency
-    all_elements = [elem for s in structure for elem in s]
-    element_count = {elem: all_elements.count(elem) for elem in all_elements}
-
-    # Select unique element for each set based on count
-    result = []
-    for s in structure:
-        if len(s) == 1:
-            # Single element, take it directly
-            result.append(next(iter(s)))
-        else:
-            # Multiple elements, find the unique one (appears once in all sets)
-            try:
-                unique_elem = next(elem for elem in s if element_count[elem] == 1)
-            except StopIteration:  # No element is unique
-                unique_elem = s.pop()
-            result.append(unique_elem)
-
-    return result
+from .cfg import cfg
+from .FewShotSegPartResnetSem import FewShotSegPart
+from .SemiFewShotPartGraph import SemiFewShotSegPartGraph
+from ..panet import unique_elements
 
 
 class PPNet(FewShotSegPart):
@@ -64,7 +47,7 @@ class PPNet(FewShotSegPart):
         )
         return logits
 
-    def __init__(self, fold=0):
+    def __init__(self, cfg, fold=0):
         cfg["exp_str"] += str(fold)
         cfg["ckpt_dir"] += str(fold)
 
@@ -141,16 +124,15 @@ class PPNet(FewShotSegPart):
         raise NotImplementedError("PANet does not support generating class embeddings")
 
 
-def build_ppnet(fold=0, custom_preprocess=False):
+def build_ppnet(ckpt_dir, fold=0, custom_preprocess=False):
     if custom_preprocess:
         raise NotImplementedError("Custom preprocess is not supported for PANet")
     model = PPNet(fold)
+    cfg["ckpt_dir"] = ckpt_dir + str(fold)
+    cfg["exp_str"] = cfg["exp_str"] + str(fold)
+    cfg["resnet_init_path"] = Path(cfg["ckpt_dir"]).parent / "resnet"
+
     ckpt = os.path.join(f'{cfg["ckpt_dir"]}/best.pth')
-    import lovely_tensors as lt
-    lt.monkey_patch()
-    # write model state dict to txt file and loaded_ckpt
-    with open("model_state_dict.txt", "w") as f:
-        f.write(str(model.state_dict()))
     loaded_ckpt = torch.load(ckpt, map_location="cpu")
     # remove the "module." prefix from the keys
     new_state_dict = {}
