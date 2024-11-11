@@ -71,21 +71,21 @@ other_grids:
           val_fold_idx: [1]
         val_coco20i_N2K1:
           val_fold_idx: [1]
-      model:
-        val_fold_idx: [1]
+    model:
+      val_fold_idx: [1]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_coco20i_N1K1:
           val_fold_idx: [2]
         val_coco20i_N2K1:
           val_fold_idx: [2]
-      model:
-        val_fold_idx: [2]
+    model:
+      val_fold_idx: [2]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
         val_coco20i_N1K1:
           val_fold_idx: [3]
         val_coco20i_N2K1:
           val_fold_idx: [3]
-      model:
-        val_fold_idx: [3]
+    model:
+      val_fold_idx: [3]
