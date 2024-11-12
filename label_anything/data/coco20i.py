@@ -124,6 +124,7 @@ class Coco20iDataset(CocoLVISDataset):
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
             idx, metadata = idx_batchmetadata
+            intended_classes = [[] for _ in range(self.n_ways * self.n_shots + 1)]
             if self.n_ways == 1:
                 # sample a random category
                 cat_ids = [-1, random.choice(list(self.categories.keys()))]
@@ -131,17 +132,23 @@ class Coco20iDataset(CocoLVISDataset):
                 image_ids = random.sample(
                     list(self.cat2img[cat_ids[1]]), self.n_shots + 1
                 )
+                intended_classes[0].append(cat_ids[1])
+                for i in range(1, self.n_shots + 1):
+                    intended_classes[i].append(cat_ids[1])
             else:
                 # sample n_ways categories
                 cat_ids = random.sample(list(self.categories.keys()), self.n_ways)
                 # Choose a random image from the first category
                 query_image_id = random.choice(list(self.cat2img[cat_ids[0]]))
+                intended_classes[0].append(cat_ids[0])
 
                 # sample n_shots images from each category
                 image_ids = [query_image_id]
                 for cat_id in cat_ids:
                     cat_image_ids = list(self.cat2img[cat_id])
                     cat_image_ids = random.sample(cat_image_ids, self.n_shots)
+                    for i in (range(len(image_ids), len(image_ids) + self.n_shots)):
+                        intended_classes[i].append(cat_id)
                     image_ids += cat_image_ids
                 cat_ids = [-1] + sorted(cat_ids)
 
@@ -199,6 +206,7 @@ class Coco20iDataset(CocoLVISDataset):
                 BatchKeys.FLAG_EXAMPLES: flag_examples,
                 BatchKeys.DIMS: dims,
                 BatchKeys.CLASSES: classes,
+                BatchKeys.INTENDED_CLASSES: intended_classes,
                 BatchKeys.IMAGE_IDS: image_ids,
                 BatchKeys.GROUND_TRUTHS: ground_truths,
             }

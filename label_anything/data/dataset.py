@@ -192,6 +192,7 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
+        intended_classes = [x["intended_classes"] for x in batched_input]
 
         # image ids
         image_ids = [x["image_ids"] for x in batched_input]
@@ -226,6 +227,7 @@ class LabelAnythingDataset(Dataset):
             "flag_examples": flag_examples,
             "dims": dims,
             "classes": classes,
+            "intended_classes": intended_classes,
             "image_ids": image_ids,
             "flag_gts": flag_gts,
         }

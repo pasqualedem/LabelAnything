@@ -82,20 +82,26 @@ class Pascal5iDataset(PascalDataset):
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Pascal5iSplit.VAL:
             idx, metadata = idx_batchmetadata
-
+            intended_classes = [[] for _ in range(self.n_ways * self.n_shots + 1)]
             if self.n_ways == 1:
                 cat_ids = [-1, random.choice(list(self.categories.keys()))]
                 images_data = random.sample(
                     list(self.cat2img[cat_ids[1]]), self.n_shots + 1
                 )
+                intended_classes[0].append(cat_ids[1])
+                for i in range(1, self.n_shots + 1):
+                    intended_classes[i].append(cat_ids[1])
             else:
                 cat_ids = random.sample(list(self.categories.keys()), self.n_ways)
                 query_image_name = random.choice(list(self.cat2img[cat_ids[0]]))
-
+                intended_classes[0].append(cat_ids[0])
+                
                 images_data = [query_image_name]
                 for cat_id in cat_ids:
                     cat_image_names = list(self.cat2img[cat_id])
                     cat_image_names = random.sample(cat_image_names, self.n_shots)
+                    for i in (range(len(images_data), len(images_data) + self.n_shots)):
+                        intended_classes[i].append(cat_id)
                     images_data += cat_image_names
                 cat_ids = [-1] + sorted(cat_ids)
                 
@@ -157,6 +163,7 @@ class Pascal5iDataset(PascalDataset):
             BatchKeys.FLAG_POINTS: flag_points,
             BatchKeys.DIMS: dims,
             BatchKeys.CLASSES: classes,
+            BatchKeys.INTENDED_CLASSES: intended_classes,
             BatchKeys.IMAGE_IDS: images_data,
             BatchKeys.GROUND_TRUTHS: ground_truths,
         }

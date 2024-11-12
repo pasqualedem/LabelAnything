@@ -52,6 +52,7 @@ class BatchKeys(StrEnum):
     FLAG_EXAMPLES = "flag_examples"
     DIMS = "dims"
     CLASSES = "classes"
+    INTENDED_CLASSES = "intended_classes"
     IMAGE_IDS = "image_ids"
     GROUND_TRUTHS = "ground_truths"
     CLIP_EMBEDDINGS = "clip_embeddings"

@@ -120,7 +120,7 @@ class Substitutor:
         BatchKeys.FLAG_POINTS,
         BatchKeys.FLAG_EXAMPLES,
     ]
-    list_keys_to_exchange = [BatchKeys.CLASSES, BatchKeys.IMAGE_IDS]
+    list_keys_to_exchange = [BatchKeys.INTENDED_CLASSES, BatchKeys.CLASSES, BatchKeys.IMAGE_IDS]
     list_keys_to_separate = []
 
     def __init__(
