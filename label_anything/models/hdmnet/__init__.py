@@ -10,33 +10,23 @@ from label_anything.utils.utils import ResultDict
 from .HDMNet import OneModel
 
 
-def remove_duplicates_by_frequency(classes, flag_examples):
-    # Count occurrences of each element across all sublists
-    element_counts = Counter(element for sublist in classes for element in sublist)
+def remove_duplicated_classes(classes, intended_classes, flag_examples):
 
-    # Result list to store modified sublists
-    result = []
+    all_classes = sorted(set.union(*[set(sublist) for sublist in classes]))
+    class_to_flag = {cls: idx + 1 for idx, cls in enumerate(all_classes)}
 
-    for sublist, flag_example in zip(classes, flag_examples):
-        # If there's more than one element in the sublist
-        if len(sublist) > 1:
-            # Sort elements by the frequency count, keeping the less frequent one
-            ssublist = sorted(sublist, key=lambda x: element_counts[x])
-            to_keep = ssublist[0]
-            element_counts[to_keep] += 1
-            to_not_keep = ssublist[1:]
-            for to_not_keep_elem in to_not_keep:
-                to_not_keep_idx = sublist.index(to_not_keep_elem)
-                remove_idx = torch.where(flag_example)[0][to_not_keep_idx + 1]
-                flag_example[remove_idx] = 0
-            # Keep only the least frequent element
-            result.append([to_keep])
-        else:
-            # If it's a single element, keep it as is
-            result.append(sublist)
-
-    return result
-
+    for sublist_c, sublist_ic, flag_example in zip(classes, intended_classes, flag_examples):
+        additional_classes = set(sublist_c) - set(sublist_ic)
+        for cls in additional_classes:
+            cls_idx = class_to_flag[cls]
+            flag_example[cls_idx] = 0
+    assert (
+        len(flag_examples.sum(dim=1).unique()) == 1
+    ), "There are classes with different occurrences"
+    assert (
+        len(flag_examples[:, 1:].sum(dim=0).unique()) == 1
+    ), "There are examples with different number of classes"
+    
 
 class HDMNetModel(OneModel):
     def postprocess_masks(self, logits, dims):
@@ -69,7 +59,7 @@ class HDMNetModel(OneModel):
             ]
         )
         return logits
-    
+
     def forward(self, batch: dict):
         # remove bg from masks
         masks = batch[BatchKeys.PROMPT_MASKS][:, :, 1:, ::]
@@ -79,20 +69,35 @@ class HDMNetModel(OneModel):
         logits = []
         # get logits for each class
         flag_examples = batch[BatchKeys.FLAG_EXAMPLES].clone()
-        classes = [
-            remove_duplicates_by_frequency(class_item[1:], flag_item)
-            for class_item, flag_item in zip(batch["classes"], flag_examples)
-        ]
+
+        for class_item, intended_class_item, flag_item in zip(
+            batch[BatchKeys.CLASSES], batch[BatchKeys.INTENDED_CLASSES], flag_examples
+        ):
+            remove_duplicated_classes(class_item[1:], intended_class_item[1:], flag_item)
+
         for c in range(masks.size(2)):
             class_examples = flag_examples[:, :, c + 1]
             x = batch[BatchKeys.IMAGES][:, 0]
             s_x = batch[BatchKeys.IMAGES][:, 1:][class_examples].unsqueeze(0)
             s_y = masks[:, :, c, ::][class_examples].unsqueeze(0)
             n_shots = class_examples.sum().item()
-            if n_shots < self.shot: # if n_shots < self.shot repeat the last image and mask
-                s_x = torch.cat([s_x, s_x[:, -1].unsqueeze(0).repeat(1, self.shot - n_shots, 1, 1, 1)], dim=1)
-                s_y = torch.cat([s_y, s_y[:, -1].unsqueeze(0).repeat(1, self.shot - n_shots, 1, 1)], dim=1)
-            logits.append(super().forward(x, s_x=s_x, s_y=s_y, y_m=y_m, y_b=y_b, cat_idx=cat_idx))
+            if (
+                n_shots < self.shot
+            ):  # if n_shots < self.shot repeat the last image and mask
+                s_x = torch.cat(
+                    [
+                        s_x,
+                        s_x[:, -1].unsqueeze(0).repeat(1, self.shot - n_shots, 1, 1, 1),
+                    ],
+                    dim=1,
+                )
+                s_y = torch.cat(
+                    [s_y, s_y[:, -1].unsqueeze(0).repeat(1, self.shot - n_shots, 1, 1)],
+                    dim=1,
+                )
+            logits.append(
+                super().forward(x, s_x=s_x, s_y=s_y, y_m=y_m, y_b=y_b, cat_idx=cat_idx)
+            )
         logits = torch.stack(logits, dim=1)
         fg_logits = logits[:, :, 1, ::]
         bg_logits = logits[:, :, 0, ::]
@@ -104,25 +109,27 @@ class HDMNetModel(OneModel):
         return {
             ResultDict.LOGITS: logits,
         }
-        
-        
+
+
 def build_hdmnet(dataset, shots=1, val_fold_idx=0, custom_preprocess=True):
-    args = EasyDict({
-        "layers": 50,
-        "vgg": False,
-        "aux_weight1": 1.0,
-        "aux_weight2": 1.0,
-        "low_fea": 'layer2',  # low_fea for computing the Gram matrix
-        "kshot_trans_dim": 2, # K-shot dimensionality reduction
-        "merge": 'final',     # fusion scheme for GFSS ('base' Eq(S1) | 'final' Eq(18) )
-        "merge_tau": 0.9,     # fusion threshold tau 
-        "zoom_factor": 8,
-        "shot": shots,
-        "data_set": dataset,
-        "ignore_label": 255,
-        "print_freq": 10,
-        "split": val_fold_idx,
-    })
+    args = EasyDict(
+        {
+            "layers": 50,
+            "vgg": False,
+            "aux_weight1": 1.0,
+            "aux_weight2": 1.0,
+            "low_fea": "layer2",  # low_fea for computing the Gram matrix
+            "kshot_trans_dim": 2,  # K-shot dimensionality reduction
+            "merge": "final",  # fusion scheme for GFSS ('base' Eq(S1) | 'final' Eq(18) )
+            "merge_tau": 0.9,  # fusion threshold tau
+            "zoom_factor": 8,
+            "shot": shots,
+            "data_set": dataset,
+            "ignore_label": 255,
+            "print_freq": 10,
+            "split": val_fold_idx,
+        }
+    )
     model = HDMNetModel(args, cls_type="Base")
     if dataset == "pascsal":
         raise NotImplementedError("PASCAL dataset is not supported yet")
@@ -141,20 +148,26 @@ def build_hdmnet(dataset, shots=1, val_fold_idx=0, custom_preprocess=True):
         3: "checkpoints/hdmnet/coco/split3/resnet50/best_model_5shot.pth",
     }
     assert shots in [1, 5]
-    checkpoint_per_fold = checkpoint_per_fold_1shot if shots == 1 else checkpoint_per_fold_5shot
-    checkpoint_path = checkpoint_per_fold[val_fold_idx]    
+    checkpoint_per_fold = (
+        checkpoint_per_fold_1shot if shots == 1 else checkpoint_per_fold_5shot
+    )
+    checkpoint_path = checkpoint_per_fold[val_fold_idx]
 
     if os.path.isfile(checkpoint_path):
         print("=> loading checkpoint '{}'".format(checkpoint_path))
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-        new_param = checkpoint['state_dict']
-        try: 
+        checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+        new_param = checkpoint["state_dict"]
+        try:
             model.load_state_dict(new_param)
-        except RuntimeError:                   # 1GPU loads mGPU model
+        except RuntimeError:  # 1GPU loads mGPU model
             for key in list(new_param.keys()):
                 new_param[key[7:]] = new_param.pop(key)
             model.load_state_dict(new_param)
-        print("=> loaded checkpoint '{}' (epoch {})".format(checkpoint_path, checkpoint['epoch']))
+        print(
+            "=> loaded checkpoint '{}' (epoch {})".format(
+                checkpoint_path, checkpoint["epoch"]
+            )
+        )
     else:
         print("=> no checkpoint found at '{}'".format(checkpoint_path))
     return model
