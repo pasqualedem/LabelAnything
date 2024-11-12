@@ -53,7 +53,7 @@ parameters:
         n_ways: [4]
       val_pascal5i_N5K1:
         <<: *val_pascal5i_N3K1
-        n_ways: [4]
+        n_ways: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
