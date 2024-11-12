@@ -1,3 +1,4 @@
+from collections import Counter
 import os
 from easydict import EasyDict
 
@@ -7,6 +8,34 @@ import torch.nn.functional as F
 from label_anything.data.utils import BatchKeys
 from label_anything.utils.utils import ResultDict
 from .HDMNet import OneModel
+
+
+def remove_duplicates_by_frequency(classes, flag_examples):
+    # Count occurrences of each element across all sublists
+    element_counts = Counter(element for sublist in classes for element in sublist)
+
+    # Result list to store modified sublists
+    result = []
+
+    for sublist, flag_example in zip(classes, flag_examples):
+        # If there's more than one element in the sublist
+        if len(sublist) > 1:
+            # Sort elements by the frequency count, keeping the less frequent one
+            ssublist = sorted(sublist, key=lambda x: element_counts[x])
+            to_keep = ssublist[0]
+            element_counts[to_keep] += 1
+            to_not_keep = ssublist[1:]
+            for to_not_keep_elem in to_not_keep:
+                to_not_keep_idx = sublist.index(to_not_keep_elem)
+                remove_idx = torch.where(flag_example)[0][to_not_keep_idx + 1]
+                flag_example[remove_idx] = 0
+            # Keep only the least frequent element
+            result.append([to_keep])
+        else:
+            # If it's a single element, keep it as is
+            result.append(sublist)
+
+    return result
 
 
 class HDMNetModel(OneModel):
@@ -49,8 +78,13 @@ class HDMNetModel(OneModel):
         cat_idx = None
         logits = []
         # get logits for each class
+        flag_examples = batch[BatchKeys.FLAG_EXAMPLES].clone()
+        classes = [
+            remove_duplicates_by_frequency(class_item[1:], flag_item)
+            for class_item, flag_item in zip(batch["classes"], flag_examples)
+        ]
         for c in range(masks.size(2)):
-            class_examples = batch[BatchKeys.FLAG_EXAMPLES][:, :, c + 1]
+            class_examples = flag_examples[:, :, c + 1]
             x = batch[BatchKeys.IMAGES][:, 0]
             s_x = batch[BatchKeys.IMAGES][:, 1:][class_examples].unsqueeze(0)
             s_y = masks[:, :, c, ::][class_examples].unsqueeze(0)

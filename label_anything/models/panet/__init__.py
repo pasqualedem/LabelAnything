@@ -99,7 +99,10 @@ class PANet(FewShotSeg):
 
         fore_masks = []
         back_masks = []
-        class_ids = unique_elements([set(mask.unique()[1:].tolist()) for mask in masks])
+        unique_mask_elements = [set(mask.unique().tolist()) for mask in masks]
+        # Remove background class
+        unique_mask_elements = [set(mask_elements) - {0} for mask_elements in unique_mask_elements]
+        class_ids = unique_elements(unique_mask_elements)
 
         done_classes = []
         for class_id, mask_way in zip(class_ids, masks):

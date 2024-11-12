@@ -35,7 +35,7 @@ parameters:
       val_coco20i_N1K5: &val_coco20i_N1K5
         name: [coco]
         instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
-        img_dir: *img_dir
+        img_dir: [data/coco/train_val_2017]
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
