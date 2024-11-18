@@ -292,6 +292,7 @@ class PromptImageEncoder(PromptEncoder):
         example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
         use_support_features: bool = True,
+        embeddings_per_class: int = 1,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -315,6 +316,7 @@ class PromptImageEncoder(PromptEncoder):
         num_heads: int = 8
         attention_downsample_rate: int = 2
         self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
+        self.embeddings_per_class = embeddings_per_class
         mlp_dim: int = 2048
 
         self.transformer = transformer
@@ -582,6 +584,30 @@ class PromptImageEncoder(PromptEncoder):
             embeddings = rearrange(embeddings, "b (m c) d -> b m c d", c=c)
         embeddings = self.class_projector_out(embeddings)
         return embeddings
+    
+    def _obtain_embeddings(self, src, flag_examples):
+        b, m, c, d, h, w = src.shape
+        if self.embeddings_per_class > 1:
+            num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_class)))
+            embeddings = nn.functional.adaptive_avg_pool2d(src, (num_embeddings, num_embeddings)) # (BMC, D, num_embeddings, num_embeddings)
+            embeddings = rearrange(embeddings, "b m c d h w -> b (m h w) c d", b=b, m=m, c=c, d=d)
+            flag_examples = repeat(flag_examples, "b m c -> b (m h w) c", h=num_embeddings, w=num_embeddings)
+        else:
+            
+            embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
+            embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
+
+        embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
+
+        # Average over examples removing padding embeddings
+        masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
+        normalizer = flag_examples.clone().unsqueeze(-1).sum(dim=1).float()
+        normalizer[normalizer == 0] = (
+            1  # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
+        )
+
+        class_embeddings = masked_embeddings.sum(dim=1) / normalizer
+        return class_embeddings, embeddings, flag_examples
 
     def forward(
         self,
@@ -647,19 +673,10 @@ class PromptImageEncoder(PromptEncoder):
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
         src = rearrange(src, "b d h w -> b d (h w)")
-        embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
-        embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
-
-        embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
-
-        # Average over examples removing padding embeddings
-        masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
-        normalizer = flag_examples.clone().unsqueeze(-1).sum(dim=1).float()
-        normalizer[normalizer == 0] = (
-            1  # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
+        class_embeddings, embeddings, flag_examples = self._obtain_embeddings(
+            src, flag_examples
         )
 
-        class_embeddings = masked_embeddings.sum(dim=1) / normalizer
         return {
             ResultDict.CLASS_EMBS: class_embeddings,
             ResultDict.EXAMPLES_CLASS_SRC: src,
