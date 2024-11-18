@@ -119,7 +119,7 @@ def _build_lam(
     transformer_feature_size=None,
     class_encoder=None,
     segment_example_logits=False,
-    embedding_per_example=None,
+    embeddings_per_example=None,
     dropout: float = 0.0,
     binary=False,
     custom_preprocess=True,
@@ -137,9 +137,9 @@ def _build_lam(
     else:
         class_encoder = lambda x, y: (x, y)
     
-    if segment_example_logits and embedding_per_example is None:
-        embedding_per_example = 1
-    if embedding_per_example and not segment_example_logits:
+    if segment_example_logits and embeddings_per_example is None:
+        embeddings_per_example = 1
+    if embeddings_per_example and not segment_example_logits:
         segment_example_logits = True
 
     if not is_pyramids:
@@ -197,6 +197,7 @@ def _build_lam(
                 dropout=dropout,
             ),
             class_encoder=class_encoder,
+            embeddings_per_example=embeddings_per_example,
         ),
         mask_decoder=build_mask_decoder(
             embed_dim=embed_dim,

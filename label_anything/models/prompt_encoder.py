@@ -14,7 +14,7 @@ from typing import Any, Optional, Tuple, Type
 from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
 from .transformer import TwoWayTransformer
 
-from label_anything.data.utils import Label
+from label_anything.data.utils import BatchKeys, Label
 from label_anything.utils.utils import ResultDict
 
 
@@ -292,7 +292,7 @@ class PromptImageEncoder(PromptEncoder):
         example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
         use_support_features: bool = True,
-        embeddings_per_class: int = 1,
+        embeddings_per_example: int = 1,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -316,7 +316,7 @@ class PromptImageEncoder(PromptEncoder):
         num_heads: int = 8
         attention_downsample_rate: int = 2
         self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
-        self.embeddings_per_class = embeddings_per_class
+        self.embeddings_per_example = embeddings_per_example
         mlp_dim: int = 2048
 
         self.transformer = transformer
@@ -586,17 +586,18 @@ class PromptImageEncoder(PromptEncoder):
         return embeddings
     
     def _obtain_embeddings(self, src, flag_examples):
-        b, m, c, d, h, w = src.shape
-        if self.embeddings_per_class > 1:
-            num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_class)))
+        _, d, h, w = src.shape
+        b, m, c = flag_examples.shape
+        if self.embeddings_per_example > 1:
+            num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
             embeddings = nn.functional.adaptive_avg_pool2d(src, (num_embeddings, num_embeddings)) # (BMC, D, num_embeddings, num_embeddings)
-            embeddings = rearrange(embeddings, "b m c d h w -> b (m h w) c d", b=b, m=m, c=c, d=d)
+            embeddings = rearrange(embeddings, "(b m c) d h w -> b (m h w) c d", b=b, m=m, c=c, d=d)
+            m = m * num_embeddings * num_embeddings
             flag_examples = repeat(flag_examples, "b m c -> b (m h w) c", h=num_embeddings, w=num_embeddings)
         else:
-            
+            src = rearrange(src, "b d h w -> b d (h w)")
             embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
             embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
-
         embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
 
         # Average over examples removing padding embeddings
@@ -672,7 +673,6 @@ class PromptImageEncoder(PromptEncoder):
         src = self.sparse_dense_fusion(
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
-        src = rearrange(src, "b d h w -> b d (h w)")
         class_embeddings, embeddings, flag_examples = self._obtain_embeddings(
             src, flag_examples
         )
@@ -681,6 +681,7 @@ class PromptImageEncoder(PromptEncoder):
             ResultDict.CLASS_EMBS: class_embeddings,
             ResultDict.EXAMPLES_CLASS_SRC: src,
             ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
         }
 
 
