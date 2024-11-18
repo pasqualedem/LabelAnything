@@ -21,18 +21,18 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[Competitors, Validation, HighWays]]
+    tags: [[Competitors, Validation]]
     offline_directory: [offline]
 
   model:
-    name: [hdmnet]
+    name: [bam]
     val_fold_idx: [0]
     shots: [1]
     dataset: [coco]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
-      val_coco20i_N5K1: &val_coco20i_N5K1
+      val_coco20i_N1K1: &val_coco20i_N1K1
         name: [coco]
         instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
         img_dir: [data/coco/train_val_2017]
@@ -40,18 +40,12 @@ parameters:
         val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
-        n_ways: [5]
+        n_ways: [1]
         do_subsample: [False]
         add_box_noise: [False]
-      val_coco20i_N10K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [10]
-      val_coco20i_N15K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [15]
-      val_coco20i_N20K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [20]
+      val_coco20i_N2K1:
+        <<: *val_coco20i_N1K1
+        n_ways: [2]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
@@ -73,37 +67,25 @@ parameters:
 other_grids:
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_coco20i_N1K1:
           val_fold_idx: [1]
-        val_coco20i_N10K1:
-          val_fold_idx: [1]
-        val_coco20i_N15K1:
-          val_fold_idx: [1]
-        val_coco20i_N20K1:
+        val_coco20i_N2K1:
           val_fold_idx: [1]
     model:
       val_fold_idx: [1]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_coco20i_N1K1:
           val_fold_idx: [2]
-        val_coco20i_N10K1:
-          val_fold_idx: [2]
-        val_coco20i_N15K1:
-          val_fold_idx: [2]
-        val_coco20i_N20K1:
+        val_coco20i_N2K1:
           val_fold_idx: [2]
     model:
       val_fold_idx: [2]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_coco20i_N1K1:
           val_fold_idx: [3]
-        val_coco20i_N10K1:
-          val_fold_idx: [3]
-        val_coco20i_N15K1:
-          val_fold_idx: [3]
-        val_coco20i_N20K1:
+        val_coco20i_N2K1:
           val_fold_idx: [3]
     model:
       val_fold_idx: [3]

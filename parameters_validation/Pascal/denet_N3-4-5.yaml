@@ -2,7 +2,7 @@
 experiment:
   # It contains all the about the grids and the group of runs:
   name: LabelAnything # name of the logger platform experiment
-  group: coco20i # name of group of experiments for the logger platform
+  group: pascal5i # name of group of experiments for the logger platform
   continue_with_errors: False # continue with other runs even if a run fails
   start_from_grid: 0 # skip grids in the grid search
   start_from_run: 0 # skip runs from the selected grid
@@ -25,47 +25,38 @@ parameters:
     offline_directory: [offline]
 
   model:
-    name: [hdmnet]
-    val_fold_idx: [0]
-    shots: [1]
-    dataset: [coco]
+    name: [denet]
+    maximum_num_classes: [21]
+    checkpoint: [checkpoints/DENet/pascal/fold0.bin]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
-      val_coco20i_N5K1: &val_coco20i_N5K1
-        name: [coco]
-        instances_path: &instance_dir [data/coco/annotations/instances_val2014.json]
-        img_dir: [data/coco/train_val_2017]
+      val_pascal5i_N3K1: &val_pascal5i_N3K1
+        name: [pascal]
+        data_dir: &instance_dir [data/pascal]
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
         n_shots: [1]
-        n_ways: [5]
+        n_ways: [3]
         do_subsample: [False]
-        add_box_noise: [False]
-      val_coco20i_N10K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [10]
-      val_coco20i_N15K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [15]
-      val_coco20i_N20K1:
-        <<: *val_coco20i_N5K1
-        n_ways: [20]
+      val_pascal5i_N4K1:
+        <<: *val_pascal5i_N3K1
+        n_ways: [4]
+      val_pascal5i_N5K1:
+        <<: *val_pascal5i_N3K1
+        n_ways: [5]
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
-      add_box_noise: [True]
-      max_points_annotations: [70]
-      max_points_per_annotation: [10]
       load_gts: [False]
-      image_size: [641]
+      image_size: [321]
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[1, 1]]] 
+    val_possible_batch_example_nums: [[[4, 1]]] 
     prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
@@ -73,37 +64,31 @@ parameters:
 other_grids:
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_pascal5i_N3K1:
           val_fold_idx: [1]
-        val_coco20i_N10K1:
+        val_pascal5i_N4K1:
           val_fold_idx: [1]
-        val_coco20i_N15K1:
-          val_fold_idx: [1]
-        val_coco20i_N20K1:
+        val_pascal5i_N5K1:
           val_fold_idx: [1]
     model:
-      val_fold_idx: [1]
+      checkpoint: [checkpoints/DENet/pascal/fold1.bin]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_pascal5i_N3K1:
           val_fold_idx: [2]
-        val_coco20i_N10K1:
+        val_pascal5i_N4K1:
           val_fold_idx: [2]
-        val_coco20i_N15K1:
-          val_fold_idx: [2]
-        val_coco20i_N20K1:
+        val_pascal5i_N5K1:
           val_fold_idx: [2]
     model:
-      val_fold_idx: [2]
+      checkpoint: [checkpoints/DENet/pascal/fold2.bin]
   - dataset: # parameters depending on the class you defined for the dataset
       datasets:
-        val_coco20i_N5K1:
+        val_pascal5i_N3K1:
           val_fold_idx: [3]
-        val_coco20i_N10K1:
+        val_pascal5i_N4K1:
           val_fold_idx: [3]
-        val_coco20i_N15K1:
+        val_pascal5i_N5K1:
           val_fold_idx: [3]
-        val_coco20i_N20K1:
-          val_fold_idx: [3]
-    model:
-      val_fold_idx: [3]
+    model:  
+      checkpoint: [checkpoints/DENet/pascal/fold3.bin]
