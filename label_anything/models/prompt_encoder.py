@@ -588,7 +588,7 @@ class PromptImageEncoder(PromptEncoder):
     def _obtain_embeddings(self, src, flag_examples):
         _, d, h, w = src.shape
         b, m, c = flag_examples.shape
-        if self.embeddings_per_example > 1:
+        if self.embeddings_per_example and self.embeddings_per_example > 1:
             num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
             embeddings = nn.functional.adaptive_avg_pool2d(src, (num_embeddings, num_embeddings)) # (BMC, D, num_embeddings, num_embeddings)
             embeddings = rearrange(embeddings, "(b m c) d h w -> b (m h w) c d", b=b, m=m, c=c, d=d)
