@@ -109,15 +109,20 @@ def draw_masks(img: Image, masks: torch.Tensor, colors):
     # associated to a list of binary masks
     orig_shape = img.size
     masked_image = resize(img.copy(), 256)
+    focused_image = resize(img.copy(), 256)
     
     for i, mask in enumerate(masks):
         mask = mask.cpu().numpy()
         masked_image = np.where(np.repeat(mask[:, :, np.newaxis], 3, axis=2),
                                 np.asarray(colors[i], dtype="uint8"),
                                 masked_image)
+        focused_image = np.where(np.repeat(mask[:, :, np.newaxis] > 1, 3, axis=2),
+                                np.asarray(colors[i], dtype="uint8"),
+                                focused_image)
     
     masked_image = masked_image.astype(np.uint8)
-    overlap = cv2.addWeighted(np.array(resize(img, 256)), 0.3, masked_image, 0.7, 0)
+    overlap = cv2.addWeighted(np.array(resize(img, 256)), 0.4, masked_image, 0.6, 0)
+    overlap = cv2.addWeighted(overlap, 0.6, focused_image, 0.4, 0)
     return resize(Image.fromarray(overlap), orig_shape)
 
 
@@ -222,18 +227,16 @@ def plot_seg_gt(input, seg, gt, colors, dims, classes):
     return plots, titles
 
 
-def plot_seg(input, seg, colors, dims, classes):
+def plot_seg(query_image, seg, colors, dims, classes):
     query_dim = dims[0, 0]
     num_classes = len(classes) + 1
-    query_image = input["images"][0, 0]
-    image = get_image(take_image(query_image, dims=query_dim, input_shape=query_image.shape[-1]))
     seg = seg[:, : query_dim[0], : query_dim[1]]
-    segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes)
+    segmask = draw_seg(query_image, seg.cpu(), colors, num_classes=num_classes)
     blank_seg = Image.fromarray(np.zeros_like(segmask))
     blank_segmask = draw_seg(
         blank_seg, seg.cpu(), colors, num_classes=num_classes
     )
-    plots = [segmask, blank_segmask, image, image]
+    plots = [segmask, blank_segmask, query_image, query_image]
     titles = [
         "Overlay",
         "Mask",

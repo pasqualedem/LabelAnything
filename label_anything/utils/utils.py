@@ -328,3 +328,4 @@ class ResultDict(StrEnum):
     LOSS = "loss"
     LAST_HIDDEN_STATE = 'last_hidden_state'
     LAST_BLOCK_STATE = 'last_block_state'
+    ATTENTIONS = 'attentions'

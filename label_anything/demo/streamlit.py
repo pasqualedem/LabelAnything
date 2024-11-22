@@ -30,7 +30,7 @@ from captum.attr import (
     visualization
 )
 
-from label_anything.demo.preprocess import preprocess_support_set, preprocess_to_batch
+from label_anything.demo.preprocess import denormalize, preprocess_support_set, preprocess_to_batch
 from label_anything.demo.utils import (
     COLORS,
     TEXT_COLORS,
@@ -51,7 +51,7 @@ lt.monkey_patch()
 
 from label_anything.models import build_lam_no_vit
 from label_anything.data.examples import uniform_sampling
-from label_anything.data import utils
+from label_anything.data import get_preprocessing, utils
 from label_anything.data.utils import (
     AnnFileKeys,
     PromptType,
@@ -63,6 +63,7 @@ from label_anything.experiment.utils import WrapperModule
 
 from label_anything.demo.visualize import (
     draw_all,
+    draw_masks,
     get_image,
     load_from_wandb,
     plot_seg,
@@ -72,19 +73,36 @@ from label_anything.demo.builtin import built_in_dataset, predict
 import cv2
 import matplotlib.pyplot as plt
 from torchvision.transforms.functional import resize
+import torchvision.transforms as TvT
 from easydict import EasyDict
 
 
-LONG_SIDE_LENGTH = 1024
 IMG_DIR = "data/coco/train2017"
 ANNOTATIONS_DIR = "data/annotations/instances_val2017.json"
 EMBEDDINGS_DIR = "data/coco/embeddings"
 MAX_EXAMPLES = 30
 VIT_B_SAM_PATH = "checkpoints/sam_vit_b_01ec64.pth"
 
-SIZE = 1024
+SIZE = 384
+PROMPT_SIZE = 512
+CUSTOM_PREPROCESS = False
 
-preprocess = Compose([CustomResize(SIZE), PILToTensor(), CustomNormalize(SIZE)])
+dataset_params = {
+    "common": {
+        "remove_small_annotations": True,
+        "image_size": SIZE,
+        "custom_preprocess": False
+    }
+}
+
+preprocess = get_preprocessing(dataset_params)
+
+
+def load_dcama():
+    return model_registry['dcama'](
+    backbone_checkpoint="checkpoints/swin_base_patch4_window12_384.pth",
+    model_checkpoint="checkpoints/swin_fold3.pt"
+)
 
 
 class SS(StrEnum):
@@ -94,68 +112,8 @@ class SS(StrEnum):
 
 
 @st.cache_resource
-def get_data(_accelerator):
-    dataset = LabelAnythingDataset(
-        {
-            "coco": {
-                "name": "coco",
-                "instances_path": st.session_state.get(
-                    "annotations_dir", ANNOTATIONS_DIR
-                ),
-                "img_dir": st.session_state.get("img_dir", IMG_DIR),
-                "preprocess": preprocess,
-            }
-        },
-        {},
-    )
-    sampler = VariableBatchSampler(
-        dataset,
-        possible_batch_example_nums=[[1, 8], [1, 4], [1, 2], [1, 1]],
-        num_processes=1,
-        shuffle=False,
-    )
-    dataloader = DataLoader(
-        dataset=dataset, batch_sampler=sampler, collate_fn=dataset.collate_fn
-    )
-    dataloader = _accelerator.prepare(dataloader)
-    return dataloader
-
-
-@st.cache_resource
-def load_model(checkpoint, model_load_mode, device):
-    if model_load_mode == "Hugging Face":
-        model = LabelAnything.from_pretrained(checkpoint)
-        model.to(device)
-        return model.model
-    elif model_load_mode == "Wandb":
-        folder = "best"
-        model_file, config_file = load_from_wandb(checkpoint, folder)
-        if config_file is not None:
-            config = load_yaml(config_file)
-            model_params = config["model"]
-            name = model_params.pop("name")
-        else:
-            model_params = {}
-            name = "lam_no_vit"
-            st.warning(
-                f"Config file not found, using default model params: {model_params}, {name}"
-            )
-        model = model_registry[name](**model_params)
-        model = WrapperModule(model, None)
-        model_state_dict = torch_dict_load(model_file)
-        unmatched_keys = model.load_state_dict(model_state_dict, strict=False)
-        model.to(device)
-        if unmatched_keys.missing_keys:
-            st.warning(f"Missing keys: {unmatched_keys.missing_keys}")
-        if unmatched_keys.unexpected_keys and unmatched_keys.unexpected_keys != [
-            "loss.prompt_components.prompt_contrastive.t_prime",
-            "loss.prompt_components.prompt_contrastive.bias",
-        ]:
-            st.warning(f"Unexpected keys: {unmatched_keys.unexpected_keys}")
-        return model.model
-    else:
-        st.warning("Model load mode not supported")
-        return None
+def load_model(device):
+    return load_dcama().to(device)
 
 
 def reset_support(idx):
@@ -188,7 +146,7 @@ def build_support_set():
 
     support_image = st.file_uploader(
         "If you want, you can upload and annotate another support image",
-        type=["png", "jpg"],
+        type=["png", "jpg", "webp"],
         key="support_image",
     )
     if support_image is not None:
@@ -209,19 +167,20 @@ def add_support_image(support_image):
                 st.session_state[SS.CLASSES],
                 key="selectbox_class",
             )
+            prompt_type = "polygon"
         with cols[1]:
-            prompt_type = st.selectbox(
-                "Prompt Type", ["rect", "point", "polygon"], key="drawing_mode"
-            )
-        with cols[2]:
             edit_mode = st.checkbox("Edit annotations", key="edit_mode")
+        with cols[2]:
+            focused = st.checkbox("Focused")
         edit_mode = "transform" if edit_mode else prompt_type
-        selected_class_color_f, selected_class_color_st = get_color_from_class(
+        selected_class_color_f, selected_class_color_st, selected_class_color_focused = get_color_from_class(
             st.session_state[SS.CLASSES], selected_class
         )
         shape = get_preprocess_shape(
-            support_image.size[1], support_image.size[0], LONG_SIDE_LENGTH
+            support_image.size[1], support_image.size[0], PROMPT_SIZE
         )
+        selected_class_color_f = selected_class_color_focused if focused else selected_class_color_f
+        selected_class_color_st = "white" if focused else selected_class_color_st
         results = st_canvas(
             fill_color=selected_class_color_f,  # Fixed fill color with some opacity
             stroke_color=selected_class_color_st,  # Fixed stroke color with full opacity
@@ -265,111 +224,141 @@ def add_support_image(support_image):
                 "color_map": color_map,
             }
     if results is not None and st.button("Add Support Image"):
-        example = SupportExample(support_image=support_image)
-        if hasattr(results, "json_data") and results.json_data is not None:
-            st.write("Extracting prompts from canvas")
-            example.prompts = results.json_data
-            example.reshape = shape
-        if isinstance(results, dict) and "mask" in results:
-            st.write("Extracting prompts from mask")
-            example.prompts = results
-            example.reshape = shape
-        st.session_state[SS.SUPPORT_SET].append(example)
-        st.session_state.pop("input_prompt_detection", None)
-        st.session_state.pop("mask_support", None)
-        st.session_state.pop("support_image", None)
-        st.write("Support image added")
+        add_annotated_support_image(support_image, results, shape)
+
+
+def add_annotated_support_image(support_image, results, shape):
+    example = SupportExample(support_image=support_image)
+    if hasattr(results, "json_data") and results.json_data is not None:
+        st.write("Extracting prompts from canvas")
+        example.prompts = results.json_data
+        example.reshape = shape
+    if isinstance(results, dict) and "mask" in results:
+        st.write("Extracting prompts from mask")
+        example.prompts = results
+        example.reshape = shape
+    st.session_state[SS.SUPPORT_SET].append(example)
+    st.session_state.pop("input_prompt_detection", None)
+    st.session_state.pop("mask_support", None)
+    st.session_state.pop("support_image", None)
+    st.write("Support image added")
 
 
 def preview_support_set(batch, preview_cols):
     for i, elem in enumerate(st.session_state[SS.SUPPORT_SET]):
         img = batch[BatchKeys.IMAGES][0][i]
         masks = batch[BatchKeys.PROMPT_MASKS][0][i]
-        bboxes = batch[BatchKeys.PROMPT_BBOXES][0][i]
-        points = batch[BatchKeys.PROMPT_POINTS][0][i]
         img = get_image(img)
-        img = draw_all(img, masks=masks, boxes=bboxes, points=points, colors=COLORS)
+        img = draw_masks(img, masks=masks, colors=COLORS)
         with preview_cols[i]:
             if st.button(f"Remove Image {i+1}"):
                 reset_support(i)
             st.image(img, caption=f"Support Image {i+1}", use_column_width=True)
+            
+            
+def rect_explanation(query_image_pt, attns_class, masks, flag_examples, num_sample):
+    st.write("## Rectangle Explanation")
+    
+    masks = masks[:, :, 1:, ::]
+    shape = query_image_pt.shape[-2:]
+    query_image_pt = denormalize(query_image_pt)
+    query_image_pt = query_image_pt.squeeze(0).permute(1, 2, 0).cpu().numpy()
+    query_image_pt = Image.fromarray((query_image_pt * 255).astype(np.uint8))
 
-
-def explain(model, batch):
-    st.write("Explain the prediction")
-    query_image = get_image(batch[BatchKeys.IMAGES][0][0])
-    shape = get_preprocess_shape(
-        query_image.size[0], query_image.size[1], LONG_SIDE_LENGTH
-    )
     results = st_canvas(
         fill_color="white",  # Fixed fill color with some opacity
         stroke_color="black",  # Fixed stroke color with full opacity
-        background_image=query_image,
-        drawing_mode="point",
-        key="explain_input",
+        background_image=query_image_pt,
+        drawing_mode="rect",
+        key=f"explain_input_{num_sample}",
         width=shape[1],
         height=shape[0],
         stroke_width=2,
         update_streamlit=False,
     )
     if results is not None and results.json_data is not None:
-        if points := [
-        (point["left"], point["top"]) for point in results.json_data["objects"]
+        if rects := [
+        (rect["left"], rect["top"], rect['width'], rect["height"]) for rect in results.json_data["objects"]
         ]:
-            class_to_explain = (
-                st.session_state[SS.CLASSES].index(
-                    st.selectbox(
-                        "Select the class to explain", st.session_state[SS.CLASSES]
-                    )
-                )
-                + 1
-            )
-            method = st.selectbox("Select the method", LamExplainer.methods.keys())
-            explainer = LamExplainer(model, method=method)
-            st.write(f"Explaining class {class_to_explain}")
-            if st.button("Explain"):
-                explanation = compute_explanation(points, explainer, batch, class_to_explain)
-                show_explanation(batch, explanation)
-        else:
-            st.write("No points selected")
+            rect = rects[0]
+            rect = torch.tensor(rect)
 
+            target_size = 48
+            st.write(rect)
 
-# TODO Rename this here and in `explain`
-def compute_explanation(points, explainer: LamExplainer, batch, class_to_explain):
-    progress = st.progress(0)
-    explanations = []
-    for pi, point in enumerate(points):
-        explanation = explainer.explain(batch, point, class_to_explain)
-        explanations.append(explanation)
-        progress.progress((pi + 1) / len(points), text=f"Point {pi+1} / {len(points)}")
+            for j, attns in enumerate(attns_class):                    
+                attns = [
+                    attn.mean(dim=1) for attn in attns
+                ]
+                class_examples = flag_examples[:, :, j + 1]
+                mask = masks[:, :, j, ::][class_examples]
 
-    explanation = {
-        key: sum(explanation[key] for explanation in explanations)
-        / len(explanations)
-        for key in explanations[0].keys()
-    }
+                rect_attns = []
+                for attn in attns:
+                    hw = attn.shape[-1]
+                    h = w = int(hw ** 0.5)
+                    scaled_rect = (rect * h / shape[0]).int()
+                    mask_current = resize(mask, (h, w), interpolation=TvT.InterpolationMode.NEAREST)
+                    mask_current = rearrange(mask_current, "1 h w -> 1 1 (h w)")
+                    attn = attn * mask_current
+                    attn = rearrange(attn, "b (h1 w1) (h2 w2) -> b h1 w1 h2 w2", h1=h, w1=w, h2=h, w2=w)
+                    x0 = scaled_rect[0]
+                    x1 = scaled_rect[0] + max(scaled_rect[2], 1)
+                    y0 = scaled_rect[1]
+                    y1 = scaled_rect[1] + max(scaled_rect[3], 1)
+                    rect_attn = attn[0, x0:x1, y0:y1]
+                    rect_attn = rect_attn.mean(dim=(0, 1))
+                    rect_attn_norm = (rect_attn - rect_attn.min()) / (rect_attn.max() - rect_attn.min())
+                    rect_attns.append((rect_attn, rect_attn_norm))
+                st.write(f"Attention for class {j}")
+                
+                st.write(f"Attention summary for rect")
+                mean_attn = torch.cat([
+                    resize(attn[0].unsqueeze(0), (target_size, target_size)) for attn in rect_attns
+                ]).mean(dim=0)
+                mean_attn = (mean_attn - mean_attn.min()) / (mean_attn.max() - mean_attn.min())
+                st.write(mean_attn.chans.fig)
+                
+                st.write("Each channel attention")
+                n_cols = 4
+                cols = st.columns(n_cols)
+                for k, (_, attn) in enumerate(rect_attns):
+                    n_col = k % n_cols
+                    cols[n_col].write(attn.chans.fig)
+                    
+def attention_summary(attns_class, masks, flag_examples):
+    
+    masks = masks[:, :, 1:, ::]
+    st.write("## Attention Summary")
+    target_size = 48
+    for j, attns in enumerate(attns_class):
+        attns = [
+            attn.mean(dim=1) for attn in attns
+        ]
+        class_examples = flag_examples[:, :, j + 1]
+        mask = masks[:, :, j, ::][class_examples]
+        outs = []
+        for attn in attns:
+            hw = attn.shape[-1]
+            h = w = int(hw ** 0.5)
+            # resize mask to attn
+            mask = resize(mask, (h, w), interpolation=TvT.InterpolationMode.NEAREST)
+            mask = rearrange(mask, "1 h w -> 1 1 (h w)")
+            attn = attn * mask
+            attn = attn.sum(dim=-1)
+            # attn = torch.matmul(attn, mask)
+            attn = rearrange(attn, "1 (h w) -> 1 h w", h=h, w=w)
+            attn = resize(attn, (target_size, target_size))
+            outs.append(attn)
+        out = torch.cat(outs).mean(dim=0)
+        out = (out - out.min()) / (out.max() - out.min())
+        st.write(out)
+        st.write(out.chans.fig)
 
-    st.write(explanation)
-    return explanation
-
-def show_explanation(batch, explanation):
-    img_attr = explanation[BatchKeys.IMAGES][0] # Get the image with the attribution and remove the batch dimension
-    for k, img in enumerate(img_attr):
-        original_im_mat = np.transpose(batch[BatchKeys.IMAGES][0][k+1].cpu().detach().numpy(), (1, 2, 0))
-        attributions_img = np.transpose(img.cpu().detach().numpy(), (1, 2, 0))
-        attr_total = np.sum(np.abs(attributions_img), axis=2, keepdims=True)
-        fig, ax = visualization.visualize_image_attr_multiple(attributions_img, original_im_mat, 
-                                                ["original_image", "heat_map"], ["all", "absolute_value"], 
-                                                titles=["Original Image", "Attribution Magnitude"],
-                                                show_colorbar=True)
-        st.write(f"Explanation for image {k+1}, Total magnitude: {attr_total.sum()}")
-        st.pyplot(fig)
-
-
-def try_it_yourself(model, image_encoder):
+def try_it_yourself(model):
     st.write("Upload the image the you want to segment")
     query_images = st.file_uploader(
-        "Choose an image", type=["png", "jpg"], accept_multiple_files=True
+        "Choose an image", type=["png", "jpg", "webp"], accept_multiple_files=True
     )
     if len(query_images) > 0:
         images = [open_rgb_image(query_image) for query_image in query_images]
@@ -383,11 +372,14 @@ def try_it_yourself(model, image_encoder):
     build_support_set()
     if SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0:
         preview_cols = st.columns((len(st.session_state[SS.SUPPORT_SET])))
+        focusing_factor = st.number_input("Focusing Factor", min_value=1, max_value=100, value=5)
         support_batch = preprocess_support_set(
             st.session_state[SS.SUPPORT_SET],
             list(range(len(st.session_state[SS.CLASSES]))),
-            size=st.session_state.get("image_size", 1024),
+            preprocess=preprocess,
             device=st.session_state.get("device", "cpu"),
+            custom_preprocess=CUSTOM_PREPROCESS,
+            focusing_factor=focusing_factor
         )
         preview_support_set(support_batch, preview_cols)
 
@@ -401,7 +393,7 @@ def try_it_yourself(model, image_encoder):
             preprocess_to_batch(
                 image,
                 support_batch.copy(),
-                size=st.session_state.get("image_size", 1024),
+                preprocess,
                 device=st.session_state.get("device", "cpu"),
             )
             for image in images
@@ -412,7 +404,7 @@ def try_it_yourself(model, image_encoder):
             st.session_state[SS.RESULT] = []
             progress = st.progress(0)
             for support_batch in batches:
-                result = predict(model, image_encoder, support_batch)
+                result = predict(model, support_batch)
                 st.session_state[SS.RESULT].append(result)
                 progress.progress((i + 1) / len(batches))
         if SS.RESULT in st.session_state:
@@ -424,7 +416,7 @@ def try_it_yourself(model, image_encoder):
                     pred = result[ResultDict.LOGITS].argmax(dim=1)
                     st.json(result, expanded=False)
                     plots, titles = plot_seg(
-                        support_batch,
+                        open_rgb_image(query_image),
                         pred,
                         COLORS,
                         dims=support_batch[BatchKeys.DIMS],
@@ -437,8 +429,11 @@ def try_it_yourself(model, image_encoder):
                     cols[1].image(
                         plots[1], caption=titles[1], use_column_width=True
                     )
-        if st.toggle("Explain prediction"):
-            explain(model, batches[i])
+                attns_class = result.get(ResultDict.ATTENTIONS, None)
+                if attns_class is not None:
+                    query_image_pt = batches[i][BatchKeys.IMAGES][0, 0]
+                    rect_explanation(query_image_pt, attns_class, batches[i][BatchKeys.PROMPT_MASKS], batches[i][BatchKeys.FLAG_EXAMPLES], i)
+                    attention_summary(attns_class, batches[i][BatchKeys.PROMPT_MASKS], batches[i][BatchKeys.FLAG_EXAMPLES])
 
 
 def handle_gpu_memory(device):
@@ -456,8 +451,8 @@ def handle_gpu_memory(device):
 
 
 def main():
-    st.set_page_config(layout="wide", page_title="Label Anything")
-    st.title("Label Anything")
+    st.set_page_config(layout="wide", page_title="Focused FSS")
+    st.title("Focused FSS")
     st.sidebar.title("Settings")
     with st.sidebar:
         if cuda := torch.cuda.is_available():
@@ -466,21 +461,14 @@ def main():
         st.session_state["device"] = device
         # load model
         st.write("Working on device:", device)
-        model_load_mode = st.radio("Load model", ["Hugging Face", "Wandb"], index=0)
-        if model_load_mode == "Hugging Face":
-            models = retrieve_models()
-            checkpoint = st.selectbox("Model", models)
-        elif model_load_mode == "Wandb":
-            checkpoint = st.text_input("Wandb run id", "3ndl7had")
-        model = load_model(checkpoint, model_load_mode, device)
-        st.session_state["image_size"] = 1024  # TODO remove this
-        image_encoder = model.image_encoder
+        model = load_model(device)
+        
         st.divider()
         st.json(st.session_state, expanded=False)
         handle_gpu_memory(device)
     tiy_tab, dataset_tab = st.tabs(["Try it yourself", "Built-in dataset"])
     with tiy_tab:
-        try_it_yourself(model, image_encoder)
+        try_it_yourself(model)
     with dataset_tab:
         built_in_dataset(model)
 

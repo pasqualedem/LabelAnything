@@ -9,9 +9,11 @@ from label_anything.data.transforms import (
     PromptsProcessor,
 )
 from label_anything.data import utils
-
 from label_anything.demo.utils import canvas_to_prompt_type, color_to_class, debug_write
 
+
+from torchvision.transforms.functional import resize
+from PIL import Image
 
 def canvas_to_coco_path(path):
     m, x, y = zip(*path[:-1])
@@ -79,52 +81,83 @@ def extract_prompts_from_canvas(canvas, source_shape, target_shape):
         return prompts
     objects = canvas["objects"]
     for obj in objects:
-        if obj["type"] in ["circle", "rect", "path"]:
-            prompt_type = canvas_to_prompt_type[obj["type"]]
+        if obj["type"] == "path":
             label = color_to_class(obj["fill"])
-            if prompt_type == "bbox":
-                bbox = [
-                            obj["left"],
-                            obj["top"],
-                            obj["width"],
-                            obj["height"],
-                        ]
-                bbox = reshape_bbox(bbox, source_shape, target_shape)
-                prompts["bboxes"].append(
-                    {
-                        "bbox": bbox,
-                        "label": label,
-                    }
-                )
-            elif prompt_type == "point":
-                point = [
-                            obj["left"] + obj["radius"],
-                            obj["top"] + obj["radius"],
-                        ]
-                point = reshape_point(point, source_shape, target_shape)
-                prompts["points"].append(
-                    {
-                        "point": point,
-                        "label": label,
-                    }
-                )
-            elif prompt_type == "mask":
-                mask = canvas_to_coco_path(obj["path"])
-                mask = reshape_mask(mask, source_shape, target_shape)
-                prompts["masks"].append(
-                    {
-                        "mask": mask,
-                        "label": label,
-                    }
-                )
+            is_focused = obj["stroke"] == "white"
+            mask = canvas_to_coco_path(obj["path"])
+            mask = reshape_mask(mask, source_shape, target_shape)
+            prompts["masks"].append(
+                {
+                    "mask": mask,
+                    "label": label,
+                    "focused": is_focused
+                }
+            )
     return prompts
 
+def reduce_masks(masks: list, focusing_factor: int):
+    masks_side_length = 256
+    # take the binary OR over the masks and resize to new size
 
-def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=True, device="cuda"):
+    if not masks:
+        return torch.zeros(
+            (masks_side_length, masks_side_length), dtype=torch.uint8
+        )
+
+    masks, focused = zip(*masks)
+    masks = np.array(masks)
+
+    mask = torch.as_tensor(np.logical_or.reduce(masks).astype(np.uint8)).unsqueeze(
+        0
+    )
+    if any(focused):
+        focused = np.array(focused)
+        focused_masks = masks[focused]
+        focused_mask = torch.as_tensor(np.logical_or.reduce(focused_masks).astype(np.uint8)).unsqueeze(
+            0
+        )
+        mask[focused_mask.bool()] = focusing_factor
+
+    mask = resize(
+        mask,
+        (masks_side_length, masks_side_length),
+        interpolation=Image.NEAREST,
+    )
+    return mask
+
+def annotation_mask_to_tensor(annotations: list, focusing_factor: int) -> torch.Tensor:
+    """Convert a list of annotations to a tensor.
+
+    Args:
+        prompts_processor (PromptsProcessor): The prompts processor.
+        annotations (list): A list of annotations.
+        img_sizes (list): A list of tuples containing the image sizes.
+        prompt_type (PromptType): The type of the prompt.
+
+    Returns:
+        torch.Tensor: The tensor containing the annotations.
+    """
+    n = len(annotations)
+    c = len(annotations[0])
+
+    tensor_shape = (n, c, 256, 256)
+
+    tensor = torch.zeros(tensor_shape)
+    flag = torch.zeros(tensor_shape[:2]).type(torch.uint8)
+    for i, annotation in enumerate(annotations):
+        for j, cat_id in enumerate(annotation):
+            mask = reduce_masks(annotation[cat_id], focusing_factor)
+            tensor_mask = torch.tensor(mask)
+            tensor[i, j, :] = tensor_mask
+            flag[i, j] = 1 if torch.sum(tensor_mask) > 0 else 0
+
+    return tensor, flag
+
+
+def preprocess_support_set(support_set, classes, preprocess, custom_preprocess=True, device="cuda", focusing_factor=5):
     classes = [-1] + classes
     prompts_processor = PromptsProcessor(custom_preprocess=custom_preprocess)
-    transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
-
+    
     if not support_set:
         return {}
 
@@ -133,79 +166,60 @@ def preprocess_support_set(support_set, classes, size=1024, custom_preprocess=Tr
 
     for v, image_size in zip(support_set, image_sizes):
         v.prompts = extract_prompts_from_canvas(v.prompts, v.reshape, image_size)
-
-    bboxes = [{cat_id: [] for cat_id in classes} for _ in images]
+        
     masks = [{cat_id: [] for cat_id in classes} for _ in images]
-    points = [{cat_id: [] for cat_id in classes} for _ in images]
 
     for image_id, (elem, image_size) in enumerate(
         zip(support_set, image_sizes)
     ):
-        for bbox in elem.prompts["bboxes"]:
-            label = bbox["label"]
-            bbox = bbox["bbox"]
-            bboxes[image_id][label].append(
-                prompts_processor.convert_bbox(
-                    bbox,
-                    *image_size,
-                )
-            )
-
-        for point in elem.prompts["points"]:
-            label = point["label"]
-            point = point["point"]
-            points[image_id][label].append(point)
         for mask in elem.prompts["masks"]:
             label = mask["label"]
+            is_focused = mask["focused"]
             # Check if mask or RLE
             if isinstance(mask["mask"], list):   
                 mask = prompts_processor.convert_mask(mask["mask"], *image_size)
             else:
                 mask = mask["mask"]
-            masks[image_id][label].append(mask)
-
-    for i in range(len(images)):
-        for cat_id in classes:
-            bboxes[i][cat_id] = np.array((bboxes[i][cat_id]))
-            masks[i][cat_id] = np.array((masks[i][cat_id]))
-            points[i][cat_id] = np.array((points[i][cat_id]))
-
-    bboxes, flag_bboxes = utils.annotations_to_tensor(
-        prompts_processor, bboxes, image_sizes, utils.PromptType.BBOX
-    )
-    masks, flag_masks = utils.annotations_to_tensor(
-        prompts_processor, masks, image_sizes, utils.PromptType.MASK
-    )
-    points, flag_points = utils.annotations_to_tensor(
-        prompts_processor, points, image_sizes, utils.PromptType.POINT
-    )
-
-    flag_examples = utils.flags_merge(flag_masks, flag_points, flag_bboxes)
+            masks[image_id][label].append((mask, is_focused))
+            
+    masks, flag_masks = annotation_mask_to_tensor(masks, focusing_factor)
+    
+    flag_examples = utils.flags_merge(flag_masks=flag_masks)
     dims = torch.tensor(image_sizes)
-    images = torch.stack([transforms(img) for img in images])
+    images = torch.stack([preprocess(img) for img in images])
 
     return {
         utils.BatchKeys.IMAGES: images.unsqueeze(0).to(device),
         utils.BatchKeys.PROMPT_MASKS: masks.unsqueeze(0).to(device),
         utils.BatchKeys.FLAG_MASKS: flag_masks.unsqueeze(0).to(device),
-        utils.BatchKeys.PROMPT_POINTS: points.unsqueeze(0).to(device),
-        utils.BatchKeys.FLAG_POINTS: flag_points.unsqueeze(0).to(device),
-        utils.BatchKeys.PROMPT_BBOXES: bboxes.unsqueeze(0).to(device),
-        utils.BatchKeys.FLAG_BBOXES: flag_bboxes.unsqueeze(0).to(device),
         utils.BatchKeys.FLAG_EXAMPLES: flag_examples.unsqueeze(0).to(device),
         utils.BatchKeys.DIMS: dims.unsqueeze(0).to(device),
         utils.BatchKeys.CLASSES: [classes[1:]],
     }
 
-def preprocess_to_batch(query_image, batch, size=1024, device="cuda"):
-    transforms = Compose([CustomResize(size), ToTensor(), CustomNormalize(size)])
+def preprocess_to_batch(query_image, batch, preprocess, device="cuda",):
     dims = batch[utils.BatchKeys.DIMS].clone()
     images = batch[utils.BatchKeys.IMAGES].clone()
     dims = torch.cat([torch.tensor([[[query_image.size[1], query_image.size[0]]]], device=device), dims], dim=1)
     images = torch.cat(
-        [transforms(query_image).unsqueeze(0).unsqueeze(0).to(device), images],
+        [preprocess(query_image).unsqueeze(0).unsqueeze(0).to(device), images],
         dim=1,
     )
     batch[utils.BatchKeys.IMAGES] = images
     batch[utils.BatchKeys.DIMS] = dims
     return batch
+
+
+def denormalize(image):
+    mean = torch.tensor(
+        [0.485, 0.456, 0.406],
+        device=image.device
+    )
+    std = torch.tensor(
+        [0.229, 0.224, 0.225],
+        device=image.device
+    )
+    mean = mean.view(1, 3, 1, 1)
+    std = std.view(1, 3, 1, 1)
+    return (image * std) + mean
+    

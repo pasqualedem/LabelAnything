@@ -55,9 +55,9 @@ class DCAMA(nn.Module):
             query_feats = self.extract_feats(query_img)
             support_feats = self.extract_feats(support_img)
 
-        logit_mask = self.model(query_feats, support_feats, support_mask.clone())
+        logit_mask, attn = self.model(query_feats, support_feats, support_mask.clone())
 
-        return logit_mask
+        return logit_mask, attn
 
     def extract_feats(self, img):
         r""" Extract input image features """
@@ -109,7 +109,7 @@ class DCAMA(nn.Module):
         support_masks = batch[BatchKeys.PROMPT_MASKS]
 
         if nshot == 1:
-            logit_mask = self.forward_1shot(query_img, support_imgs[:, 0], support_masks[:, 0])
+            logit_mask, attn = self.forward_1shot(query_img, support_imgs[:, 0], support_masks[:, 0])
         else:
             with torch.no_grad():
                 query_feats = self.extract_feats(query_img)
@@ -117,7 +117,7 @@ class DCAMA(nn.Module):
                 for k in range(nshot):
                     support_feats = self.extract_feats(support_imgs[:, k])
                     n_support_feats.append(support_feats)
-            logit_mask = self.model(query_feats, n_support_feats, support_masks.clone(), nshot)
+            logit_mask, attn = self.model(query_feats, n_support_feats, support_masks.clone(), nshot)
 
         if self.use_original_imgsize:
             org_qry_imsize = tuple([batch[BatchKeys.DIMS][1].item(), batch[BatchKeys.DIMS][0].item()])
@@ -125,7 +125,7 @@ class DCAMA(nn.Module):
         else:
             logit_mask = F.interpolate(logit_mask, support_imgs[0].size()[2:], mode='bilinear', align_corners=True)
 
-        return logit_mask
+        return logit_mask, attn
 
     def compute_objective(self, logit_mask, gt_mask):
         bsz = logit_mask.size(0)
@@ -179,6 +179,7 @@ class DCAMA_model(nn.Module):
 
     def forward(self, query_feats, support_feats, support_mask, nshot=1):
         coarse_masks = []
+        attns = []
         for idx, query_feat in enumerate(query_feats):
             # 1/4 scale feature only used in skip connect
             if idx < self.stack_ids[0]: continue
@@ -201,12 +202,13 @@ class DCAMA_model(nn.Module):
 
             # DCAMA blocks forward
             if idx < self.stack_ids[1]:
-                coarse_mask = self.DCAMA_blocks[0](self.pe[0](query), self.pe[0](support_feat), mask)
+                coarse_mask, attn = self.DCAMA_blocks[0](self.pe[0](query), self.pe[0](support_feat), mask, return_attn=True)
             elif idx < self.stack_ids[2]:
-                coarse_mask = self.DCAMA_blocks[1](self.pe[1](query), self.pe[1](support_feat), mask)
+                coarse_mask, attn = self.DCAMA_blocks[1](self.pe[1](query), self.pe[1](support_feat), mask, return_attn=True)
             else:
-                coarse_mask = self.DCAMA_blocks[2](self.pe[2](query), self.pe[2](support_feat), mask)
+                coarse_mask, attn = self.DCAMA_blocks[2](self.pe[2](query), self.pe[2](support_feat), mask, return_attn=True)
             coarse_masks.append(coarse_mask.permute(0, 2, 1).contiguous().view(bsz, 1, ha, wa))
+            attns.append(attn)
 
         # multi-scale conv blocks forward
         bsz, ch, ha, wa = coarse_masks[self.stack_ids[3]-1-self.stack_ids[0]].size()
@@ -253,7 +255,7 @@ class DCAMA_model(nn.Module):
         out = F.interpolate(out, upsample_size, mode='bilinear', align_corners=True)
         logit_mask = self.mixer3(out)
 
-        return logit_mask
+        return logit_mask, attns
 
     def build_conv_block(self, in_channel, out_channels, kernel_sizes, spt_strides, group=4):
         r""" bulid conv blocks """

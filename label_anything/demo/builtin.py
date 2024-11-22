@@ -189,9 +189,7 @@ def get_features(_model, batch):
     return result
 
 
-def predict(model, image_encoder, batch):
-    image_features = get_features(image_encoder, batch[BatchKeys.IMAGES])
-    batch[BatchKeys.EMBEDDINGS] = image_features
+def predict(model, batch):
     with torch.no_grad():
         result = model(batch)
     return result

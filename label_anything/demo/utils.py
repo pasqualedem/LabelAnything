@@ -61,7 +61,8 @@ def get_color_from_class(classes, selected_class):
     selected_class_color = COLORS[classes.index(selected_class) + 1] # +1 because background is not a class
     selected_class_color_f = f"rgba({selected_class_color[0]}, {selected_class_color[1]}, {selected_class_color[2]}, 0.3)"
     selected_class_color_st = f"rgba({selected_class_color[0]}, {selected_class_color[1]}, {selected_class_color[2]}, 0.8)"
-    return selected_class_color_f, selected_class_color_st
+    selected_class_color_focused = f"rgba({selected_class_color[0]}, {selected_class_color[1]}, {selected_class_color[2]}, 1)"
+    return selected_class_color_f, selected_class_color_st, selected_class_color_focused
 
 
 canvas_to_prompt_type = {
