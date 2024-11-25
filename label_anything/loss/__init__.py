@@ -3,6 +3,7 @@ import torch
 
 from label_anything.data.utils import BatchKeys
 from label_anything.loss.fp import FalsePositiveLoss
+from label_anything.loss.mask import MaskEmbeddingLoss
 
 from .dice import DiceLoss
 from .focal import FocalLoss
@@ -21,6 +22,7 @@ LOGITS_LOSSES = {
 
 PROMPT_LOSSES = {
     "prompt_contrastive": PromptContrastiveLoss,
+    "masks": MaskEmbeddingLoss
 }
 
 
@@ -30,6 +32,7 @@ class LabelAnythingLoss(nn.Module):
     - DiceLoss
     - RMILoss
     - PromptContrastiveLoss
+    - MaskEmbeddingLoss
     """
 
     def __init__(self, components, class_weighting=None):
@@ -78,10 +81,7 @@ class LabelAnythingLoss(nn.Module):
     def prompt_loss(self, result):
         return sum(
             self.weights[k]
-            * loss(
-                result[ResultDict.EXAMPLES_CLASS_EMBS],
-                result[BatchKeys.FLAG_EXAMPLES],
-            )
+            * loss(result)
             for k, loss in self.prompt_components.items()
         )
 

@@ -322,6 +322,7 @@ class RunningAverage:
 
 class ResultDict(StrEnum):
     CLASS_EMBS = "class_embeddings"
+    MASK_EMBEDDINGS = "mask_embeddings"
     LOGITS = "logits"
     EXAMPLES_CLASS_EMBS = "class_examples_embeddings"
     EXAMPLES_CLASS_SRC = "class_examples_src"

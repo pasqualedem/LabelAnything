@@ -280,12 +280,8 @@ class PromptChooser(nn.Module):
     def __init__(self, emb_dim, num_embeddings):
         super().__init__()
         self.num_embeddings = num_embeddings
-        self.fg_choosers = nn.ModuleList([
-            nn.Conv2d(emb_dim, 1, (5, 5), stride=1, padding=2) for _ in range(num_embeddings)
-        ])
-        self.bg_choosers = nn.ModuleList([
-            nn.Conv2d(emb_dim, 1, (5, 5), stride=1, padding=2) for _ in range(num_embeddings)
-        ])
+        self.fg_chooser = nn.Conv2d(emb_dim, num_embeddings, (5, 5), stride=1, padding=2)
+        self.bg_chooser = nn.Conv2d(emb_dim, num_embeddings, (5, 5), stride=1, padding=2)
         self.act = nn.Sigmoid()
         
     def forward(self, src, flag_examples):
@@ -302,13 +298,14 @@ class PromptChooser(nn.Module):
         fg_src = rearrange(fg_src, "b m c d ... -> (b m c) d ...", b=b, m=m)
         bg_src = rearrange(bg_src, "b m c d ... -> (b m c) d ...", b=b, m=m, c=1)
         
-        fg_mask = torch.stack([fg_chooser(fg_src) for fg_chooser in self.fg_choosers])
-        bg_mask = torch.stack([bg_chooser(bg_src) for bg_chooser in self.bg_choosers])
+        fg_mask = self.fg_chooser(fg_src)
+        bg_mask = self.bg_chooser(bg_src)
         
-        fg_mask = torch.nn.functional.sigmoid(fg_mask)
-        bg_mask = torch.nn.functional.sigmoid(bg_mask)
+        fg_mask = rearrange(torch.nn.functional.softmax(fg_mask), "bmc n ... -> n bmc 1 ...")
+        bg_mask = rearrange(torch.nn.functional.softmax(bg_mask), "bmc n ... -> n bmc 1 ...")
                 
-        src = repeat(src, "... -> n ...", n=self.num_embeddings)
+        fg_src = repeat(fg_src, "... -> n ...", n=self.num_embeddings)
+        bg_src = repeat(bg_src, "... -> n ...", n=self.num_embeddings)
         
         fg = fg_mask * fg_src
         bg = bg_mask * bg_src
@@ -323,7 +320,11 @@ class PromptChooser(nn.Module):
         
         embeddings = torch.cat([bg, fg], dim=2)
         
-        return embeddings, flag_examples
+        return {
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            ResultDict.MASK_EMBEDDINGS: (bg_mask, fg_mask)
+        }
 
 
 class PromptImageEncoder(PromptEncoder):
@@ -641,8 +642,7 @@ class PromptImageEncoder(PromptEncoder):
         b, m, c = flag_examples.shape
         if self.prompt_chooser:
             class_embeddings = None
-            embeddings, flag_examples = self.prompt_chooser(src, flag_examples)
-            return class_embeddings, embeddings, flag_examples
+            return self.prompt_chooser(src, flag_examples)
         
         if self.embeddings_per_example and self.embeddings_per_example > 1:
             num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
@@ -664,7 +664,11 @@ class PromptImageEncoder(PromptEncoder):
         )
 
         class_embeddings = masked_embeddings.sum(dim=1) / normalizer
-        return class_embeddings, embeddings, flag_examples
+        return {
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings
+        }
 
     def forward(
         self,
@@ -729,15 +733,12 @@ class PromptImageEncoder(PromptEncoder):
         src = self.sparse_dense_fusion(
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
-        class_embeddings, embeddings, flag_examples = self._obtain_embeddings(
+        embeddings_dict = self._obtain_embeddings(
             src, flag_examples
         )
-
         return {
-            ResultDict.CLASS_EMBS: class_embeddings,
+            **embeddings_dict,
             ResultDict.EXAMPLES_CLASS_SRC: src,
-            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
-            BatchKeys.FLAG_EXAMPLES: flag_examples,
         }
 
 

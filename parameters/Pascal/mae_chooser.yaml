@@ -13,12 +13,12 @@ parameters:
   seed: [42]
 
   logger:
-    log_frequency: [500]
+    log_frequency: [100]
     train_image_log_frequency: [1000]
     val_image_log_frequency: [100]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE, Chooser]]
+    tags: [[MAE, ChooserLoss]]
     offline_directory: [offline]
 
   train_params:
@@ -27,6 +27,8 @@ parameters:
       components:
         focal:
           weight: [1.0]
+        masks:
+          weight: [0.7]
     num_points: [1] # number of points for class after the substitution
     max_epochs: [100]
     compile: [False]

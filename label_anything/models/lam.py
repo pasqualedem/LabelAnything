@@ -91,10 +91,13 @@ class Lam(nn.Module):
         seg = self.postprocess_masks(seg, batched_input["dims"])
         if "flag_gts" in batched_input:
             seg[batched_input["flag_gts"].logical_not()] = -1 * torch.inf
-        return {
+        result = {
             ResultDict.LOGITS: seg,
             ResultDict.EXAMPLES_CLASS_EMBS: pe_result[ResultDict.EXAMPLES_CLASS_EMBS],
         }
+        if ResultDict.MASK_EMBEDDINGS in pe_result:
+            result[ResultDict.MASK_EMBEDDINGS] = pe_result[ResultDict.MASK_EMBEDDINGS]
+        return result
 
     def get_dense_pe(self):
         if (
