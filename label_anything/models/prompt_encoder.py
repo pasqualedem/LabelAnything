@@ -275,6 +275,55 @@ class RandomMatrixEncoder(nn.Module):
         return self.forward_with_rows(
             dense_embeddings, sparse_embeddings, selected_rows
         )
+        
+class PromptChooser(nn.Module):
+    def __init__(self, emb_dim, num_embeddings):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.fg_choosers = nn.ModuleList([
+            nn.Conv2d(emb_dim, 1, (5, 5), stride=1, padding=2) for _ in range(num_embeddings)
+        ])
+        self.bg_choosers = nn.ModuleList([
+            nn.Conv2d(emb_dim, 1, (5, 5), stride=1, padding=2) for _ in range(num_embeddings)
+        ])
+        self.act = nn.Sigmoid()
+        
+    def forward(self, src, flag_examples):
+        fg_flag_examples = flag_examples.clone()
+        b, m, c  = fg_flag_examples.shape
+        
+        # Remove bg
+        fg_flag_examples = fg_flag_examples[:, :, 1:]
+        
+        src = rearrange(src, "(b m c) d ... -> b m c d ...", b=b, m=m)
+        fg_src = src[:, :, 1:]
+        bg_src = fg_src.mean(dim=2).unsqueeze(2)
+        bg_flag_examples = fg_flag_examples.sum(dim=2).bool().int().unsqueeze(2)
+        fg_src = rearrange(fg_src, "b m c d ... -> (b m c) d ...", b=b, m=m)
+        bg_src = rearrange(bg_src, "b m c d ... -> (b m c) d ...", b=b, m=m, c=1)
+        
+        fg_mask = torch.stack([fg_chooser(fg_src) for fg_chooser in self.fg_choosers])
+        bg_mask = torch.stack([bg_chooser(bg_src) for bg_chooser in self.bg_choosers])
+        
+        fg_mask = torch.nn.functional.sigmoid(fg_mask)
+        bg_mask = torch.nn.functional.sigmoid(bg_mask)
+                
+        src = repeat(src, "... -> n ...", n=self.num_embeddings)
+        
+        fg = fg_mask * fg_src
+        bg = bg_mask * bg_src
+        
+        fg = nn.functional.adaptive_avg_pool2d(fg, (1, 1))
+        bg = nn.functional.adaptive_avg_pool2d(bg, (1, 1))
+        flag_examples = torch.cat([bg_flag_examples, fg_flag_examples], dim=2)
+        flag_examples = repeat(flag_examples, "b m c -> b (n m) c", n=self.num_embeddings)
+        
+        fg = rearrange(fg, "n (b m c) d 1 1 -> b (n m) c d", b=b, m=m, c=(c - 1))
+        bg = rearrange(bg, "n (b m c) d 1 1 -> b (n m) c d", b=b, m=m, c=1)
+        
+        embeddings = torch.cat([bg, fg], dim=2)
+        
+        return embeddings, flag_examples
 
 
 class PromptImageEncoder(PromptEncoder):
@@ -293,6 +342,7 @@ class PromptImageEncoder(PromptEncoder):
         activation: Type[nn.Module] = nn.GELU,
         use_support_features: bool = True,
         embeddings_per_example: int = 1,
+        use_prompt_chooser: bool = False,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -322,6 +372,7 @@ class PromptImageEncoder(PromptEncoder):
         self.transformer = transformer
         self.class_encoder = class_encoder
         self.use_support_features = use_support_features
+        self.prompt_chooser = PromptChooser(emb_dim=embed_dim, num_embeddings=embeddings_per_example) if use_prompt_chooser else None
 
         self.sparse_embedding_attention = AttentionMLPBlock(
             embed_dim=embed_dim,
@@ -588,6 +639,11 @@ class PromptImageEncoder(PromptEncoder):
     def _obtain_embeddings(self, src, flag_examples):
         _, d, h, w = src.shape
         b, m, c = flag_examples.shape
+        if self.prompt_chooser:
+            class_embeddings = None
+            embeddings, flag_examples = self.prompt_chooser(src, flag_examples)
+            return class_embeddings, embeddings, flag_examples
+        
         if self.embeddings_per_example and self.embeddings_per_example > 1:
             num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
             embeddings = nn.functional.adaptive_avg_pool2d(src, (num_embeddings, num_embeddings)) # (BMC, D, num_embeddings, num_embeddings)

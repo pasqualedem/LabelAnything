@@ -120,6 +120,7 @@ def _build_lam(
     class_encoder=None,
     segment_example_logits=False,
     embeddings_per_example=None,
+    use_prompt_chooser=False,
     dropout: float = 0.0,
     binary=False,
     custom_preprocess=True,
@@ -198,6 +199,7 @@ def _build_lam(
             ),
             class_encoder=class_encoder,
             embeddings_per_example=embeddings_per_example,
+            use_prompt_chooser=use_prompt_chooser,
         ),
         mask_decoder=build_mask_decoder(
             embed_dim=embed_dim,

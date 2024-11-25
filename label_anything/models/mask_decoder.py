@@ -308,8 +308,9 @@ class MaskDecoderLam(nn.Module):
             pe_result, flag_examples
         )
 
+        embedding_mask = rearrange(flag_examples, "b m c -> b (m c)")
         class_embeddings, query_embeddings = self.transformer(
-            query_embeddings, image_pe, class_embeddings
+            query_embeddings, image_pe, class_embeddings, embedding_mask
         )
         query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
 
