@@ -301,8 +301,8 @@ class PromptChooser(nn.Module):
         fg_mask = self.fg_chooser(fg_src)
         bg_mask = self.bg_chooser(bg_src)
         
-        fg_mask = rearrange(torch.nn.functional.softmax(fg_mask), "bmc n ... -> n bmc 1 ...")
-        bg_mask = rearrange(torch.nn.functional.softmax(bg_mask), "bmc n ... -> n bmc 1 ...")
+        fg_mask = rearrange(torch.nn.functional.sigmoid(fg_mask), "bmc n ... -> n bmc 1 ...")
+        bg_mask = rearrange(torch.nn.functional.sigmoid(bg_mask), "bmc n ... -> n bmc 1 ...")
                 
         fg_src = repeat(fg_src, "... -> n ...", n=self.num_embeddings)
         bg_src = repeat(bg_src, "... -> n ...", n=self.num_embeddings)
