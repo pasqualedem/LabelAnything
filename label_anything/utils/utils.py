@@ -318,6 +318,23 @@ class RunningAverage:
         
     def compute(self):
         return self.accumulator / self.steps
+    
+class LossRunningAverage:
+    def __init__(self):
+        self.loss = RunningAverage()
+        self.components = {}
+        
+    def update(self, loss_dict):
+        value = loss_dict[LossDict.VALUE]
+        self.loss.update(value)
+        for k, v in loss_dict[LossDict.COMPONENTS].items():
+            if f"loss_{k}" not in self.components:
+                self.components[f"loss_{k}"] = RunningAverage()
+            self.components[f"loss_{k}"].update(v)
+    def compute(self):
+        value = self.loss.compute()
+        components = {f"avg_loss_{k}": self.components[f"loss_{k}"].compute() for k, v in self.components.items()}
+        return {"avg_loss": value, **components}
 
 
 class ResultDict(StrEnum):
@@ -329,3 +346,8 @@ class ResultDict(StrEnum):
     LOSS = "loss"
     LAST_HIDDEN_STATE = 'last_hidden_state'
     LAST_BLOCK_STATE = 'last_block_state'
+    
+
+class LossDict(StrEnum):
+    VALUE = "value"
+    COMPONENTS = "components"

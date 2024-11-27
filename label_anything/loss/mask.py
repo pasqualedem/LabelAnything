@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from einops import rearrange
 
-from label_anything.utils.utils import ResultDict
+from label_anything.utils.utils import LossDict, ResultDict
 
 def calculate_entropy(probabilities):
     """
@@ -42,6 +42,14 @@ class MaskEmbeddingLoss(nn.Module):
         fg_sum = torch.nn.functional.softmax(fg.sum(dim=0))
         bg_sum = torch.nn.functional.softmax(bg.sum(dim=0))
         
-        return self.alpha * ((calculate_entropy(bg).mean() + calculate_entropy(fg).mean()) / 2) + \
-            self.beta * (((1 - calculate_entropy(fg_sum)) + (1 - calculate_entropy(bg_sum))) / 2) 
+        inters = self.alpha * ((calculate_entropy(bg).mean() + calculate_entropy(fg).mean()) / 2)
+        union = self.beta * (((1 - calculate_entropy(fg_sum)) + (1 - calculate_entropy(bg_sum))) / 2)
+        
+        return {
+            LossDict.VALUE: inters + union,
+            LossDict.COMPONENTS: {
+                "mask_int": inters.item(),
+                "mask_uni": union.item(),   
+            }
+        } 
         
