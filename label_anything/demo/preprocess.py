@@ -174,7 +174,7 @@ def preprocess_support_set(support_set, classes, preprocess, custom_preprocess=T
     ):
         for mask in elem.prompts["masks"]:
             label = mask["label"]
-            is_focused = mask["focused"]
+            is_focused = mask.get("focused", False)
             # Check if mask or RLE
             if isinstance(mask["mask"], list):   
                 mask = prompts_processor.convert_mask(mask["mask"], *image_size)

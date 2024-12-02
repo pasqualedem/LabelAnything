@@ -1,3 +1,5 @@
+
+import inspect
 import torch
 import torch.nn as nn
 import numpy as np
@@ -16,6 +18,7 @@ class MultiHeadedAttention(nn.Module):
         self.h = h
         self.linears = clones(nn.Linear(d_model, d_model), 2)
         self.attn = None
+        self.attn_fn = attention
         self.dropout = nn.Dropout(p=dropout)
 
     def forward(self, query, key, value, mask=None, return_attn=False):
@@ -31,7 +34,7 @@ class MultiHeadedAttention(nn.Module):
         value = value.repeat(self.h, 1, 1).transpose(0, 1).contiguous().unsqueeze(-1)
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, self.attn = attention(query, key, value, mask=mask,
+        x, self.attn = self.attn_fn(query, key, value, mask=mask,
                                  dropout=self.dropout)
 
         # 3) "Concat" using a view and apply a final linear.
@@ -63,19 +66,76 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-def attention(query, key, value, mask=None, dropout=None):
-    "Compute 'Scaled Dot Product Attention'"
+def attention(query, key, value, mask=None, dropout=None, aggregation='sum', **kwargs):
+    "Compute 'Scaled Dot Product Attention' with customizable aggregation and hyperparameters"
     d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) \
-             / math.sqrt(d_k)
+    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)
+
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
+
+    # Softmax for attention weights
     p_attn = F.softmax(scores, dim=-1)
     if dropout is not None:
         p_attn = dropout(p_attn)
-    return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'sum':
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'max':
+        # No hyperparameters needed for max
+        max_scores, _ = torch.max(scores, dim=-1, keepdim=True)
+        p_attn = (scores == max_scores).float()  # Hard attention
+        p_attn = F.normalize(p_attn, p=1, dim=-1)  # Normalize for weighted aggregation
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'threshold':
+        # Get threshold from kwargs, default is 0.5
+        threshold = kwargs.get('threshold', 0.5)
+        p_attn = p_attn * (scores > threshold).float()  # Mask values below the threshold
+        p_attn = F.normalize(p_attn, p=1, dim=-1)  # Normalize again
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'power':
+        # Get gamma from kwargs, default is 2
+        gamma = kwargs.get('gamma', 2)
+        p_attn = p_attn**gamma
+        p_attn = F.normalize(p_attn, p=1, dim=-1)  # Normalize for proper weighting
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'lse':
+        # Get lambda_param from kwargs, default is 1.0
+        lambda_param = kwargs.get('lambda_param', 1.0)
+        lse_scores = (1 / lambda_param) * torch.logsumexp(lambda_param * scores, dim=-1, keepdim=True)
+        p_attn = torch.exp(scores - lse_scores)  # Recompute normalized probabilities
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'sigmoid':
+        # Get tau (threshold) and k (steepness) from kwargs
+        tau = kwargs.get('tau', 0.5)
+        k = kwargs.get('k', 10)
+        sigmoid_weights = torch.sigmoid(k * (scores - tau))
+        p_attn = p_attn * sigmoid_weights
+        p_attn = F.normalize(p_attn, p=1, dim=-1)  # Normalize again
+        return torch.matmul(p_attn, value), p_attn
+
+    if aggregation == 'hard':
+        # No hyperparameters needed for hard attention
+        _, max_indices = torch.max(scores, dim=-1, keepdim=True)
+        p_attn = torch.zeros_like(scores).scatter_(-1, max_indices, 1.0)  # One-hot encoding for max
+        return torch.matmul(p_attn, value), p_attn
+
+    raise ValueError(f"Unknown aggregation type: {aggregation}")
 
 
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
+
+
+def get_attn_fn(**params):
+
+    def attn_fn_with_args(*args, **kwargs):
+        return attention(*args, **kwargs, **params)
+    
+    return attn_fn_with_args

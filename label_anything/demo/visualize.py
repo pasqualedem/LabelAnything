@@ -1,3 +1,4 @@
+from sklearn.decomposition import PCA
 import wandb
 import matplotlib.pyplot as plt
 import numpy as np
@@ -227,10 +228,14 @@ def plot_seg_gt(input, seg, gt, colors, dims, classes):
     return plots, titles
 
 
-def plot_seg(query_image, seg, colors, dims, classes):
+def crop_seg(seg, dims):
     query_dim = dims[0, 0]
+    seg = seg[..., : query_dim[0], : query_dim[1]]
+    return seg
+
+def plot_seg(query_image, seg, colors, dims, classes):
     num_classes = len(classes) + 1
-    seg = seg[:, : query_dim[0], : query_dim[1]]
+    seg = crop_seg(seg, dims)
     segmask = draw_seg(query_image, seg.cpu(), colors, num_classes=num_classes)
     blank_seg = Image.fromarray(np.zeros_like(segmask))
     blank_segmask = draw_seg(
@@ -329,3 +334,33 @@ def plot_emebddings(examples_class_embeddings, example_flags, text_colors):
     fig.suptitle('t-SNE Visualization of Embeddings')
     fig.show()
     return fig
+
+def feature_map_pca_heatmap(feature_map):
+    """
+    Given a feature map of shape (D, H, W), performs PCA along the feature dimension
+    and returns a heatmap based on the first principal component.
+    
+    Args:
+        feature_map (torch.Tensor): Input tensor of shape (D, H, W).
+    
+    Returns:
+        heatmap (torch.Tensor): Heatmap of shape (H, W) based on the first principal component.
+    """
+    # Check the input dimensions
+    D, H, W = feature_map.shape
+    feature_map_reshaped = feature_map.view(D, -1).T  # Reshape to (H*W, D)
+
+    # Convert to numpy for PCA
+    feature_map_np = feature_map_reshaped.cpu().numpy()
+    
+    # Perform PCA
+    pca = PCA(n_components=1)
+    principal_component = pca.fit_transform(feature_map_np)
+    
+    # Reshape the result back to (H, W) and convert it to a tensor
+    heatmap = torch.tensor(principal_component).view(H, W)
+    
+    # Normalize the heatmap for better visualization
+    heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min())
+    
+    return heatmap

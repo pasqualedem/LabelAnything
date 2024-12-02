@@ -62,8 +62,10 @@ from label_anything.data.utils import (
 from label_anything.experiment.utils import WrapperModule
 
 from label_anything.demo.visualize import (
+    crop_seg,
     draw_all,
     draw_masks,
+    feature_map_pca_heatmap,
     get_image,
     load_from_wandb,
     plot_seg,
@@ -326,7 +328,13 @@ def rect_explanation(query_image_pt, attns_class, masks, flag_examples, num_samp
                     n_col = k % n_cols
                     cols[n_col].write(attn.chans.fig)
                     
-def attention_summary(attns_class, masks, flag_examples):
+def attention_summary(result, masks, flag_examples):
+    attns_class = result[ResultDict.ATTENTIONS]
+    pre_mix = result[ResultDict.PRE_MIX]
+    mix = result[ResultDict.MIX]
+    mix1 = result[ResultDict.MIX_1]
+    sf1  = result[ResultDict.SUPPORT_FEAT_1]
+    sf0  = result[ResultDict.SUPPORT_FEAT_0]
     
     masks = masks[:, :, 1:, ::]
     st.write("## Attention Summary")
@@ -352,9 +360,78 @@ def attention_summary(attns_class, masks, flag_examples):
             outs.append(attn)
         out = torch.cat(outs).mean(dim=0)
         out = (out - out.min()) / (out.max() - out.min())
-        st.write(out)
-        st.write(out.chans.fig)
+        prediction = out > 0.5
+        cols = st.columns(3)
+        with cols[0]:  
+            st.write("### Attention summary")
+            st.write(out.chans(scale=4).fig)
+        with cols[1]:
+            st.write("### Attention prediction")
+            st.write(prediction.chans(scale=4).fig)
+        with cols[2]:
+            st.write("### Pre-mix")
+            pre_mix_pca = feature_map_pca_heatmap(pre_mix[j][0])
+            st.write(pre_mix_pca.chans(scale=4).fig)
+        cols = st.columns(4)
+        with cols[0]:
+            st.write("### Mix")
+            mix_pca = feature_map_pca_heatmap(mix[j][0])
+            st.write(mix_pca.chans(scale=4).fig)
+        with cols[1]:
+            st.write("### Mix Out 1")
+            mix_pca = feature_map_pca_heatmap(mix1[j][0])
+            st.write(mix_pca.chans(scale=4).fig)
+        with cols[2]:
+            st.write("### Support Feature 0")
+            sf0_pca = feature_map_pca_heatmap(sf0[j][0])
+            st.write(sf0_pca.chans(scale=4).fig)
+        with cols[3]:
+            st.write("### Support Feature 1")
+            sf1_pca = feature_map_pca_heatmap(sf1[j][0])
+            st.write(sf1_pca.chans(scale=4).fig)
+        
+def show_logits(logits):
+    st.write("## Logits")
+    cols = st.columns(logits.shape[1])
+    logits = logits.softmax(dim=1)[0]
+    for i, logit in enumerate(logits):
+        with cols[i]:
+            st.write(logit.chans.fig)
+        
+        
+def dcama_personalization(model):
+    cols = st.columns(3)
+    with cols[0]:
+        alpha = st.number_input("alpha", 0.0, value=1.0, step=0.1)
+    with cols[1]:
+        beta = st.number_input("beta", 0.0, value=1.0, step=0.1)
+    with cols[2]:
+        gamma = st.number_input("gamma", 0.0, value=1.0, step=0.1)
+    model.set_importance_levels(alpha, beta, gamma)
+    
+    # Select aggregation method
+    aggregation_methods = ['sum', 'max', 'threshold', 'power', 'lse', 'sigmoid', 'hard']
+    aggregation = st.selectbox("Select Aggregation Method", aggregation_methods)
 
+    # Show inputs dynamically for hyperparameters
+    kwargs = {}
+
+    if aggregation == 'threshold':
+        kwargs['threshold'] = st.slider("Threshold", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+
+    if aggregation == 'power':
+        kwargs['gamma'] = st.slider("Gamma", min_value=1.0, max_value=10.0, value=2.0, step=0.1)
+
+    if aggregation == 'lse':
+        kwargs['lambda_param'] = st.slider("Lambda Parameter", min_value=0.1, max_value=10.0, value=1.0, step=0.1)
+
+    if aggregation == 'sigmoid':
+        kwargs['tau'] = st.slider("Tau (Threshold)", min_value=0.0, max_value=1.0, value=0.5, step=0.01)
+        kwargs['k'] = st.slider("K (Steepness)", min_value=1, max_value=100, value=10, step=1)
+        
+    model.set_attn_fn(aggregation=aggregation, **kwargs)
+        
+        
 def try_it_yourself(model):
     st.write("Upload the image the you want to segment")
     query_images = st.file_uploader(
@@ -373,6 +450,9 @@ def try_it_yourself(model):
     if SS.SUPPORT_SET in st.session_state and len(st.session_state[SS.SUPPORT_SET]) > 0:
         preview_cols = st.columns((len(st.session_state[SS.SUPPORT_SET])))
         focusing_factor = st.number_input("Focusing Factor", min_value=1, max_value=100, value=5)
+        
+        dcama_personalization(model)
+        
         support_batch = preprocess_support_set(
             st.session_state[SS.SUPPORT_SET],
             list(range(len(st.session_state[SS.CLASSES]))),
@@ -430,10 +510,13 @@ def try_it_yourself(model):
                         plots[1], caption=titles[1], use_column_width=True
                     )
                 attns_class = result.get(ResultDict.ATTENTIONS, None)
+                pre_mix = result.get(ResultDict.PRE_MIX, None)
                 if attns_class is not None:
                     query_image_pt = batches[i][BatchKeys.IMAGES][0, 0]
+                    logits = crop_seg(result[ResultDict.LOGITS], support_batch[BatchKeys.DIMS])
+                    show_logits(logits)
+                    attention_summary(result, batches[i][BatchKeys.PROMPT_MASKS], batches[i][BatchKeys.FLAG_EXAMPLES])
                     rect_explanation(query_image_pt, attns_class, batches[i][BatchKeys.PROMPT_MASKS], batches[i][BatchKeys.FLAG_EXAMPLES], i)
-                    attention_summary(attns_class, batches[i][BatchKeys.PROMPT_MASKS], batches[i][BatchKeys.FLAG_EXAMPLES])
 
 
 def handle_gpu_memory(device):

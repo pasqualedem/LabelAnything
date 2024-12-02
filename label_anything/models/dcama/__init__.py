@@ -70,8 +70,7 @@ class DCAMAMultiClass(DCAMA):
         assert (
             masks.shape[0] == 1
         ), "Only tested with batch size = 1"
-        logits = []
-        attns = []
+        results = []
         # get logits for each class
         for c in range(masks.size(2)):
             class_examples = x[BatchKeys.FLAG_EXAMPLES][:, :, c + 1]
@@ -82,9 +81,11 @@ class DCAMAMultiClass(DCAMA):
                     class_examples
                 ].unsqueeze(0),
             }
-            logit, attn = self.predict_mask_nshot(class_input_dict, n_shots)
-            logits.append(logit)
-            attns.append(attn)
+            result = self.predict_mask_nshot(class_input_dict, n_shots)
+            results.append(result)
+            
+        results = {k: [d[k] for d in results] for k in results[0]}
+        logits = results[ResultDict.LOGITS]
         logits = torch.stack(logits, dim=1)
         fg_logits = logits[:, :, 1, ::]
         bg_logits = logits[:, :, 0, ::]
@@ -95,8 +96,8 @@ class DCAMAMultiClass(DCAMA):
         logits = self.postprocess_masks(logits, x["dims"])
 
         return {
+            **results, 
             ResultDict.LOGITS: logits,
-            ResultDict.ATTENTIONS: attns,
         }
 
     def postprocess_masks(self, logits, dims):

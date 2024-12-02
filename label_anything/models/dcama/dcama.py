@@ -8,8 +8,9 @@ import torch.nn.functional as F
 from torchvision.models import resnet
 
 from label_anything.models.dcama.swin_transformer import SwinTransformer
-from label_anything.models.dcama.transformer import MultiHeadedAttention, PositionalEncoding
+from label_anything.models.dcama.transformer import MultiHeadedAttention, PositionalEncoding, get_attn_fn
 from label_anything.data.utils import BatchKeys
+from label_anything.utils.utils import ResultDict
 
 
 class DCAMA(nn.Module):
@@ -55,9 +56,7 @@ class DCAMA(nn.Module):
             query_feats = self.extract_feats(query_img)
             support_feats = self.extract_feats(support_img)
 
-        logit_mask, attn = self.model(query_feats, support_feats, support_mask.clone())
-
-        return logit_mask, attn
+        return self.model(query_feats, support_feats, support_mask.clone())
 
     def extract_feats(self, img):
         r""" Extract input image features """
@@ -109,7 +108,7 @@ class DCAMA(nn.Module):
         support_masks = batch[BatchKeys.PROMPT_MASKS]
 
         if nshot == 1:
-            logit_mask, attn = self.forward_1shot(query_img, support_imgs[:, 0], support_masks[:, 0])
+            result = self.forward_1shot(query_img, support_imgs[:, 0], support_masks[:, 0])
         else:
             with torch.no_grad():
                 query_feats = self.extract_feats(query_img)
@@ -117,7 +116,8 @@ class DCAMA(nn.Module):
                 for k in range(nshot):
                     support_feats = self.extract_feats(support_imgs[:, k])
                     n_support_feats.append(support_feats)
-            logit_mask, attn = self.model(query_feats, n_support_feats, support_masks.clone(), nshot)
+            result = self.model(query_feats, n_support_feats, support_masks.clone(), nshot)
+        logit_mask = result[ResultDict.LOGITS]
 
         if self.use_original_imgsize:
             org_qry_imsize = tuple([batch[BatchKeys.DIMS][1].item(), batch[BatchKeys.DIMS][0].item()])
@@ -125,7 +125,8 @@ class DCAMA(nn.Module):
         else:
             logit_mask = F.interpolate(logit_mask, support_imgs[0].size()[2:], mode='bilinear', align_corners=True)
 
-        return logit_mask, attn
+        result[ResultDict.LOGITS] = logit_mask
+        return result
 
     def compute_objective(self, logit_mask, gt_mask):
         bsz = logit_mask.size(0)
@@ -137,6 +138,15 @@ class DCAMA(nn.Module):
     def train_mode(self):
         self.train()
         self.feature_extractor.eval()
+        
+    def set_importance_levels(self, alpha=1, beta=1, gamma=1):
+        self.model.alpha = alpha
+        self.model.beta = beta
+        self.model.gamma = gamma
+        
+    def set_attn_fn(self, **kwargs):
+        for dcama_module in self.model.DCAMA_blocks:
+            dcama_module.attn_fn = get_attn_fn(**kwargs)
 
 
 class DCAMA_model(nn.Module):
@@ -144,6 +154,9 @@ class DCAMA_model(nn.Module):
         super(DCAMA_model, self).__init__()
 
         self.stack_ids = stack_ids
+        self.alpha = 1
+        self.beta = 1
+        self.gamma = 1
 
         # DCAMA blocks
         self.DCAMA_blocks = nn.ModuleList()
@@ -218,9 +231,9 @@ class DCAMA_model(nn.Module):
         bsz, ch, ha, wa = coarse_masks[self.stack_ids[1]-1-self.stack_ids[0]].size()
         coarse_masks3 = torch.stack(coarse_masks[0:self.stack_ids[1]-self.stack_ids[0]]).transpose(0, 1).contiguous().view(bsz, -1, ha, wa)
 
-        coarse_masks1 = self.conv1(coarse_masks1)
-        coarse_masks2 = self.conv2(coarse_masks2)
-        coarse_masks3 = self.conv3(coarse_masks3)
+        coarse_masks1 = self.conv1(coarse_masks1) * self.alpha
+        coarse_masks2 = self.conv2(coarse_masks2) * self.beta
+        coarse_masks3 = self.conv3(coarse_masks3) * self.gamma
 
         # multi-scale cascade (pixel-wise addition)
         coarse_masks1 = F.interpolate(coarse_masks1, coarse_masks2.size()[-2:], mode='bilinear', align_corners=True)
@@ -230,12 +243,14 @@ class DCAMA_model(nn.Module):
         mix = F.interpolate(mix, coarse_masks3.size()[-2:], mode='bilinear', align_corners=True)
         mix = mix + coarse_masks3
         mix = self.conv5(mix)
+        pre_mix = mix.clone()
 
         # skip connect 1/8 and 1/4 features (concatenation)
         if nshot == 1:
             support_feat = support_feats[self.stack_ids[1] - 1]
         else:
             support_feat = torch.stack([support_feats[k][self.stack_ids[1] - 1] for k in range(nshot)]).max(dim=0).values
+        sf1 = support_feat.clone()
         mix = torch.cat((mix, query_feats[self.stack_ids[1] - 1], support_feat), 1)
 
         upsample_size = (mix.size(-1) * 2,) * 2
@@ -244,10 +259,12 @@ class DCAMA_model(nn.Module):
             support_feat = support_feats[self.stack_ids[0] - 1]
         else:
             support_feat = torch.stack([support_feats[k][self.stack_ids[0] - 1] for k in range(nshot)]).max(dim=0).values
+        sf0 = support_feat.clone()
         mix = torch.cat((mix, query_feats[self.stack_ids[0] - 1], support_feat), 1)
 
         # mixer blocks forward
         out = self.mixer1(mix)
+        mix1 = out.clone()
         upsample_size = (out.size(-1) * 2,) * 2
         out = F.interpolate(out, upsample_size, mode='bilinear', align_corners=True)
         out = self.mixer2(out)
@@ -255,7 +272,17 @@ class DCAMA_model(nn.Module):
         out = F.interpolate(out, upsample_size, mode='bilinear', align_corners=True)
         logit_mask = self.mixer3(out)
 
-        return logit_mask, attns
+        return {
+            ResultDict.LOGITS: logit_mask,
+            ResultDict.ATTENTIONS: attns,
+            ResultDict.PRE_MIX: pre_mix,
+            ResultDict.MIX: mix,
+            ResultDict.MIX_1: mix1,
+            ResultDict.SUPPORT_FEAT_0: sf0,
+            ResultDict.SUPPORT_FEAT_1: sf1,
+            ResultDict.QUERY_FEAT_0: query_feats[self.stack_ids[0] - 1],
+            ResultDict.QUERY_FEAT_1: query_feats[self.stack_ids[1] - 1],
+        }
 
     def build_conv_block(self, in_channel, out_channels, kernel_sizes, spt_strides, group=4):
         r""" bulid conv blocks """

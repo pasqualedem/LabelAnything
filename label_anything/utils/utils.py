@@ -329,3 +329,11 @@ class ResultDict(StrEnum):
     LAST_HIDDEN_STATE = 'last_hidden_state'
     LAST_BLOCK_STATE = 'last_block_state'
     ATTENTIONS = 'attentions'
+    PRE_MIX = "pre_mix"
+    SUPPORT_FEAT_1 = "support_feat_1"
+    SUPPORT_FEAT_0 = "support_feat_0"
+    QUERY_FEAT_1 = "query_feat_1"
+    QUERY_FEAT_0 = "query_feat_0"
+    MIX = "mix"
+    MIX_1 = "mix1"
+    
