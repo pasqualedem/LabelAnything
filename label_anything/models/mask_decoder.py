@@ -9,6 +9,7 @@ from einops import rearrange, reduce
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torchvision.transforms.functional import resize
 
 from typing import List, Tuple, Type
 from einops import rearrange, repeat
@@ -176,6 +177,7 @@ class MaskDecoderLam(nn.Module):
         segment_example_logits: bool = False,
         classification_layer_downsample_rate: int = 8,
         conv_upsample_stride: int = 2,
+        classification_levels: int = 1,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -197,6 +199,8 @@ class MaskDecoderLam(nn.Module):
             if classification_layer_downsample_rate > 1
             else 1
         )
+        
+        self.level_reducer = nn.Conv2d(classification_levels, 1, (3, 3), padding="same") if classification_levels > 1 else None
 
         if conv_upsample_stride > 1 or classification_layer_downsample_rate > 1:
             self.output_upscaling = nn.Sequential(
@@ -314,11 +318,26 @@ class MaskDecoderLam(nn.Module):
         )
         query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
 
+        if self.level_reducer:
+            cls1 = self._classify(query_embeddings, class_embeddings, flag_examples)
+
         upscaled_embeddings, class_embeddings = self._upscale(
             query_embeddings, class_embeddings
         )
         upscaled_embeddings = self._spatial_convs(upscaled_embeddings)
-        return self._classify(upscaled_embeddings, class_embeddings, flag_examples)
+        
+        cls0 = self._classify(upscaled_embeddings, class_embeddings, flag_examples)
+        
+        if not self.level_reducer:
+            return cls0
+        
+        h0, w0 = cls0.shape[-2:]
+        cls1 = resize(cls1, (h0, w0))
+        seg = rearrange(torch.stack([cls0, cls1]), "l b c h w -> (b c) l h w")
+        seg = self.level_reducer(seg)
+        seg = rearrange(seg, "(b c) 1 h w -> b c h w", b=b)
+        return seg
+        
 
 
 class AffinityDecoder(nn.Module):
