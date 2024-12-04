@@ -12,7 +12,7 @@ from einops import rearrange, repeat
 from typing import Any, Optional, Tuple, Type
 
 from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
-from .transformer import TwoWayTransformer
+from .transformer import TwoWayTransformer, OneWayAttentionBlock
 
 from label_anything.data.utils import BatchKeys, Label
 from label_anything.utils.utils import ResultDict
@@ -276,12 +276,58 @@ class RandomMatrixEncoder(nn.Module):
             dense_embeddings, sparse_embeddings, selected_rows
         )
         
-class PromptChooser(nn.Module):
+
+class EmbeddingTransformer(nn.Module):
+    def __init__(self, emb_dim, num_embeddings, num_layers=2):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            OneWayAttentionBlock(embedding_dim=emb_dim, num_heads=8) for _ in range(num_layers)
+        ])
+        self.embeddings = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=emb_dim)
+        
+    def forward(self, src, flag_examples):
+        b, m, c = flag_examples.shape
+        h, w = src.shape[-2:]
+        n = self.embeddings.weight.shape[0]
+        embeddings = repeat(self.embeddings.weight, "n d -> (b c) n d", b=b, c=c)
+        key_mask = repeat(flag_examples, "b m c -> (b c) (m h w)", h=h, w=w)
+        src = rearrange(src, "(b m c) d h w -> (b c) (m h w) d", b=b, m=m)
+        for layer in self.layers:
+            embeddings = layer(embeddings, src, key_mask=key_mask, query_pe=torch.zeros_like(embeddings))
+            
+        flag_embeddings = flag_examples.sum(dim=1).bool().int()
+        flag_embeddings = repeat(flag_embeddings, " b c -> b n c", n=n)
+        embeddings = rearrange(embeddings, "(b c) n d -> b n c d", c=c)
+
+        return {
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            BatchKeys.FLAG_EXAMPLES: flag_embeddings,
+        }
+        
+class GuidedPooler(nn.Module):
     def __init__(self, emb_dim, num_embeddings):
         super().__init__()
         self.num_embeddings = num_embeddings
-        self.fg_chooser = nn.Conv2d(emb_dim, num_embeddings, (5, 5), stride=1, padding=2)
-        self.bg_chooser = nn.Conv2d(emb_dim, num_embeddings, (5, 5), stride=1, padding=2)
+        self.fg_chooser = nn.Sequential(
+            nn.Conv2d(emb_dim, emb_dim // 2, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 8, num_embeddings, (5, 5), stride=1, padding=2)
+        )
+
+        self.bg_chooser = nn.Sequential(
+            nn.Conv2d(emb_dim, emb_dim // 2, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (5, 5), stride=1, padding=2),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 8, num_embeddings, (5, 5), stride=1, padding=2)
+        )
+
         self.act = nn.Sigmoid()
         
     def forward(self, src, flag_examples):
@@ -343,7 +389,7 @@ class PromptImageEncoder(PromptEncoder):
         activation: Type[nn.Module] = nn.GELU,
         use_support_features: bool = True,
         embeddings_per_example: int = 1,
-        use_prompt_chooser: bool = False,
+        embedding_extraction: str = None,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -373,7 +419,12 @@ class PromptImageEncoder(PromptEncoder):
         self.transformer = transformer
         self.class_encoder = class_encoder
         self.use_support_features = use_support_features
-        self.prompt_chooser = PromptChooser(emb_dim=embed_dim, num_embeddings=embeddings_per_example) if use_prompt_chooser else None
+        if embedding_extraction == "pooler":
+            self.embedding_extraction = GuidedPooler(emb_dim=embed_dim, num_embeddings=embeddings_per_example)
+        elif embedding_extraction == "cross_attention":
+            self.embedding_extraction = EmbeddingTransformer(emb_dim=embed_dim, num_embeddings=embeddings_per_example, num_layers=2)
+        else:
+            self.embedding_extraction = None            
 
         self.sparse_embedding_attention = AttentionMLPBlock(
             embed_dim=embed_dim,
@@ -640,9 +691,9 @@ class PromptImageEncoder(PromptEncoder):
     def _obtain_embeddings(self, src, flag_examples):
         _, d, h, w = src.shape
         b, m, c = flag_examples.shape
-        if self.prompt_chooser:
+        if self.embedding_extraction:
             class_embeddings = None
-            return self.prompt_chooser(src, flag_examples)
+            return self.embedding_extraction(src, flag_examples)
         
         if self.embeddings_per_example and self.embeddings_per_example > 1:
             num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))

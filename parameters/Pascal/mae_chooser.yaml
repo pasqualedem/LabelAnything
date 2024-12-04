@@ -27,8 +27,6 @@ parameters:
       components:
         focal:
           weight: [1.0]
-        masks:
-          weight: [0.7]
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
@@ -53,7 +51,7 @@ parameters:
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
     embeddings_per_example: [4]
-    use_prompt_chooser: [True]
+    embedding_extraction: [cross_attention]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

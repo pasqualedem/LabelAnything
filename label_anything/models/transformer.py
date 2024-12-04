@@ -138,11 +138,11 @@ class OneWayAttentionBlock(nn.Module):
         self.norm3 = nn.LayerNorm(embedding_dim)
 
     def forward(
-        self, queries: Tensor, keys: Tensor, query_pe: Tensor
+        self, queries: Tensor, keys: Tensor, query_pe: Tensor, key_mask=None
     ) -> Tuple[Tensor, Tensor]:
         # Cross attention block, image embedding attending to tokens 
         q = queries + query_pe
-        attn_out = self.cross_attn_image_to_token(q=q, k=keys, v=keys)
+        attn_out = self.cross_attn_image_to_token(q=q, k=keys, v=keys, key_mask=key_mask)
         queries = queries + attn_out
         queries = self.norm1(queries)
 

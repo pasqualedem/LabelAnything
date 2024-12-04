@@ -333,7 +333,7 @@ class LossRunningAverage:
             self.components[f"loss_{k}"].update(v)
     def compute(self):
         value = self.loss.compute()
-        components = {f"avg_loss_{k}": self.components[f"loss_{k}"].compute() for k, v in self.components.items()}
+        components = {f"avg_loss_{k}": self.components[k].compute() for k, v in self.components.items()}
         return {"avg_loss": value, **components}
 
 
