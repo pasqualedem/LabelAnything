@@ -8,6 +8,7 @@ import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from transformers import get_scheduler as get_transformers_scheduler
+from torch.optim import AdamW, SGD
 
 from label_anything.data.utils import BatchKeys, random_batch
 from label_anything.logger.text_logger import get_logger
@@ -47,6 +48,26 @@ def cast_model(model: torch.nn.Module, precision=torch.float32):
 class SchedulerStepMoment(Enum):
     BATCH = "batch"
     EPOCH = "epoch"
+
+
+def get_optimizer(parameters, optimizer_params, initial_lr):
+    optimizers = {
+        "AdamW": AdamW,
+        "SGD": SGD,
+    }
+    optimizer_type = optimizer_params.get("type")
+    if optimizer_type not in optimizers:
+        logger.warning(f"Unknown optimizer type {optimizer_type}, using AdamW")
+        optimizer_type = "AdamW"
+    logger.info(f"Using optimizer {optimizer_type}")
+    optimizer_type = optimizers[optimizer_type]
+    return optimizer_type(
+        parameters,
+        **{
+            **{k: v for k, v in optimizer_params.items() if k != "type"},
+            "lr": initial_lr,
+        },
+    )
 
 
 def get_scheduler(optimizer, num_training_steps, scheduler_params):
@@ -244,8 +265,16 @@ class WrapperModule(torch.nn.Module):
         self.model = model
         self.loss = loss
 
-        self.predict = self.model.predict if hasattr(self.model, "predict") else raise_not_implemented_error
-        self.generate_class_embeddings = self.model.generate_class_embeddings if hasattr(self.model, "generate_class_embeddings") else raise_not_implemented_error
+        self.predict = (
+            self.model.predict
+            if hasattr(self.model, "predict")
+            else raise_not_implemented_error
+        )
+        self.generate_class_embeddings = (
+            self.model.generate_class_embeddings
+            if hasattr(self.model, "generate_class_embeddings")
+            else raise_not_implemented_error
+        )
 
     def forward(self, input_dict, gt):
         result_dict = self.model(input_dict)

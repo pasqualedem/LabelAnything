@@ -13,7 +13,6 @@ import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
-from torch.optim import AdamW
 from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
@@ -52,6 +51,7 @@ from .utils import (
     compose_loss_input,
     get_batch_size,
     get_scheduler,
+    get_optimizer,
     handle_oom,
     nosync_accumulation,
     parse_params,
@@ -182,9 +182,11 @@ class Run:
             params = self.model.module.get_learnable_params(self.train_params)
         else:
             params = self.model.get_learnable_params(self.train_params)
-        self.optimizer = AdamW(
+
+        self.optimizer = get_optimizer(
             params,
-            lr=self.train_params["initial_lr"],
+            self.train_params.get("optimizer", {}),
+            self.train_params["initial_lr"],
         )
 
         if scheduler_params := self.train_params.get("scheduler", None):
