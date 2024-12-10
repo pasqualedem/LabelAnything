@@ -5,7 +5,8 @@ from torch.nn.functional import normalize, binary_cross_entropy
 from einops import rearrange
 
 from label_anything.data.utils import BatchKeys
-from label_anything.utils.utils import ResultDict
+from label_anything.loss.utils import loss_orthogonality
+from label_anything.utils.utils import LossDict, ResultDict
 
 
 class PromptContrastiveLoss(nn.Module):
@@ -43,7 +44,13 @@ class PromptContrastiveLoss(nn.Module):
         contrastive_matrix = 2 * contrastive_matrix - 1
         loss = -torch.log(torch.sigmoid(dot_products * contrastive_matrix))
         return (loss / valid_elements.unsqueeze(2))[flags].sum() / B
-        
+    
+
+class ClassEmbeddingContrastiveLoss(nn.Module):
+    def forward(self, result):
+        class_embeddings = result[ResultDict.EXAMPLES_CLASS_EMBS]
+        class_embeddings = rearrange(class_embeddings, "b n c d -> b (n c) d")
+        return loss_orthogonality(class_embeddings)
         
         
         

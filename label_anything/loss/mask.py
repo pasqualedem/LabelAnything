@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from einops import rearrange
 
+from label_anything.loss.utils import loss_orthogonality
 from label_anything.utils.utils import LossDict, ResultDict
 
 def calculate_entropy(probabilities):
@@ -26,52 +27,26 @@ def calculate_entropy(probabilities):
     return entropy
 
 
-def loss_balance(mask):
+def loss_balance(mask, tol=0.25):
     B, N, _, H, W = mask.shape
+    eps = 1e-6
     
-    # Calcola la somma di ogni maschera lungo H e W (per ciascun prototipo)
-    sum_mask = mask.view(mask.size(0), N, -1).sum(dim=-1)  # BxN
+    sum_mask = mask.view(mask.size(0), N, -1).sum(dim=-1)
+    target = (torch.abs(sum_mask).sum(dim=1) / N).unsqueeze(-1)
+    balance_loss = ((torch.abs(sum_mask - target) / (target + eps))).sum(dim=1) / N
+    balance_loss = nn.functional.relu(balance_loss - tol)
     
-    # Calcola il valore medio per ogni maschera (H * W) / N
-    target = (H * W) / N
-    
-    # Calcola la perdita di bilanciamento come la somma della differenza assoluta
-    balance_loss = torch.abs(sum_mask - target).sum()  # Somma su tutto il batch e i prototipi
-    
-    return balance_loss
+    return balance_loss.sum() / B
 
 
 import torch
 
-def loss_orthogonality(mask):
-    B, N, _, H, W = mask.shape
-    # Appiattisci la maschera per ogni prototipo in un vettore di dimensione (B, N, H*W)
-    mask_flat = mask.view(mask.size(0), N, -1)  # BxNx(H*W)
-    
-    # Normalizza le maschere lungo l'asse H*W
-    norm_mask = torch.norm(mask_flat, p=2, dim=-1, keepdim=True)  # BxNx1
-    mask_flat_normalized = mask_flat / (norm_mask + 1e-8)  # BxNx(H*W) (evita la divisione per 0)
-    
-    # Calcola il prodotto scalare tra tutte le maschere (cross-prodotto tra le maschere)
-    # La matrice risultante ha dimensione (B, N, N)
-    similarity_matrix = torch.bmm(mask_flat_normalized, mask_flat_normalized.transpose(1, 2))  # BxNxN
-    
-    # Imposta gli elementi diagonali (prodotto della maschera con se stessa) a 0, perché non vogliamo penalizzare l'auto-similitudine
-    mask_eye = torch.eye(N, device=mask.device).unsqueeze(0).expand(mask.size(0), -1, -1)  # BxNxN
-    similarity_matrix = similarity_matrix * (1 - mask_eye)  # Rimuovi i termini diagonali
-    
-    # Calcola la penalità di ortogonalità come la somma dei valori assoluti fuori diagonale
-    orthogonality_loss = torch.abs(similarity_matrix).sum()  # Somma su tutte le coppie di maschere
-    
-    return orthogonality_loss
-
-
-
 class MaskEmbeddingLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        self.alpha = 0.1
-        self.beta = 0.9
+        self.alpha = 0.20
+        self.beta = 0.40
+        self.gamma = 0.40
     
     def forward(self, result_dict):
         masks = result_dict[ResultDict.MASK_EMBEDDINGS]
@@ -82,18 +57,25 @@ class MaskEmbeddingLoss(nn.Module):
         
         balance_bg = loss_balance(bg)
         balance_fg = loss_balance(fg)
-        balance = (balance_bg + balance_fg) / 2
+        balance = ((balance_bg + balance_fg) / 2) * self.alpha
         
         ortho_fg = loss_orthogonality(fg)
         ortho_bg = loss_orthogonality(bg)
-        ortho = (ortho_bg + ortho_fg) / 2
+        ortho = ((ortho_bg + ortho_fg) / 2) * self.beta
         
+        fg = rearrange(fg, "b n ... -> (b ...) n")
+        bg = rearrange(bg, "b n ... -> (b ...) n")
+        
+        entropy_fg = calculate_entropy(fg).mean()
+        entropy_bg = calculate_entropy(bg).mean()
+        entropy = ((entropy_bg + entropy_fg) / 2) * self.gamma  
         
         return {
-            LossDict.VALUE: ortho + balance,
+            LossDict.VALUE: ortho + balance + entropy,
             LossDict.COMPONENTS: {
                 "balance": balance.item(),
                 "ortho": ortho.item(),   
+                "entropy": entropy.item()
             }
         } 
         

@@ -18,7 +18,7 @@ parameters:
     val_image_log_frequency: [100]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[MAE, MultiembAttn]]
+    tags: [[DCAMA]]
     offline_directory: [offline]
 
   train_params:
@@ -26,9 +26,7 @@ parameters:
       class_weighting: [True]
       components:
         focal:
-          weight: [0.8]
-        masks:
-          weight: [0.2]
+          weight: [1.0]
     num_points: [1] # number of points for class after the substitution
     max_epochs: [30]
     compile: [False]
@@ -43,25 +41,17 @@ parameters:
     watch_metric: [miou] # metric to watch for early stopping and scheduler (loss or miou)
     check_nan: [1] # check for nan every n batches
   model:
-    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
-    spatial_convs: [3]
-    class_attention: [False]
-    example_attention: [False]
-    example_class_attention: [False]
-    fusion_transformer: [TwoWayTransformer]
-    image_embed_dim: [768]
-    embed_dim: &embed_dim [256]
-    image_size: &image_size [480]
-    embeddings_per_example: [4]
-    embedding_extraction: [pooler]
-    classification_levels: [2]
+    name: [dcama]
+    backbone: [swin]
+    backbone_checkpoint: [checkpoints/swin_base_patch4_window12_384.pth]
+    image_size: &image_size [384]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       pascal5i:
         name: [pascal]
         data_dir: [data/pascal]
-        emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480]
+        # emb_dir: &emb_dir [data/pascal/embeddings_vit_mae_480]
         split: ["train"]
         val_fold_idx: [0]
         n_folds: [4]
@@ -70,7 +60,7 @@ parameters:
       val_pascal5i_N1K1: &val_pascal5i_N1K1
         name: [pascal]
         data_dir: &instance_dir [data/pascal]
-        emb_dir: *emb_dir
+        # emb_dir: *emb_dir
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
@@ -90,15 +80,14 @@ parameters:
     common:
       remove_small_annotations: [True]
       do_subsample: [False]
-      load_embeddings: [True]
       load_gts: [False]
       image_size: *image_size
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
     prefetch_factor: [2]
-    possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[8, 1]]] 
+    possible_batch_example_nums: [[[1, 1, 1]]]
+    val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]

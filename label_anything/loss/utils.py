@@ -40,3 +40,26 @@ def get_weight_matrix_from_labels(labels, num_classes, ignore_index=-100):
         unique=torch.arange(weight_num_classes, device=labels.device),
     )
     return wtarget, class_weights
+
+
+def loss_orthogonality(embedding):
+    B, N = embedding.shape[:2]
+    # Appiattisci la maschera per ogni prototipo in un vettore di dimensione (B, N, H*W)
+    emb_flat = embedding.view(embedding.size(0), N, -1)  # BxNx(H*W)
+
+    # Normalizza le maschere lungo l'asse H*W
+    norm_emb = torch.norm(emb_flat, p=2, dim=-1, keepdim=True)  # BxNx1
+    emb_flat_normalized = emb_flat / (norm_emb + 1e-8)  # BxNx(H*W) (evita la divisione per 0)
+
+    # Calcola il prodotto scalare tra tutte le maschere (cross-prodotto tra le maschere)
+    # La matrice risultante ha dimensione (B, N, N)
+    similarity_matrix = torch.bmm(emb_flat_normalized, emb_flat_normalized.transpose(1, 2))  # BxNxN
+
+    # Imposta gli elementi diagonali (prodotto della maschera con se stessa) a 0, perché non vogliamo penalizzare l'auto-similitudine
+    mask_eye = torch.eye(N, device=embedding.device).unsqueeze(0).expand(embedding.size(0), -1, -1)  # BxNxN
+    similarity_matrix = similarity_matrix * (1 - mask_eye)  # Rimuovi i termini diagonali
+
+    # Calcola la penalità di ortogonalità come la somma dei valori assoluti fuori diagonale
+    orthogonality_loss = torch.abs(similarity_matrix).sum() / (B * (N**2 - N))
+
+    return orthogonality_loss

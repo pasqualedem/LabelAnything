@@ -8,7 +8,7 @@ from label_anything.loss.mask import MaskEmbeddingLoss
 from .dice import DiceLoss
 from .focal import FocalLoss
 from .rmi import RMILoss
-from .prompt import PromptContrastiveLoss
+from .prompt import ClassEmbeddingContrastiveLoss, PromptContrastiveLoss
 from .utils import get_weight_matrix_from_labels
 from label_anything.utils.utils import ResultDict, LossDict
 
@@ -22,6 +22,7 @@ LOGITS_LOSSES = {
 
 PROMPT_LOSSES = {
     "prompt_contrastive": PromptContrastiveLoss,
+    "emb_contrastive": ClassEmbeddingContrastiveLoss,
     "masks": MaskEmbeddingLoss,
 }
 
@@ -33,6 +34,7 @@ class LabelAnythingLoss(nn.Module):
     - RMILoss
     - PromptContrastiveLoss
     - MaskEmbeddingLoss
+    - ClassEmbeddingContrastiveLoss
     """
 
     def __init__(self, components, class_weighting=None):

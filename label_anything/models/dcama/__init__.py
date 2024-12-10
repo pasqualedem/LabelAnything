@@ -12,7 +12,7 @@ from label_anything.data.utils import get_preprocess_shape
 def build_dcama(
     backbone: str = "swin",
     backbone_checkpoint: str = "checkpoints/backbone.pth",
-    model_checkpoint: str = "checkpoints/dcama.pth",
+    model_checkpoint: str = None,
     image_size: int = 384,
     custom_preprocess: bool = False,
 ):
@@ -20,6 +20,8 @@ def build_dcama(
         backbone, backbone_checkpoint, use_original_imgsize=False, image_size=image_size
     )
     params = model.state_dict()
+    if model_checkpoint is None:
+        return model
     state_dict = torch.load(model_checkpoint)
 
     for k1, k2 in zip(list(state_dict.keys()), params.keys()):
@@ -124,6 +126,9 @@ class DCAMAMultiClass(DCAMA):
                 for i, mask in enumerate(logits)
             ]
         )
+
+        # set padding to background class
+        logits[:, 0, :, :][logits[:, 0, :, :] == float("-inf")] = 0
         return logits
 
     def get_learnable_params(self, train_params):

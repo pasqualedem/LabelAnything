@@ -284,8 +284,9 @@ class EmbeddingTransformer(nn.Module):
             OneWayAttentionBlock(embedding_dim=emb_dim, num_heads=8) for _ in range(num_layers)
         ])
         self.embeddings = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=emb_dim)
+        self.embedding_dropout = 0.2
         
-    def forward(self, src, flag_examples):
+    def forward(self, src, image_pe, flag_examples):
         b, m, c = flag_examples.shape
         h, w = src.shape[-2:]
         n = self.embeddings.weight.shape[0]
@@ -297,6 +298,13 @@ class EmbeddingTransformer(nn.Module):
             
         flag_embeddings = flag_examples.sum(dim=1).bool().int()
         flag_embeddings = repeat(flag_embeddings, " b c -> b n c", n=n)
+        if self.training:
+            included = torch.rand(n).to(flag_embeddings.device) > self.embedding_dropout
+            if not included.any():  # Check if all are False
+                random_index = torch.randint(0, n, (1,)).item()  # Randomly select an index
+                included[random_index] = True  # Set it to True
+            included = rearrange(included, "n -> 1 n 1")
+            flag_embeddings = flag_embeddings * included
         embeddings = rearrange(embeddings, "(b c) n d -> b n c d", c=c)
 
         return {
@@ -308,47 +316,59 @@ class GuidedPooler(nn.Module):
     def __init__(self, emb_dim, num_embeddings):
         super().__init__()
         self.num_embeddings = num_embeddings
+        self.attention = nn.MultiheadAttention(emb_dim, 8)
+        
         self.fg_chooser = nn.Sequential(
-            nn.Conv2d(emb_dim, emb_dim // 2, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim, emb_dim // 2, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 2, emb_dim // 4, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 4, emb_dim // 8, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 8, num_embeddings, (5, 5), stride=1, padding=2)
+            nn.Conv2d(emb_dim // 8, num_embeddings+1, (1, 1), stride=1, padding=0)
         )
 
         self.bg_chooser = nn.Sequential(
-            nn.Conv2d(emb_dim, emb_dim // 2, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim, emb_dim // 2, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 2, emb_dim // 4, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 4, emb_dim // 8, (5, 5), stride=1, padding=2),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (1, 1), stride=1, padding=0),
             nn.ReLU(),
-            nn.Conv2d(emb_dim // 8, num_embeddings, (5, 5), stride=1, padding=2)
+            nn.Conv2d(emb_dim // 8, num_embeddings+1, (1, 1), stride=1, padding=0)
         )
 
-        self.act = nn.Sigmoid()
+    
+    def act(self, x):
+        tau = 0.5
+        return torch.nn.functional.gumbel_softmax(x, tau=tau, hard=False)
         
-    def forward(self, src, flag_examples):
+    def forward(self, src, image_pe, flag_examples):
         fg_flag_examples = flag_examples.clone()
         b, m, c  = fg_flag_examples.shape
+        h, w = src.shape[-2:]
         
         # Remove bg
         fg_flag_examples = fg_flag_examples[:, :, 1:]
-        
+        src = src + image_pe
         src = rearrange(src, "(b m c) d ... -> b m c d ...", b=b, m=m)
         fg_src = src[:, :, 1:]
         bg_src = fg_src.mean(dim=2).unsqueeze(2)
         bg_flag_examples = fg_flag_examples.sum(dim=2).bool().int().unsqueeze(2)
-        fg_src = rearrange(fg_src, "b m c d ... -> (b m c) d ...", b=b, m=m)
-        bg_src = rearrange(bg_src, "b m c d ... -> (b m c) d ...", b=b, m=m, c=1)
+        fg_src = rearrange(fg_src, "b m c d h w -> (b m c) (h w) d", b=b, m=m)
+        bg_src = rearrange(bg_src, "b m c d h w -> (b m c) (h w) d", b=b, m=m, c=1)
+        
+        fg_src, _ = self.attention(fg_src, fg_src, fg_src)
+        bg_src, _ = self.attention(bg_src, bg_src, bg_src)
+        
+        fg_src = rearrange(fg_src, "(b m c) (h w) d -> (b m c) d h w", b=b, m=m, h=h)
+        bg_src = rearrange(bg_src, "(b m c) (h w) d -> (b m c) d h w", b=b, m=m, c=1, h=h)
         
         fg_mask = self.fg_chooser(fg_src)
         bg_mask = self.bg_chooser(bg_src)
         
-        fg_mask = rearrange(torch.nn.functional.sigmoid(fg_mask), "bmc n ... -> n bmc 1 ...")
-        bg_mask = rearrange(torch.nn.functional.sigmoid(bg_mask), "bmc n ... -> n bmc 1 ...")
+        fg_mask = rearrange(self.act(fg_mask), "bmc n ... -> n bmc 1 ...")[1:]
+        bg_mask = rearrange(self.act(bg_mask), "bmc n ... -> n bmc 1 ...")[1:]
                 
         fg_src = repeat(fg_src, "... -> n ...", n=self.num_embeddings)
         bg_src = repeat(bg_src, "... -> n ...", n=self.num_embeddings)
@@ -688,12 +708,12 @@ class PromptImageEncoder(PromptEncoder):
         embeddings = self.class_projector_out(embeddings)
         return embeddings
     
-    def _obtain_embeddings(self, src, flag_examples):
+    def _obtain_embeddings(self, src, image_pe, flag_examples):
         _, d, h, w = src.shape
         b, m, c = flag_examples.shape
         if self.embedding_extraction:
             class_embeddings = None
-            return self.embedding_extraction(src, flag_examples)
+            return self.embedding_extraction(src, image_pe, flag_examples)
         
         if self.embeddings_per_example and self.embeddings_per_example > 1:
             num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
@@ -785,7 +805,7 @@ class PromptImageEncoder(PromptEncoder):
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
         embeddings_dict = self._obtain_embeddings(
-            src, flag_examples
+            src, pos_src, flag_examples
         )
         return {
             **embeddings_dict,

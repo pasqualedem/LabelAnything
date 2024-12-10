@@ -254,19 +254,20 @@ class MaskDecoderLam(nn.Module):
             self.spatial_convs = nn.Sequential(*module_list)
 
     def _get_pe_result(self, pe_result, flag_examples):
-        if self.segment_example_logits:
-            class_embeddings = rearrange(
-                pe_result[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
-            )
-
-        else:
-            class_embeddings = pe_result[ResultDict.CLASS_EMBS]
         flag_examples = (
             flag_examples
             if BatchKeys.FLAG_EXAMPLES not in pe_result
             else pe_result[BatchKeys.FLAG_EXAMPLES]
         )
-        return class_embeddings, flag_examples
+        if self.segment_example_logits:
+            class_embeddings = rearrange(
+                pe_result[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
+            )
+            embedding_mask = rearrange(flag_examples, "b m c -> b (m c)")
+        else:
+            class_embeddings = pe_result[ResultDict.CLASS_EMBS]
+            embedding_mask = flag_examples.sum(dim=1).bool().int()
+        return class_embeddings, flag_examples, embedding_mask
 
     def _upscale(self, query_embeddings, class_embeddings):
         class_embeddings = self.class_mlp(class_embeddings)
@@ -308,11 +309,10 @@ class MaskDecoderLam(nn.Module):
           torch.Tensor: batched predicted segmentations
         """
         b, d, h, w = query_embeddings.shape
-        class_embeddings, flag_examples = self._get_pe_result(
+        class_embeddings, flag_examples, embedding_mask = self._get_pe_result(
             pe_result, flag_examples
         )
 
-        embedding_mask = rearrange(flag_examples, "b m c -> b (m c)")
         class_embeddings, query_embeddings = self.transformer(
             query_embeddings, image_pe, class_embeddings, embedding_mask
         )
