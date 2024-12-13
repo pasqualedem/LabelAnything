@@ -23,15 +23,20 @@ parameters:
 
   train_params:
     loss:
-      class_weighting: [True]
+      class_weighting: [False]
       components:
         focal:
           weight: [1.0]
+          gamma: [0.0]
     num_points: [1] # number of points for class after the substitution
-    max_epochs: [30]
+    max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00005]
-    optimizer: [AdamW]
+    initial_lr: [0.00025]
+    optimizer:
+      type: [SGD]
+      momentum: [0.9]
+      weight_decay: [0.000025]
+      nesterov: [True]
     scheduler:
     - type: constant_with_warmup
       step_moment: batch
@@ -93,31 +98,24 @@ parameters:
     val_prompt_types: [["mask"]]
 
 other_grids:
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N1K5:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [1]
-  #       val_pascal5i_N2K5:
-  #         val_fold_idx: [1]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [2]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [2]
-  # - dataset: # parameters depending on the class you defined for the dataset
-  #     datasets:
-  #       pascal5i:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N1K1:
-  #         val_fold_idx: [3]
-  #       val_pascal5i_N2K1:
-  #         val_fold_idx: [3]
+  - train_params:
+      initial_lr: [0.001]
+      optimizer:
+        type: [SGD]
+        momentum: [0.9]
+        weight_decay: [0.0001]
+        nesterov: [True]
+  - train_params:
+      initial_lr: [0.00025]
+      optimizer:
+        type: [SGD]
+        momentum: [0.9]
+        weight_decay: [0.000025]
+        nesterov: [True]
+  - train_params:
+      initial_lr: [0.0001]
+      optimizer:
+        type: [SGD]
+        momentum: [0.9]
+        weight_decay: [0.00001]
+        nesterov: [True]

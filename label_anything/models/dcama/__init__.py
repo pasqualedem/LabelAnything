@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 
 from label_anything.models.dcama.dcama import DCAMA
-from label_anything.utils.utils import ResultDict
+from label_anything.utils.utils import ResultDict, torch_dict_load
 from label_anything.data.utils import BatchKeys
 from label_anything.data.utils import get_preprocess_shape
 
@@ -22,10 +22,18 @@ def build_dcama(
     params = model.state_dict()
     if model_checkpoint is None:
         return model
-    state_dict = torch.load(model_checkpoint)
+    state_dict = torch_dict_load(model_checkpoint)
 
-    for k1, k2 in zip(list(state_dict.keys()), params.keys()):
-        state_dict[k2] = state_dict.pop(k1)
+    if model_checkpoint.endswith(".pt"): # DCAMA original repo
+        for k1, k2 in zip(list(state_dict.keys()), params.keys()):
+            state_dict[k2] = state_dict.pop(k1)
+    elif model_checkpoint.endswith(".safetensors"): # LA Repo
+        try:
+            model.load_state_dict(state_dict)
+        except RuntimeError as e:
+            print("Error loading state_dict, trying to load without 'model.' prefix")
+            state_dict = {k[len("model."):]: v for k, v in state_dict.items()}
+            model.load_state_dict(state_dict)
 
     model.load_state_dict(state_dict)
     return model
