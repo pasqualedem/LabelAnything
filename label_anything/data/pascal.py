@@ -32,6 +32,7 @@ logger = get_logger(__name__)
 
 
 class PascalDataset(Dataset):
+    PASCAL_IGNORE_INDEX = 255
     """Pascal VOC dataset."""
 
     def __init__(
@@ -51,6 +52,7 @@ class PascalDataset(Dataset):
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
         load_annotation_dicts: bool = True,
+        ignore_index: int = -100,
         is_pyramids: bool = False,
     ):
         super().__init__()
@@ -83,6 +85,7 @@ class PascalDataset(Dataset):
         self.remove_small_annotations = remove_small_annotations
         self.sample_function = sample_function
         self.is_pyramids = is_pyramids
+        self.ignore_index = ignore_index
 
         self.masks_dir_list = set(os.listdir(self.masks_dir))
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
@@ -428,6 +431,8 @@ class PascalDataset(Dataset):
                     continue
                 mask = seg == cat_id
                 ground_truths[-1][mask] = cat_ids.index(cat_id)
+                if self.split == "val":
+                    ground_truths[-1][seg == self.PASCAL_IGNORE_INDEX] = self.ignore_index
 
         return [torch.tensor(x) for x in ground_truths]
 
