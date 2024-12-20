@@ -53,6 +53,7 @@ class PascalDataset(Dataset):
         custom_preprocess: bool = True,
         load_annotation_dicts: bool = True,
         ignore_index: int = -100,
+        ignore_borders: bool = False,
         is_pyramids: bool = False,
     ):
         super().__init__()
@@ -86,6 +87,7 @@ class PascalDataset(Dataset):
         self.sample_function = sample_function
         self.is_pyramids = is_pyramids
         self.ignore_index = ignore_index
+        self.ignore_borders = ignore_borders
 
         self.masks_dir_list = set(os.listdir(self.masks_dir))
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
@@ -431,7 +433,7 @@ class PascalDataset(Dataset):
                     continue
                 mask = seg == cat_id
                 ground_truths[-1][mask] = cat_ids.index(cat_id)
-                if self.split == "val":
+                if self.split == "val" and self.ignore_borders:
                     ground_truths[-1][seg == self.PASCAL_IGNORE_INDEX] = self.ignore_index
 
         return [torch.tensor(x) for x in ground_truths]
