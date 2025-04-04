@@ -257,7 +257,10 @@ def get_batch_metadata(
     while remaining_images > 0:
         res = random.choice(possible_batch_example_nums)
         num_class = None
-        if len(res) == 2:
+        if len(res) == 1:
+            cur_batch_size = res[0]
+            examples_num = None
+        elif len(res) == 2:
             cur_batch_size, examples_num = res
         elif len(res) == 3:
             cur_batch_size, num_class, examples_num = res

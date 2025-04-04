@@ -55,7 +55,11 @@ def get_optimizer(parameters, optimizer_params, initial_lr):
         "AdamW": AdamW,
         "SGD": SGD,
     }
-    optimizer_type = optimizer_params.get("type")
+    if isinstance(optimizer_params, str):
+        optimizer_type = optimizer_params
+        optimizer_params = {}
+    else:
+        optimizer_type = optimizer_params.get("type")
     if optimizer_type not in optimizers:
         logger.warning(f"Unknown optimizer type {optimizer_type}, using AdamW")
         optimizer_type = "AdamW"

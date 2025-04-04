@@ -21,21 +21,28 @@ parameters:
     val_image_log_frequency: [25]
     tmp_dir: [tmp]
     entity: [cilabuniba]
-    tags: [[DCAMA, Validation]]
+    tags: [[MAE, Levels, Validation]]
     offline_directory: [offline]
 
   model:
-    name: [dcama]
-    backbone: [swin]
-    backbone_checkpoint: [checkpoints/dcama/swin_base_patch4_window12_384.pth]
-    model_checkpoint: [checkpoints/dcama/pascal/fold0_dcama_swin_xm0xgeoo.safetensors, checkpoints/dcama/pascal/swin_fold0.pt]
-    image_size: &image_size [384]
+    name: [lam_no_vit] # path to model class or model name contained in EzDL or super-gradients
+    spatial_convs: [3]
+    class_attention: [False]
+    example_attention: [False]
+    example_class_attention: [False]
+    fusion_transformer: [TwoWayTransformer]
+    image_embed_dim: [768]
+    embed_dim: &embed_dim [256]
+    image_size: &image_size [480]
+    checkpoint: [checkpoints/pascal/fold0_mae_levels_es4i8vp4.safetensors]
+    classification_levels: [2]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       val_pascal5i_N1K1: &val_pascal5i_N1K1
         name: [pascal]
         data_dir: &instance_dir [data/pascal]
+        emb_dir: [data/pascal/embeddings_vit_mae_480]
         split: ["val"]
         val_fold_idx: [0]
         n_folds: [4]
@@ -54,9 +61,8 @@ parameters:
         n_shots: [5]
     common:
       remove_small_annotations: [True]
-      ignore_borders: [True]
       do_subsample: [False]
-      load_embeddings: [False]
+      load_embeddings: [True]
       load_gts: [False]
       image_size: *image_size
       custom_preprocess: [False]
@@ -64,7 +70,7 @@ parameters:
     num_workers: [32]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
-    val_possible_batch_example_nums: [[[1, 1]]] 
+    val_possible_batch_example_nums: [[[8, 1]]] 
     prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]

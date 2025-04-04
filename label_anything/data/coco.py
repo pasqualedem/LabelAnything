@@ -50,6 +50,7 @@ class CocoLVISDataset(Dataset):
         max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
         n_ways: int = "max",
+        n_shots: int = None,
         preprocess=ToTensor(),
         image_size: int = 1024,
         load_embeddings: bool = None,
@@ -114,6 +115,7 @@ class CocoLVISDataset(Dataset):
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.n_ways = n_ways
+        self.n_shots = n_shots
         self.image_size = image_size
         self.remove_small_annotations = remove_small_annotations
         self.all_example_categories = all_example_categories
@@ -522,11 +524,11 @@ class CocoLVISDataset(Dataset):
         """
         idx, batch_metadata = idx_metadata
 
-        num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
+        num_examples = batch_metadata.get(BatchMetadataKeys.NUM_EXAMPLES) or self.n_shots
         possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
         if batch_metadata[BatchMetadataKeys.PROMPT_CHOICE_LEVEL] == "episode":
             possible_prompt_types = random.choice(possible_prompt_types)
-        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
+        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, self.n_ways)
 
         base_image_data = self.images[self.image_ids[idx]]
         image_ids, aux_cat_ids = self._extract_examples(

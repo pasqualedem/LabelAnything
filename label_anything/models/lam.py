@@ -372,7 +372,7 @@ class Lam(nn.Module):
             query_embeddings=query_embeddings,
             support_embeddings=None,
             image_pe=self.prompt_encoder.get_dense_pe(),
-            class_embeddings=class_embeddings,
+            pe_result=class_embeddings,
             flag_examples=None,
         )
 

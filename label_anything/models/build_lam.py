@@ -98,6 +98,7 @@ def _build_lam(
     checkpoint=None,
     use_sam_checkpoint=False,
     use_vit_sam_neck=True,
+    ignore_encoder_checkpoint=False,
     use_vit=True,
     image_embed_dim=SAM_EMBED_DIM,
     embed_dim=SAM_EMBED_DIM,
@@ -225,7 +226,7 @@ def _build_lam(
         if use_sam_checkpoint:
             lam.init_pretrained_weights(state_dict)
         else:
-            lam = load_state_dict(lam, state_dict)
+            lam = load_state_dict(lam, state_dict, ignore_encoder_missing_keys=ignore_encoder_checkpoint)
     return lam
 
 
