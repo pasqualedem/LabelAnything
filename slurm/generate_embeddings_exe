@@ -1,5 +1,11 @@
 #!/bin/bash
 
+export HF_HOME=$SCRATCH
+export TORCH_HOME=$SCRATCH
+
+echo "HF_HOME: $HF_HOME"
+echo "TORCH_HOME: $TORCH_HOME"
+
 source .venv/bin/activate
 export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
 python main.py generate_embeddings $@
