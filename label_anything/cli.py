@@ -93,6 +93,11 @@ def validate(parameters):
     help="Folder to save the embeddings",
 )
 @click.option(
+    "--device",
+    default="cuda",
+    help="Device to use for the model",
+)
+@click.option(
     "--last_block_dir",
     default=None,
     help="Folder to save last transformer block",
@@ -131,6 +136,7 @@ def generate_embeddings(
     batch_size,
     num_workers,
     outfolder,
+    device,
     last_block_dir,
     custom_preprocess,
     huggingface,
@@ -147,6 +153,7 @@ def generate_embeddings(
             batch_size=batch_size,
             num_workers=num_workers,
             outfolder=outfolder,
+            device=device,
             compile=compile,
             image_resolution=image_resolution,
             custom_preprocess=custom_preprocess,

@@ -176,7 +176,9 @@ python main.py generate_embeddings --encoder vit_l_mae --directory data/coco/tra
 For Dino
 
 ```bash
-sbatch slurm/generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
+python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
+
+python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dinov2_b_476 --model_name facebook/dinov2-base --image_resolution 476 --mean_std default --huggingface
 ```
 
 For PASCAL
