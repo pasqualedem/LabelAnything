@@ -88,13 +88,14 @@ parameters:
       #   n_shots: [5]
     common:
       remove_small_annotations: [True]
+      ignore_borders: [True]
       do_subsample: [False]
       load_embeddings: [True]
       load_gts: [False]
       image_size: *image_size
       custom_preprocess: [False]
   dataloader:
-    num_workers: [32]
+    num_workers: [16]
     prefetch_factor: [2]
     possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
     val_possible_batch_example_nums: [[[8, 1]]] 
