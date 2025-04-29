@@ -21,8 +21,8 @@ from .dcama import build_dcama
 from .fptrans import build_fptrans
 from .panet import build_panet
 from .ppnet import build_ppnet
-from .bam import build_bam
-from.hdmnet import build_hdmnet
+# from .bam import build_bam
+# from.hdmnet import build_hdmnet
 from .denet import build_denet
 from .dummy import build_dummy
 
@@ -49,9 +49,9 @@ model_registry = {
     "panet": build_panet,
     "ppnet": build_ppnet,
     "denet": build_denet,
-    "hdmnet": build_hdmnet,
-    "bam": build_bam,
-    "hdmnet": build_hdmnet,
+    # "hdmnet": build_hdmnet,
+    # "bam": build_bam,
+    # "hdmnet": build_hdmnet,
     "dummy": build_dummy,
     # Encoders only
     **ENCODERS

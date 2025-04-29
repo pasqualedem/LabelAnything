@@ -14,7 +14,7 @@ parameters:
   logger:
     log_frequency: [10]
     train_image_log_frequency: [100000]
-    val_image_log_frequency: [500]
+    val_image_log_frequency: [30000]
     tmp_dir: [tmp]
     entity: [cilabuniba]
     tags: [[DINOv2, emb256]]
@@ -29,7 +29,7 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.0001]
+    initial_lr: [0.0001, 0.00005]
     optimizer: [AdamW]
     scheduler:
     - type: constant_with_warmup
@@ -49,14 +49,14 @@ parameters:
     image_embed_dim: [768]
     vit_patch_size: [14]
     embed_dim: &embed_dim [256]
-    image_size: &image_size [476]
+    image_size: &image_size [224]
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:
       coco:
         name: [coco]
         instances_path: [data/coco/annotations/instances_train2014.json]
-        emb_dir: &emb_dir [data/coco/embeddings_dinov2_b_476]
+        emb_dir: &emb_dir [data/coco/embeddings_dinov2_b_224]
         img_dir: &img_dir [data/coco/train_val_2017]
         # split: ["train"]
         sample_function: [uniform]
@@ -84,12 +84,13 @@ parameters:
       image_size: *image_size
       custom_preprocess: [False]
   dataloader:
-    num_workers: [8]
-    possible_batch_example_nums: [[[2, 1, 4], [2, 4, 2], [2, 1, 2], [4, 2, 2], [4, 4, 1], [16, 1, 1]]]
+    num_workers: [16]
+    possible_batch_example_nums: [[[32, 1, 4], [32, 4, 2], [32, 1, 2], [64, 2, 2], [64, 4, 1], [256, 1, 1]]]
     # possible_batch_example_nums: [[[16, 1, 1]]]
-    val_possible_batch_example_nums: [[[2]]] 
+    val_possible_batch_example_nums: [[[64]]] 
     prompt_types: [["point", "bbox", "mask"]]
     prompt_choice_level: [["episode"]]
     val_prompt_types: [["mask"]]
+    prefetch_factor: [2]
 
 other_grids:

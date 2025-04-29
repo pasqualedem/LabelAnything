@@ -1,5 +1,7 @@
 #!/bin/bash
 
-source .venv/bin/activate
-export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
+conda init zsh
+conda activate label-anything
+export TMPDIR=./tmp
+
 python3 main.py run $1

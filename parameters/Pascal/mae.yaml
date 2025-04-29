@@ -45,15 +45,15 @@ parameters:
     spatial_convs: [3]
     class_attention: [False]
     example_attention: [False]
-    example_class_attention: [False]
+    example_class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]
-    # class_encoder:
-    #   name: [RandomMatrixEncoder]
-    #   bank_size: [100]
-    #   embed_dim: *embed_dim
+    class_encoder:
+      name: [RandomMatrixEncoder]
+      bank_size: [100]
+      embed_dim: *embed_dim
 
   dataset: # parameters depending on the class you defined for the dataset
     datasets:

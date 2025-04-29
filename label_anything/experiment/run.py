@@ -848,7 +848,7 @@ class Run:
 
 class ParallelRun:
     slurm_command = "sbatch"
-    slurm_script = "slurm/launch_run"
+    slurm_script = "slurm/launch_run_single"
     slurm_script_first_parameter = "--parameters="
     slurm_outfolder = "out"
     out_extension = "out"
