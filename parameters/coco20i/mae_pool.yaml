@@ -46,6 +46,7 @@ parameters:
     example_attention: [False]
     example_class_attention: [True]
     fusion_transformer: [TwoWayTransformer]
+    prompt_encoder: [TokenPool]
     image_embed_dim: [768]
     embed_dim: &embed_dim [256]
     image_size: &image_size [480]

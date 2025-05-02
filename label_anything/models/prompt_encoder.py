@@ -7,7 +7,7 @@
 import numpy as np
 import torch
 from torch import nn
-from einops import rearrange, repeat
+from einops import rearrange, reduce, repeat
 
 from typing import Any, Optional, Tuple, Type
 
@@ -825,6 +825,95 @@ class PromptImageEncoder(PromptEncoder):
             **embeddings_dict,
             ResultDict.EXAMPLES_CLASS_SRC: src,
         }
+
+
+class PromptImagePoolEncoder(PromptImageEncoder):
+    def _obtain_embeddings(self, embeddings, flag_examples):
+        embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
+
+        # Average over examples removing padding embeddings
+        masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
+        normalizer = flag_examples.clone().unsqueeze(-1).sum(dim=1).float()
+        normalizer[normalizer == 0] = (
+            1  # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
+        )
+
+        class_embeddings = masked_embeddings.sum(dim=1) / normalizer
+        return {
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings
+        }
+    
+    def forward(
+        self,
+        image_embeddings: torch.Tensor,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+        flag_examples: Optional[torch.Tensor],
+        chunk_size=None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning class embeddings
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
+            and labels to embed (B, M, C, 2)
+          boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
+          masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+          flag_examples (torch.Tensor or none): flags to indicate which examples (B, M, C)
+
+        Returns:
+          torch.Tensor: sparse embeddings for the points and boxes, with shape
+            BxNx(embed_dim), where N is determined by the number of input points
+            and boxes.
+          torch.Tensor: dense embeddings for the masks, in the shape
+            Bx(embed_dim)x(embed_H)x(embed_W)
+        """
+        sparse_embeddings, dense_embeddings = self.embed_points_masks(
+            points, boxes, masks, chunk_size=chunk_size
+        )
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m c) n d")
+
+        b, m, c, d, h, w = dense_embeddings.shape
+        dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
+
+        if image_embeddings.shape[-2:] != dense_embeddings.shape[-2:]:
+            dense_embeddings = nn.functional.interpolate(
+                dense_embeddings,
+                size=image_embeddings.shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+        dense_embeddings = rearrange(dense_embeddings, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
+        sparse_embeddings = rearrange(sparse_embeddings, "(b m c) n d -> b m c n d", b=b, m=m, c=c)
+
+        if self.use_support_features:
+            dense_embeddings, sparse_embeddings = self.class_encoder(dense_embeddings, sparse_embeddings)
+            dense_embeddings = dense_embeddings.sum(dim=2)
+            src = image_embeddings + dense_embeddings
+        else:
+            raise NotImplementedError(
+                "PromptImagePoolEncoder does not support use_support_features=False"
+            )
+
+        # Run the transformer to fuse the dense embeddings and sparse embeddings
+        src = rearrange(src, "b m d h w -> (b m) d h w")
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m) (c n) d")
+        pos_src = torch.repeat_interleave(
+            self.get_dense_pe(), src.shape[0], dim=0
+        )
+        embeddings, src = self.transformer(src, pos_src, sparse_embeddings)
+        embeddings = reduce(embeddings, "(b m) (c n) d -> b m c d", b=b, c=c, reduction="mean")
+            
+        embeddings_dict = self._obtain_embeddings(embeddings, flag_examples)
+        return {
+            **embeddings_dict,
+            ResultDict.EXAMPLES_CLASS_SRC: src,
+        }
+
 
 
 class MultiLevelPromptEncoder(nn.Module):

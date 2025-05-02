@@ -15,7 +15,7 @@ from label_anything.models.common import SAM_EMBED_DIM
 from label_anything.models.hfhub import has_config
 from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
-from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
+from label_anything.models.prompt_encoder import MultiLevelPromptEncoder, PromptImagePoolEncoder
 from label_anything.models.transformer import AffinityTransformer
 from label_anything.models.pyramids import PyramidNeck
 from label_anything.utils.utils import load_state_dict, torch_dict_load
@@ -117,6 +117,7 @@ def _build_lam(
     classification_levels=1,
     few_type="Prototype",  # "Prototype" or "Affinity" or "PrototypeAffinity"
     class_fusion="sum",
+    prompt_encoder=None, # None or TokenPool
     transformer_keys_are_images=True,
     transformer_feature_size=None,
     class_encoder=None,
@@ -176,11 +177,13 @@ def _build_lam(
         )
     lam_class = BinaryLam if binary else Lam
 
+    prompt_encoder = PromptImagePoolEncoder if prompt_encoder == "TokenPool" else PromptImageEncoder
+
     lam = lam_class(
         image_size=image_size,
         image_encoder=vit,
         neck=neck,
-        prompt_encoder=PromptImageEncoder(
+        prompt_encoder=prompt_encoder(
             embed_dim=embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
