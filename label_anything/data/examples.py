@@ -303,7 +303,7 @@ class NWayExampleGenerator(ExampleGenerator):
                 raise ValueError(f"Unknown sample function {sample_function}.")
         else:
             def n_classes_sample_function(n):
-                torch.tensor(min(n, n_ways))
+                return torch.tensor(min(n, n_ways))
         super().__init__(
             images_to_categories,
             categories_to_imgs,

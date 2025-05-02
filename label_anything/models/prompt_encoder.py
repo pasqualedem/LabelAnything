@@ -500,7 +500,15 @@ class PromptImageEncoder(PromptEncoder):
                 act=activation,
                 dropout=dropout,
             )
-
+            
+        if not self.use_support_features:
+            self.proto_chooser = nn.Sequential(
+                nn.Conv2d(embed_dim, embed_dim // 8, (1, 1), stride=1, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(embed_dim // 8, 1, (1, 1), stride=1, padding=0),
+                nn.Sigmoid(),
+            )
+                 
         self.not_a_mask_embed = nn.Embedding(
             1, embed_dim
         )  # For classes/examples with missing masks
@@ -804,6 +812,12 @@ class PromptImageEncoder(PromptEncoder):
         src = self.sparse_dense_fusion(
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
+        if not self.use_support_features:
+            mask = self.proto_chooser(src)
+            # mask = rearrange(mask, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
+            src = repeat(image_embeddings, "b m d h w -> (b m c) d h w", c=c)
+            src = src * mask
+            
         embeddings_dict = self._obtain_embeddings(
             src, pos_src, flag_examples
         )

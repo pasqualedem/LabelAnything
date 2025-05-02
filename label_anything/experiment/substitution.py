@@ -162,7 +162,7 @@ class Substitutor:
         """
         Generate new points from predictions errors and add them to the prompts
         """
-        if self.substitute:
+        if self.substitute and self.num_points > 0:
             sampled_points, labels = generate_points_from_errors(
                 prediction, ground_truth, self.num_points
             )

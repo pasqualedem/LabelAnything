@@ -5,44 +5,60 @@ import torch
 from huggingface_hub import list_models
 
 COLORS = [
-    # blue
-    (0, 0, 255),
-    # red
-    (255, 0, 0),
-    # green
-    (0, 255, 0),
-    # yellow
-    (255, 255, 0),
-    # purple
-    (255, 0, 255),
-    # cyan
-    (0, 255, 255),
-    # orange
-    (255, 165, 0),
-    # pink
-    (255, 192, 203),
-    # brown
-    (139, 69, 19),
-    # grey
-    (128, 128, 128),
-    # black
-    (0, 0, 0),
-    # white
-    (255, 255, 255),
-]
+        [0, 0, 0],         # Background
+        [255, 0, 0],       # Class 2: Red
+        [0, 0, 255],       # Class 4: Blue
+        [255, 255, 0],     # Class 3: Yellow
+        [0, 255, 0],       # Class 1: Green
+        [255, 0, 255],     # Class 5: Magenta
+        [0, 255, 255],     # Class 6: Cyan
+        [192, 192, 192],   # Class 7: Light Gray
+        [255, 0, 0],       # Class 8: Bright Red
+        [0, 255, 0],       # Class 9: Bright Green
+        [0, 0, 255],       # Class 10: Bright Blue
+        [255, 255, 0],     # Class 11: Bright Yellow
+        [255, 0, 255],     # Class 12: Bright Magenta
+        [0, 255, 255],     # Class 13: Bright Cyan
+        [128, 128, 128],   # Class 14: Dark Gray
+        [255, 165, 0],     # Class 15: Orange
+        [75, 0, 130],      # Class 16: Indigo
+        [255, 20, 147],    # Class 17: Deep Pink
+        [139, 69, 19],     # Class 18: Brown
+        [154, 205, 50],    # Class 19: Yellow-Green
+        [70, 130, 180],    # Class 20: Steel Blue
+        [220, 20, 60],     # Class 21: Crimson
+        [107, 142, 35],    # Class 22: Olive Drab
+        [0, 100, 0],       # Class 23: Dark Green
+        [205, 133, 63],    # Class 24: Peru
+        [148, 0, 211],     # Class 25: Dark Violet
+    ]
 TEXT_COLORS = [
-    "blue",
-    "red",
-    "green",
-    "yellow",
-    "purple",
-    "cyan",
-    "orange",
-    "pink",
-    "brown",
-    "grey",
-    "black",
-    "white",
+    "Black",
+    "Red",
+    "Blue",
+    "Yellow",
+    "Green",
+    "Magenta",
+    "Cyan",
+    "Light Gray",
+    "Bright Red",
+    "Bright Green",
+    "Bright Blue",
+    "Bright Yellow",
+    "Bright Magenta",
+    "Bright Cyan",
+    "Dark Gray",
+    "Orange",
+    "Indigo",
+    "Deep Pink",
+    "Brown",
+    "Yellow-Green",
+    "Steel Blue",
+    "Crimson",
+    "Olive Drab",
+    "Dark Green",
+    "Peru",
+    "Dark Violet",
 ]
 
 def debug_write(*args):
@@ -53,7 +69,7 @@ def color_to_class(color):
     # color is in format rgba(r, g, b, a)
     # use regex to extract r, g, b (values can be float or int)
     color = re.findall(r"\d+\.\d+|\d+", color)
-    color = (int(color[0]), int(color[1]), int(color[2]))
+    color = [int(color[0]), int(color[1]), int(color[2])]
     return COLORS.index(color) - 1 # -1 because background is not a class
 
 

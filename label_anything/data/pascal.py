@@ -49,6 +49,7 @@ class PascalDataset(Dataset):
         do_subsample: bool = True,
         remove_small_annotations: bool = False,
         all_example_categories: bool = True,
+        num_samples: int = None,
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
         load_annotation_dicts: bool = True,
@@ -81,6 +82,7 @@ class PascalDataset(Dataset):
         self.image_size = image_size
         self.load_embeddings = load_embeddings
         self.all_example_categories = all_example_categories
+        self.num_samples = num_samples
         self.load_gts = load_gts
         self.do_subsample = do_subsample
         self.remove_small_annotations = remove_small_annotations
@@ -262,7 +264,7 @@ class PascalDataset(Dataset):
         return img2cat, cat2img
 
     def __len__(self):
-        return len(self.image_data)
+        return self.num_samples or len(self.image_data)
 
     def load_and_preprocess_images(self, image_names: list[str]) -> torch.Tensor:
         image_names = [x[0] if isinstance(x, tuple) else x for x in image_names]

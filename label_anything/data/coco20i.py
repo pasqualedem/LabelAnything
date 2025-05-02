@@ -44,7 +44,7 @@ class Coco20iDataset(CocoLVISDataset):
 
         assert split in [Coco20iSplit.TRAIN, Coco20iSplit.VAL]
         assert val_fold_idx < n_folds
-        assert split == Coco20iSplit.TRAIN or n_shots is not None
+        assert split == Coco20iSplit.TRAIN or n_shots is not None or self.n_examples is not None
         # If n_shots is min, n_ways should be max
         assert (
             n_shots != "min" or self.n_ways == "max"
@@ -120,7 +120,7 @@ class Coco20iDataset(CocoLVISDataset):
         Returns:
             dict: Data dictionary.
         """
-        if self.split == Coco20iSplit.TRAIN or self.n_shots == "min":
+        if self.split == Coco20iSplit.TRAIN or self.n_shots == "min" or self.n_examples is not None:
             return super().__getitem__(idx_batchmetadata)
         elif self.split == Coco20iSplit.VAL:
             idx, metadata = idx_batchmetadata
