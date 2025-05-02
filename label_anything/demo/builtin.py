@@ -5,23 +5,25 @@ import streamlit as st
 import torch
 import numpy as np
 import plotly.express as px
-
-
-import numpy as np
 import torch
-import numpy as np
+
+
+from copy import deepcopy
 
 from label_anything.demo.utils import COLORS, TEXT_COLORS
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import ResultDict
 from label_anything.data.examples import uniform_sampling
-from label_anything.data import utils
+from label_anything.data import get_dataloaders, utils
 from label_anything.data.utils import (
     AnnFileKeys,
     PromptType,
     BatchKeys,
 )
 from label_anything.experiment.utils import WrapperModule
+import zipfile
+import os
+from io import BytesIO
 
 from label_anything.demo.visualize import (
     get_embeddings_names,
@@ -34,73 +36,72 @@ from label_anything.demo.visualize import (
     to_device,
 )
 
+    
 
-def show_image(idx, coco_dataset):
-    base_image_data = coco_dataset.images[coco_dataset.image_ids[idx]]
+COCO_NAME = "val_coco20i"
+COCO_PARAMS = {
+    "name": "coco",
+    "instances_path": "data/coco/annotations/instances_val2014.json",
+    "img_dir": "data/coco/train_val_2017",
+    "split": "val",
+    "val_fold_idx": 3,
+    "n_folds": 4,
+    "n_shots": 1,
+    "n_ways": 1,
+    "do_subsample": False,
+    "add_box_noise": False,
+    "val_num_samples": 100,
+}
 
-    st.image(get_image(coco_dataset._load_and_preprocess_image(base_image_data)))
 
-    img_cats = torch.tensor(list(coco_dataset.img2cat[base_image_data[AnnFileKeys.ID]]))
-    sampled_classes = (
-        coco_dataset.example_generator.sample_classes_from_query(
-            img_cats, uniform_sampling
-        )
-        if coco_dataset.do_subsample
-        else img_cats
+parameters = {
+    "dataloader": {
+        "num_workers": 0,
+        "possible_batch_example_nums": [[1]],
+        "val_possible_batch_example_nums": [[1]],
+        "prompt_types": ["mask"],
+        "prompt_choice_level": ["episode"],
+        "val_prompt_types": ["mask"],
+        },
+    "dataset": {
+        "preprocess": {
+            "mean": [0.485, 0.456, 0.406],
+            "std": [0.229, 0.224, 0.225],
+            "image_size": 480,
+        },
+        "datasets": {
+            COCO_NAME: COCO_PARAMS,
+        },
+        "common": {
+            "remove_small_annotations": True
+        }
+    },
+}
+
+
+def get_data(n_ways, n_shots, n_examples, image_size, custom_preprocess, all_example_categories, prompt_types, max_points, fold, class_based_sampling=False):
+    parameters["dataset"]["datasets"][COCO_NAME]["n_ways"] = n_ways
+    parameters["dataset"]["datasets"][COCO_NAME]["n_shots"] = n_shots
+    parameters["dataset"]["datasets"][COCO_NAME]["n_examples"] = n_examples
+    parameters["dataset"]["datasets"][COCO_NAME]["image_size"] = image_size
+    parameters["dataset"]["datasets"][COCO_NAME]["val_fold_idx"] = fold
+    parameters["dataset"]["datasets"][COCO_NAME]["class_based_sampling"] = class_based_sampling
+    parameters["dataset"]["preprocess"]["image_size"] = image_size
+    parameters["dataset"]["common"]["custom_preprocess"] = custom_preprocess
+    parameters["dataset"]["common"]["image_size"] = image_size
+    parameters["dataset"]["common"]["max_points_per_annotation"] = max_points
+    parameters["dataset"]["common"]["all_example_categories"] = all_example_categories
+    if not prompt_types:
+        st.warning("Please select at least one prompt type.")
+        return
+    parameters["dataloader"]["prompt_types"] = prompt_types
+    parameters["dataloader"]["val_prompt_types"] = prompt_types
+    _, val, _ = get_dataloaders(
+        deepcopy(parameters["dataset"]),
+        deepcopy(parameters["dataloader"]),
+        num_processes=1,
     )
-    cols = st.columns(len(img_cats))
-    for i, cat in enumerate(img_cats):
-        cols[i].checkbox(
-            coco_dataset.categories[cat.item()]["name"],
-            value=True,
-            key=f"cat_{cat}",
-        )
-    chosen_classes = [
-        cat.item() for i, cat in enumerate(img_cats) if st.session_state[f"cat_{cat}"]
-    ]
-    st.write(
-        f"Chosen classes: {[coco_dataset.categories[cat]['name'] for cat in chosen_classes]}"
-    )
-    if "chosen_classes" not in st.session_state:
-        st.session_state["chosen_classes"] = chosen_classes
-    elif st.session_state["chosen_classes"] != chosen_classes:
-        st.session_state["chosen_classes"] = chosen_classes
-        st.session_state["batch"] = (None, None, None)
-        st.session_state["result"] = None
-        st.session_state["examples"] = None
-
-    return base_image_data, img_cats, chosen_classes
-
-
-def generate_examples(
-    coco_dataset, base_image_data, img_cats, chosen_classes, num_examples
-):
-    image_ids, aux_cat_ids = coco_dataset.example_generator.generate_examples(
-        query_image_id=base_image_data[AnnFileKeys.ID],
-        image_classes=img_cats,
-        sampled_classes=torch.tensor(chosen_classes),
-        num_examples=num_examples,
-    )
-
-    cat_ids = sorted(list(set(itertools.chain(*aux_cat_ids))))
-    st.session_state["named_classes"] = ["background"] + [
-        coco_dataset.categories[cat]["name"] for cat in cat_ids
-    ]
-    cat_ids.insert(0, -1)  # add the background class
-
-    images, image_key, ground_truths = coco_dataset._get_images_or_embeddings(image_ids)
-    pil_images = [get_image(image) for image in images][1:]
-    st.session_state["examples"] = {
-        "images": images,
-        "pil_images": pil_images,
-        "aux_cat_ids": aux_cat_ids,
-        "image_ids": image_ids,
-        "cat_ids": cat_ids,
-        "image_key": image_key,
-        "ground_truths": ground_truths,
-    }
-    st.session_state["result"] = None
-    st.session_state["batch"] = (None, None, None)
+    return val[COCO_NAME]
 
 
 def get_prompt_types():
@@ -111,33 +112,6 @@ def get_prompt_types():
         for i, option in enumerate(options)
     }
     return [option for option, toggle in toggles.items() if toggle]
-
-
-def generate_prompts(accelerator, dataset, coco_dataset, prompt_types):
-    image_ids = st.session_state.get("examples", {}).get("image_ids", [])
-    cat_ids = st.session_state.get("examples", {}).get("cat_ids", [])
-    images = st.session_state.get("examples", {}).get("images", [])
-    st.write(f"Image ids: {image_ids}")
-    st.write(f"Cat ids: {cat_ids}")
-    bboxes, masks, points, classes, img_sizes = coco_dataset._get_prompts(
-        image_ids, cat_ids, prompt_types
-    )
-    image_key = st.session_state.get("examples", {}).get("image_key", [])
-    (batch, gt), dataset_name = obtain_batch(
-        dataset,
-        coco_dataset,
-        images,
-        image_ids,
-        cat_ids,
-        classes,
-        img_sizes,
-        image_key,
-        (bboxes, masks, points),
-        ground_truths=None,
-    )
-    batch = to_device(batch, accelerator.device)
-    st.session_state["batch"] = (batch, gt, dataset_name)
-    st.session_state["result"] = None
 
 
 def plot_prompts():
@@ -152,6 +126,9 @@ def plot_prompts():
             unbatched["prompt_bboxes"][i],
             unbatched["prompt_points"][i],
             COLORS,
+            unbatched["flag_masks"][i],
+            unbatched["flag_bboxes"][i],
+            unbatched["flag_points"][i],
         )
         for i in range(unbatched["images"].shape[0])
     ]
@@ -160,9 +137,15 @@ def plot_prompts():
     cols = st.columns(n_cols)
     for i, image in enumerate(images[1:]):
         cols[i % 4].image(image, caption=f"Prompt {i+1}", use_column_width=True)
+    return images
 
 
 def get_result(model, batch, gt):
+    device = st.session_state.get("device", "cpu")
+    batch = {
+        k: v.to(device) if isinstance(v, torch.Tensor) else v
+        for k, v in batch.items()
+    }
     substitutor = Substitutor(substitute=False)
     substitutor.reset((batch, gt))
     input, one_gt = next(iter(substitutor))
@@ -172,9 +155,6 @@ def get_result(model, batch, gt):
     st.session_state["result"] = result
     st.session_state["one_gt"] = one_gt
     st.session_state["seg"] = result[ResultDict.LOGITS].argmax(dim=1)
-    st.session_state["reduced_embeddings"] = reduce_embeddings(
-        result[ResultDict.EXAMPLES_CLASS_EMBS]
-    )
 
 
 @st.cache_resource(hash_funcs={torch.Tensor: lambda x: x.sum().item()})
@@ -235,11 +215,11 @@ def plot_results():
     result = st.session_state.get("result", None)
     one_gt = st.session_state.get("one_gt", None)
     seg = st.session_state.get("seg", None)
-    if result is not None:
-        plot_embeddings(
-            examples_class_embeddings=result[ResultDict.EXAMPLES_CLASS_EMBS],
-            example_flags=input[BatchKeys.FLAG_EXAMPLES],
-        )
+    # if result is not None:
+    #     plot_embeddings(
+    #         examples_class_embeddings=result[ResultDict.EXAMPLES_CLASS_EMBS],
+    #         example_flags=input[BatchKeys.FLAG_EXAMPLES],
+    #     )
     plots, titles = plot_seg_gt(
         input,
         seg,
@@ -248,55 +228,99 @@ def plot_results():
         dims=input[BatchKeys.DIMS],
         classes=input["classes"][0][0],
     )
-    cols = st.columns(2)
-    for i, plot in enumerate(plots):
-        cols[i % 2].image(plot, caption=titles[i], use_column_width=True)
+    n_cols = 5
+    cols = st.columns(n_cols)
+    for i, (title, plot) in enumerate(zip(titles, plots)):
+        cols[i % n_cols].write(title)
+        cols[i % n_cols].write(plot.rgb.fig)
+    return plots, titles
 
 
 def built_in_dataset(model):
-    st.write("## Under maintanaince")
-    return
-    st.text_input("Image directory", IMG_DIR, key="img_dir")
-    st.text_input("Annotations directory", ANNOTATIONS_DIR, key="annotations_dir")
+    IMAGE_SIZE = 480
 
-    datalaoder = get_data(accelerator)
-    st.session_state["dataset"] = (
-        get_data(_accelerator=accelerator) if st.button("Load dataset") else None
-    )
+    with st.expander("Dataset parameters", expanded=True):
+        col1, col2 = st.columns(2)
+        n_ways = col1.number_input("Number of ways", 1, 20, 1)
+        n_shots = col2.number_input("Number of shots", 1, 20, 1)
+        n_examples = None
+        if col2.checkbox("Use shots as examples", value=False):
+            n_examples = n_shots
+            n_shots = None
+        custom_preprocess = col1.checkbox("Segment Anytihng preprocess", value=False)
+        image_size = col2.number_input(
+            "Image size", 1, 1024, IMAGE_SIZE, step=32
+        )
+        prompt_types = get_prompt_types()
+        max_points = col1.number_input(
+            "Max points per annotation", 1, 20, 5
+        )
+        all_example_categories = col1.checkbox(
+            "Use all categories in examples", value=False
+        )
+        class_based_sampling = col1.checkbox(
+            "Class based sampling", value=True
+        )
+        fold = col2.number_input(
+            "Fold", 0, 3, 0
+        )
+
+    if st.button("Load dataset"):
+        dataloader = get_data(n_ways, n_shots, n_examples, image_size, custom_preprocess, all_example_categories, prompt_types, max_points, fold, class_based_sampling=True)
+        st.session_state["dataset"] = iter(dataloader)
+        st.session_state["datasets"] = dataloader.dataset.datasets
     dataset = st.session_state.get("dataset", None)
     if dataset is None:
         return
-    coco = dataset.dataset.datasets["coco"]
 
-    image_idx = st.slider("Image index", 0, len(dataset) - 1, 0)
-    num_examples = st.slider("Number of examples", 1, MAX_EXAMPLES, 1)
-    prompt_types = get_prompt_types()
-    base_image_data, img_cats, chosen_classes = show_image(image_idx, coco)
-    if st.button("Generate Examples"):
-        generate_examples(coco, base_image_data, img_cats, chosen_classes, num_examples)
-    if st.session_state.get("examples", None) is not None:
-        pil_images = st.session_state.get("examples", {}).get("pil_images", [])
-        aux_cat_ids = st.session_state.get("examples", {}).get("aux_cat_ids", [])
-        if pil_images:
-            cols = st.columns(len(pil_images))
-            for i, pil_image in enumerate(pil_images):
-                cats = [coco.categories[cat]["name"] for cat in aux_cat_ids[i]]
-                cols[i].image(pil_image, caption=f"{cats}", use_column_width=True)
-        if st.button("Generate prompts"):
-            generate_prompts(accelerator, datalaoder.dataset, coco, prompt_types)
-        plot_prompts()
-        batch, gt, dataset_name = st.session_state.get("batch", (None, None, None))
-        if batch is not None:
-            embeddings_name = get_embeddings_names(batch, EMBEDDINGS_DIR)
-            st.write(f"Needed embeddings")
-            st.code(embeddings_name)
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Load embeddings"):
-                    batch = set_embeddings(accelerator, batch, EMBEDDINGS_DIR)
-                    batch = to_device(batch, accelerator.device)
-            with col2:
-                if st.button("Predict"):
-                    get_result(model, batch, gt)
-            if st.session_state.get("result", None) is not None:
-                plot_results()
+    if st.button("Get sample"):
+        (batch, gt), dataset_name = next(dataset)
+        st.session_state["batch"] = (batch, gt, dataset_name[0])
+    if st.session_state.get("batch", None) is None:
+        return
+
+    batch, gt, dataset_name = st.session_state.get("batch", (None, None, None))
+    st.write(batch)
+
+    images = batch.get("images", [])[0]
+    cat_ids = batch.get("classes", [])[0]
+    cols = st.columns(len(images))
+    for i, image in enumerate(images):
+        image = get_image(image)
+        cats = [st.session_state["datasets"][dataset_name].categories[cat]["name"] for cat in cat_ids[i]]
+        cols[i].image(image, caption=f"{cats}", use_column_width=True)
+    st.session_state["plot_prompts"] = plot_prompts()
+    if st.button("Predict"):
+        get_result(model, batch, gt)
+    if st.session_state.get("result", None) is not None:
+        st.session_state["plot_results"] = plot_results()
+    if "plot_prompts" not in st.session_state or  "plot_results" not in st.session_state:
+        return
+    if st.button("Download Results"):
+        # Create a temporary zip file in memory
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            # Save prompt plots
+            for i, image in enumerate(st.session_state["plot_prompts"]):
+                image_path = f"prompt_{i + 1}.png"
+                image.save(image_path)
+                zip_file.write(image_path, arcname=os.path.basename(image_path))
+                os.remove(image_path)
+
+            # Save result plots
+            for i, (plot, title) in enumerate(
+                zip(st.session_state["plot_results"][0], st.session_state["plot_results"][1])
+            ):
+                result_path = f"result_{i + 1}_{title}.png"
+                plot.rgb.fig.savefig(result_path)
+                zip_file.write(result_path, arcname=os.path.basename(result_path))
+                os.remove(result_path)
+
+        # Prepare the zip file for download
+        zip_buffer.seek(0)
+        st.download_button(
+        label="Download ZIP",
+        data=zip_buffer,
+        file_name="results.zip",
+        mime="application/zip",
+        )

@@ -1,0 +1,186 @@
+wandb_version: 1
+
+_wandb:
+  desc: null
+  value:
+    python_version: 3.11.6
+    cli_version: 0.16.4
+    framework: huggingface
+    huggingface_version: 4.38.2
+    is_jupyter_run: false
+    is_kaggle_kernel: false
+    start_time: 1712851736.0
+    t:
+      1:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      2:
+      - 1
+      - 11
+      - 35
+      - 41
+      - 49
+      - 55
+      - 63
+      - 71
+      3:
+      - 3
+      - 4
+      - 7
+      - 15
+      - 18
+      - 23
+      - 42
+      4: 3.11.6
+      5: 0.16.4
+      6: 4.38.2
+      8:
+      - 5
+      13: linux-x86_64
+    m:
+    - 1: train/step
+      6:
+      - 3
+    - 1: validate/step
+      6:
+      - 3
+dataloader:
+  desc: null
+  value:
+    num_workers: 32
+    possible_batch_example_nums:
+    - - 2
+      - 1
+      - 4
+    - - 2
+      - 4
+      - 2
+    - - 2
+      - 1
+      - 2
+    - - 4
+      - 2
+      - 2
+    - - 4
+      - 4
+      - 1
+    - - 16
+      - 1
+      - 1
+    prefetch_factor: 2
+    prompt_choice_level:
+    - episode
+    prompt_types:
+    - point
+    - bbox
+    - mask
+    val_possible_batch_example_nums:
+    - - 2
+      - 1
+    val_prompt_types:
+    - mask
+dataset:
+  desc: null
+  value:
+    common:
+      image_size: 480
+      custom_preprocess: false
+      preprocess:
+        mean: default
+        std: default
+    datasets:
+      test_weedmap:
+        train_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/000
+        test_root: ../Datasets/WeedMap/0_rotations_processed_003_test/RedEdge/003
+        prompt_images: [
+                # List of selected images from the training set
+                # "frame0009_2.png",
+                # "frame0021_2.png",
+                "frame0033_3.png",
+                # "frame0034_1.png",
+                # "frame0048_0.png",
+                # "frame0048_1.png",
+                "frame0049_0.png",
+                # "frame0073_3.png",
+                # "frame0183_1.png",
+                # "frame0157_3.png",
+                # "frame0197_0.png",
+            ]
+        remove_black_images: false
+experiment:
+  desc: null
+  value:
+    continue_with_errors: false
+    direction: null
+    excluded_files: ''
+    group: DomainTests
+    logger: null
+    max_parallel_runs: 1
+    n_trials: null
+    name: LabelAnything
+    resume: false
+    resume_last: false
+    search: grid
+    start_from_grid: 0
+    start_from_run: 0
+    timestamp: '20240411_175659'
+    tracking_dir: ''
+    uuid: 5edd1951
+logger:
+  desc: null
+  value:
+    experiment_save_delta: null
+    log_frequency: 10
+    tmp_dir: tmp
+    train_image_log_frequency: 100000
+    val_image_log_frequency: 100
+    test_image_log_frequency: 50
+    wandb:
+      entity: cilabuniba
+      offline: false
+      offline_directory: offline
+      run_id: t1fsb2p4
+model:
+  desc: null
+  value:
+    class_attention: false
+    class_encoder:
+      bank_size: 100
+      embed_dim: 512
+      name: RandomMatrixEncoder
+    embed_dim: 512
+    example_attention: true
+    example_class_attention: false
+    fusion_transformer: TwoWayTransformer
+    image_embed_dim: 768
+    image_size: 480
+    name: lam_mae_b
+    spatial_convs: 3
+train_params:
+  desc: null
+  value:
+    accumulate_substitution: false
+    check_nan: 1
+    compile: false
+    initial_lr: 5.0e-05
+    loss:
+      class_weighting: true
+      components:
+        focal:
+          weight: 1.0
+    max_epochs: 50
+    num_points: 1
+    optimizer: AdamW
+    scheduler:
+      num_warmup_steps: 1000
+      step_moment: batch
+      type: cosine
+    seed: 42
+    substitute: false
+    watch_metric: miou

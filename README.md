@@ -10,11 +10,11 @@ This repository contains the official code for the paper ["LabelAnything: Multi-
 
 **Note**: The following instructions are for a Linux environment using CUDA 12.1. 
 
-Create a virtual environment using our conda environment file:
+Create a virtual environment using uv
 
 ```bash
-conda env create -f label-anything.yml
-conda activate label_anything
+uv sync
+source .venv/bin/activate
 ```
 
 ## Prepare the Datasets
@@ -168,13 +168,19 @@ For ViT-MAE
 ```bash
 python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 32 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_1024/ --model_name facebook/vit-mae-base --image_resolution 1024 --mean_std default --huggingface
 
-python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_320 --model_name facebook/vit-mae-base --image_resolution 320 --mean_std default --huggingface
+python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_480 --model_name facebook/vit-mae-base --image_resolution 480 --mean_std default --huggingface
+
+python main.py generate_embeddings --encoder vit_l_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_l_480 --model_name facebook/vit-mae-large --image_resolution 480 --mean_std default --huggingface
 ```
 
 For Dino
 
 ```bash
-sbatch slurm/generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
+python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
+
+python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dinov2_b_476 --model_name facebook/dinov2-base --image_resolution 476 --mean_std default --huggingface
+
+python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dinov2_b_224 --model_name facebook/dinov2-base --image_resolution 224 --mean_std default --huggingface
 ```
 
 For PASCAL

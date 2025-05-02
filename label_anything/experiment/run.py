@@ -9,11 +9,11 @@ import shutil
 import uuid
 from copy import deepcopy
 
+import accelerate
 import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from accelerate.utils import set_seed
-from torch.optim import AdamW
 from torchmetrics import F1Score, MetricCollection
 from tqdm import tqdm
 
@@ -35,6 +35,8 @@ from label_anything.utils.metrics import (
 )
 from label_anything.utils.utils import (
     FLOAT_PRECISIONS,
+    LossDict,
+    LossRunningAverage,
     ResultDict,
     RunningAverage,
     get_timestamp,
@@ -50,6 +52,7 @@ from .utils import (
     compose_loss_input,
     get_batch_size,
     get_scheduler,
+    get_optimizer,
     handle_oom,
     nosync_accumulation,
     parse_params,
@@ -120,10 +123,11 @@ class Run:
             DistributedDataParallelKwargs(find_unused_parameters=True),
         ]
         logger.info("Creating Accelerator")
+        dataloader_config = accelerate.DataLoaderConfiguration(even_batches=False)
         self.accelerator = Accelerator(
-            even_batches=False,
             kwargs_handlers=kwargs,
             split_batches=False,
+            dataloader_config=dataloader_config,
         )
         logger.info("Initiliazing tracker...")
         self.tracker: WandBLogger = wandb_tracker(self.accelerator, self.params)
@@ -180,9 +184,11 @@ class Run:
             params = self.model.module.get_learnable_params(self.train_params)
         else:
             params = self.model.get_learnable_params(self.train_params)
-        self.optimizer = AdamW(
+
+        self.optimizer = get_optimizer(
             params,
-            lr=self.train_params["initial_lr"],
+            self.train_params.get("optimizer", {}),
+            self.train_params["initial_lr"],
         )
 
         if scheduler_params := self.train_params.get("scheduler", None):
@@ -351,19 +357,19 @@ class Run:
         return outputs
 
     def _backward(self, batch_idx, input_dict, outputs, gt, loss_normalizer):
-        # loss_dict = compose_loss_input(input_dict, outputs)
-        loss = outputs["loss"] / loss_normalizer
-        self.accelerator.backward(loss)
+        loss_value = outputs["loss"][LossDict.VALUE] / loss_normalizer
+        self.accelerator.backward(loss_value)
         check_nan(
             self.model,
             input_dict,
             outputs,
             gt,
-            loss,
+            loss_value,
             batch_idx,
             self.train_params,
         )
-        return loss
+        outputs["loss"][LossDict.VALUE] = loss_value.item()
+        return outputs["loss"]
 
     def _update_metrics(
         self,
@@ -409,6 +415,12 @@ class Run:
         if tot_steps % self.tracker.log_frequency == 0:
             self.tracker.log_metric("lr", self._get_lr())
         return metric_values
+    
+    def _log_loss(self, loss_dict: dict):
+        value = loss_dict[LossDict.VALUE]
+        self.tracker.log_metric("loss", value)
+        for k, v in loss_dict[LossDict.COMPONENTS].items():
+            self.tracker.log_metric(f"loss_{k}", v)
 
     def train_epoch(
         self,
@@ -447,7 +459,7 @@ class Run:
             },
         )
         metrics = self.accelerator.prepare(metrics)
-        loss_avg = RunningAverage()
+        loss_avg = LossRunningAverage()
 
         # prepare substitutor
         substitutor = Substitutor(
@@ -502,7 +514,7 @@ class Run:
                     )
                     if isinstance(result_dict, RuntimeError):
                         break
-                    loss = self._backward(
+                    loss_dict = self._backward(
                         batch_idx, input_dict, result_dict, gt, loss_normalizer
                     )
                     outputs = result_dict[ResultDict.LOGITS]
@@ -513,8 +525,8 @@ class Run:
                         self._scheduler_step(SchedulerStepMoment.BATCH)
                         self.optimizer.zero_grad()
 
-                    loss_avg.update(loss.item())
-                    self.tracker.log_metric("loss", loss.item())
+                    loss_avg.update(loss_dict)
+                    self._log_loss(loss_dict)
                     glob_preds, glob_gt = to_global_multiclass(
                         input_dict["classes"], dataset_categories, preds, gt
                     )
@@ -547,7 +559,8 @@ class Run:
                     bar.set_postfix(
                         {
                             **metric_values,
-                            "loss": loss.item(),
+                            "loss": loss_dict[LossDict.VALUE],
+                            **{f"loss_{k}": v for k, v in loss_dict[LossDict.COMPONENTS].items()},
                             "lr": self._get_lr(),
                         }
                     )
@@ -566,7 +579,7 @@ class Run:
                 f"avg_{k}": v
                 for k, v in {**metrics.compute(), **metrics.compute()}.items()
             },
-            "avg_loss": loss_avg.compute(),
+            **loss_avg.compute(),
         }
         for k, v in metric_dict.items():
             logger.info(f"{k}: {v}")
@@ -837,7 +850,7 @@ class Run:
 
 class ParallelRun:
     slurm_command = "sbatch"
-    slurm_script = "slurm/launch_run"
+    slurm_script = "slurm/launch_run_single"
     slurm_script_first_parameter = "--parameters="
     slurm_outfolder = "out"
     out_extension = "out"

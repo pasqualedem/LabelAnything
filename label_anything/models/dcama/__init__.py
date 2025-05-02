@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 
 from label_anything.models.dcama.dcama import DCAMA
-from label_anything.utils.utils import ResultDict
+from label_anything.utils.utils import ResultDict, torch_dict_load
 from label_anything.data.utils import BatchKeys
 from label_anything.data.utils import get_preprocess_shape
 
@@ -12,7 +12,7 @@ from label_anything.data.utils import get_preprocess_shape
 def build_dcama(
     backbone: str = "swin",
     backbone_checkpoint: str = "checkpoints/backbone.pth",
-    model_checkpoint: str = "checkpoints/dcama.pth",
+    model_checkpoint: str = None,
     image_size: int = 384,
     custom_preprocess: bool = False,
 ):
@@ -20,10 +20,20 @@ def build_dcama(
         backbone, backbone_checkpoint, use_original_imgsize=False, image_size=image_size
     )
     params = model.state_dict()
-    state_dict = torch.load(model_checkpoint)
+    if model_checkpoint is None:
+        return model
+    state_dict = torch_dict_load(model_checkpoint)
 
-    for k1, k2 in zip(list(state_dict.keys()), params.keys()):
-        state_dict[k2] = state_dict.pop(k1)
+    if model_checkpoint.endswith(".pt"): # DCAMA original repo
+        for k1, k2 in zip(list(state_dict.keys()), params.keys()):
+            state_dict[k2] = state_dict.pop(k1)
+    elif model_checkpoint.endswith(".safetensors"): # LA Repo
+        try:
+            model.load_state_dict(state_dict)
+        except RuntimeError as e:
+            print("Error loading state_dict, trying to load without 'model.' prefix")
+            state_dict = {k[len("model."):]: v for k, v in state_dict.items()}
+            model.load_state_dict(state_dict)
 
     model.load_state_dict(state_dict)
     return model
@@ -67,19 +77,20 @@ class DCAMAMultiClass(DCAMA):
         x[BatchKeys.PROMPT_MASKS] = self._preprocess_masks(
             x[BatchKeys.PROMPT_MASKS], x[BatchKeys.DIMS]
         )
-        assert (
-            x[BatchKeys.PROMPT_MASKS].shape[0] == 1
-        ), "Only tested with batch size = 1"
+        # assert (
+        #     x[BatchKeys.PROMPT_MASKS].shape[0] == 1
+        # ), "Only tested with batch size = 1"
         logits = []
         # get logits for each class
+        B = x[BatchKeys.PROMPT_MASKS].shape[0]
         for c in range(x[BatchKeys.PROMPT_MASKS].size(2)):
             class_examples = x[BatchKeys.FLAG_EXAMPLES][:, :, c + 1]
-            n_shots = class_examples.sum().item()
+            n_shots = class_examples.sum(dim=1)
+            assert (n_shots == n_shots[0]).all(), "Only support same number of examples for each class"
+            n_shots = n_shots[0]
             class_input_dict = {
                 BatchKeys.IMAGES: x[BatchKeys.IMAGES],
-                BatchKeys.PROMPT_MASKS: x[BatchKeys.PROMPT_MASKS][:, :, c, ::][
-                    class_examples
-                ].unsqueeze(0),
+                BatchKeys.PROMPT_MASKS: rearrange(x[BatchKeys.PROMPT_MASKS][:, :, c, ::][class_examples], "(b k) h w -> b k h w", b=B),
             }
             logits.append(self.predict_mask_nshot(class_input_dict, n_shots))
         logits = torch.stack(logits, dim=1)
@@ -124,6 +135,9 @@ class DCAMAMultiClass(DCAMA):
                 for i, mask in enumerate(logits)
             ]
         )
+
+        # set padding to background class
+        logits[:, 0, :, :][logits[:, 0, :, :] == float("-inf")] = 0
         return logits
 
     def get_learnable_params(self, train_params):

@@ -66,7 +66,7 @@ def get_dataloaders(dataset_args, dataloader_args, num_processes):
 
     datasets_params = dataset_args.get("datasets")
     common_params = dataset_args.get("common")
-    possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums")
+    possible_batch_example_nums = dataloader_args.pop("possible_batch_example_nums", None)
     val_possible_batch_example_nums = dataloader_args.pop(
         "val_possible_batch_example_nums", possible_batch_example_nums
     )

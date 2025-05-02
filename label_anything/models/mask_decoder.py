@@ -9,10 +9,12 @@ from einops import rearrange, reduce
 import torch
 from torch import nn
 from torch.nn import functional as F
+from torchvision.transforms.functional import resize
 
 from typing import List, Tuple, Type
 from einops import rearrange, repeat
 
+from label_anything.data.utils import BatchKeys
 from label_anything.utils.utils import ResultDict
 
 from .common import AttentionMLPBlock, LayerNorm2d, MLPBlock
@@ -175,6 +177,7 @@ class MaskDecoderLam(nn.Module):
         segment_example_logits: bool = False,
         classification_layer_downsample_rate: int = 8,
         conv_upsample_stride: int = 2,
+        classification_levels: int = 1,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -196,6 +199,8 @@ class MaskDecoderLam(nn.Module):
             if classification_layer_downsample_rate > 1
             else 1
         )
+        
+        self.level_reducer = nn.Conv2d(classification_levels, 1, (3, 3), padding="same") if classification_levels > 1 else None
 
         if conv_upsample_stride > 1 or classification_layer_downsample_rate > 1:
             self.output_upscaling = nn.Sequential(
@@ -213,7 +218,7 @@ class MaskDecoderLam(nn.Module):
                     kernel_size=conv_upsample_stride,
                     stride=conv_upsample_stride,
                 ),
-            ) 
+            )
             self.class_mlp = MLP(
                 transformer_dim,
                 transformer_dim,
@@ -224,9 +229,9 @@ class MaskDecoderLam(nn.Module):
         else:
             self.output_upscaling = nn.Identity()
             self.class_mlp = nn.Identity()
-            
+
         self.transformer = transformer
-        
+
         self.spatial_convs = None
         if spatial_convs is not None:
             module_list = []
@@ -248,44 +253,48 @@ class MaskDecoderLam(nn.Module):
                     module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
 
-    def _get_class_embeddings(self, class_embeddings):
+    def _get_pe_result(self, pe_result, flag_examples):
+        flag_examples = (
+            flag_examples
+            if BatchKeys.FLAG_EXAMPLES not in pe_result
+            else pe_result[BatchKeys.FLAG_EXAMPLES]
+        )
         if self.segment_example_logits:
             class_embeddings = rearrange(
-                class_embeddings[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
+                pe_result[ResultDict.EXAMPLES_CLASS_EMBS], "b n c d -> b (n c) d"
             )
+            embedding_mask = rearrange(flag_examples, "b m c -> b (m c)")
         else:
-            class_embeddings = class_embeddings[ResultDict.CLASS_EMBS]
-        return class_embeddings
+            class_embeddings = pe_result[ResultDict.CLASS_EMBS]
+            embedding_mask = flag_examples.sum(dim=1).bool().int()
+        return class_embeddings, flag_examples, embedding_mask
 
     def _upscale(self, query_embeddings, class_embeddings):
         class_embeddings = self.class_mlp(class_embeddings)
         upscaled_embeddings = self.output_upscaling(query_embeddings)
         return upscaled_embeddings, class_embeddings
-    
+
     def _spatial_convs(self, query_embeddings):
         if self.spatial_convs is not None:
             query_embeddings = self.spatial_convs(query_embeddings)
         return query_embeddings
-    
+
     def _classify(self, query_embeddings, class_embeddings, flag_examples):
         b, d, h, w = query_embeddings.shape
         b, n, c = flag_examples.shape
-        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(
-            b, -1, h, w
-        )
+        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(b, -1, h, w)
         if self.segment_example_logits:
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
             seg[flag_examples.logical_not()] = float("-inf")
             seg = seg.max(dim=1).values
         return seg
-        
 
     def forward(
         self,
         query_embeddings: torch.Tensor,
         support_embeddings: torch.Tensor,
         image_pe: torch.Tensor,
-        class_embeddings: torch.Tensor,
+        pe_result: dict,
         flag_examples: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -300,18 +309,35 @@ class MaskDecoderLam(nn.Module):
           torch.Tensor: batched predicted segmentations
         """
         b, d, h, w = query_embeddings.shape
-        class_embeddings = self._get_class_embeddings(class_embeddings)
+        class_embeddings, flag_examples, embedding_mask = self._get_pe_result(
+            pe_result, flag_examples
+        )
 
         class_embeddings, query_embeddings = self.transformer(
-            query_embeddings, image_pe, class_embeddings
+            query_embeddings, image_pe, class_embeddings, embedding_mask
         )
         query_embeddings = rearrange(query_embeddings, "b (h w) c -> b c h w", h=h)
+
+        if self.level_reducer:
+            cls1 = self._classify(query_embeddings, class_embeddings, flag_examples)
 
         upscaled_embeddings, class_embeddings = self._upscale(
             query_embeddings, class_embeddings
         )
         upscaled_embeddings = self._spatial_convs(upscaled_embeddings)
-        return self._classify(upscaled_embeddings, class_embeddings, flag_examples)
+        
+        cls0 = self._classify(upscaled_embeddings, class_embeddings, flag_examples)
+        
+        if not self.level_reducer:
+            return cls0
+        
+        h0, w0 = cls0.shape[-2:]
+        cls1 = resize(cls1, (h0, w0))
+        seg = rearrange(torch.stack([cls0, cls1]), "l b c h w -> (b c) l h w")
+        seg = self.level_reducer(seg)
+        seg = rearrange(seg, "(b c) 1 h w -> b c h w", b=b)
+        return seg
+        
 
 
 class AffinityDecoder(nn.Module):
@@ -609,7 +635,7 @@ class MultiLevelMaskDecoder(nn.Module):
         self.mask_decoders = mask_decoders
         self.segment_example_logits = segment_example_logits
         max_embed_dim = max(embed_dims)
-        
+
         self.feature_maps_projectors = nn.ModuleList(
             [
                 nn.Conv2d(
@@ -629,19 +655,17 @@ class MultiLevelMaskDecoder(nn.Module):
                 for embed_dim in embed_dims
             ]
         )
-        
+
     def _classify(self, query_embeddings, class_embeddings, flag_examples):
         b, d, h, w = query_embeddings.shape
         _, c, _ = class_embeddings.shape
-        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(
-            b, -1, h, w
-        )
+        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(b, -1, h, w)
         if self.segment_example_logits:
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
             seg[flag_examples.logical_not()] = float("-inf")
             seg = seg.max(dim=1).values
         return seg
-        
+
     def forward(
         self,
         query_embeddings: list[torch.Tensor],
@@ -663,35 +687,62 @@ class MultiLevelMaskDecoder(nn.Module):
         """
         decoder_results = []
         # Turn dict of lists into list of dicts
-        class_embeddings = [{k: v[i] for k, v in class_embeddings.items()} for i in range(len(query_embeddings))]
-        for lv_query_embeddings, lv_support_embeddings, lv_image_pe, lv_class_embeddings, mask_decoder in zip(
-            query_embeddings, support_embeddings, image_pe, class_embeddings, self.mask_decoders
+        class_embeddings = [
+            {k: v[i] for k, v in class_embeddings.items()}
+            for i in range(len(query_embeddings))
+        ]
+        for (
+            lv_query_embeddings,
+            lv_support_embeddings,
+            lv_image_pe,
+            lv_class_embeddings,
+            mask_decoder,
+        ) in zip(
+            query_embeddings,
+            support_embeddings,
+            image_pe,
+            class_embeddings,
+            self.mask_decoders,
         ):
             b, d, h, w = lv_query_embeddings.shape
-            lv_class_embeddings = mask_decoder._get_class_embeddings(lv_class_embeddings)
+            lv_class_embeddings = mask_decoder._get_pe_result(
+                lv_class_embeddings
+            )
 
             lv_class_embeddings, lv_query_embeddings = mask_decoder.transformer(
                 lv_query_embeddings, lv_image_pe, lv_class_embeddings
             )
-            lv_query_embeddings = rearrange(lv_query_embeddings, "b (h w) c -> b c h w", h=h)
+            lv_query_embeddings = rearrange(
+                lv_query_embeddings, "b (h w) c -> b c h w", h=h
+            )
 
             upscaled_embeddings, lv_class_embeddings = mask_decoder._upscale(
                 lv_query_embeddings, lv_class_embeddings
             )
             upscaled_embeddings = mask_decoder._spatial_convs(upscaled_embeddings)
             decoder_results.append((upscaled_embeddings, lv_class_embeddings))
-        b, d, h, w = decoder_results[0][0].shape # Get max h, w
+        b, d, h, w = decoder_results[0][0].shape  # Get max h, w
         feature_maps, lv_class_embeddings = zip(*decoder_results)
         # Upscale feature maps
-        feature_maps = [F.interpolate(fm, size=(h, w), mode="bilinear") for fm in feature_maps]
+        feature_maps = [
+            F.interpolate(fm, size=(h, w), mode="bilinear") for fm in feature_maps
+        ]
         # Project feature maps and class embeddings to the same dimension
-        feature_maps = [projector(fm) for fm, projector in zip(feature_maps, self.feature_maps_projectors)]
-        lv_class_embeddings = [projector(ce) for ce, projector in zip(lv_class_embeddings, self.class_embeddings_projectors)]
-        
+        feature_maps = [
+            projector(fm)
+            for fm, projector in zip(feature_maps, self.feature_maps_projectors)
+        ]
+        lv_class_embeddings = [
+            projector(ce)
+            for ce, projector in zip(
+                lv_class_embeddings, self.class_embeddings_projectors
+            )
+        ]
+
         # Sum feature maps and class embeddings
         feature_maps = sum(feature_maps)
         lv_class_embeddings = sum(lv_class_embeddings)
-        
+
         # Classify
         return self._classify(feature_maps, lv_class_embeddings, flag_examples)
 

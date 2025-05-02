@@ -1,5 +1,13 @@
 #!/bin/bash
 
-source .venv/bin/activate
+export HF_HOME=$SCRATCH
+export TORCH_HOME=$SCRATCH
+
+echo "HF_HOME: $HF_HOME"
+echo "TORCH_HOME: $TORCH_HOME"
+
+conda init zsh
+conda activate label-anything
+
 export TMPDIR=/leonardo_work/IscrC_PENELOPE/tmp/
 python main.py generate_embeddings $@

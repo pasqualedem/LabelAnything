@@ -89,6 +89,7 @@ class WandBLogger:
         train_image_log_frequency: int = 1000,
         val_image_log_frequency: int = 1000,
         test_image_log_frequency: int = 1000,
+        ignore_index = -100
     ):
         """
         :param project_name: The WandB project name.
@@ -172,6 +173,7 @@ class WandBLogger:
         self.save_logs_wandb = save_logs_remote
         self.context = ""
         self.sequences = {}
+        self.ignore_index = ignore_index
                 
     def _resume(self, offline_directory, run_id, checkpoint_type="latest"):
         if not offline_directory:
@@ -606,6 +608,8 @@ class WandBLogger:
             cur_sample_categories[0] = "background"
 
             sample_gt = gt[b, : dims[b, 0, 0], : dims[b, 0, 1]].detach().cpu().numpy()
+            # Remove ignore index
+            sample_gt[sample_gt == self.ignore_index] = 0
 
             sample_pred = pred[b, : dims[b, 0, 0], : dims[b, 0, 1]].detach().cpu().numpy()
 

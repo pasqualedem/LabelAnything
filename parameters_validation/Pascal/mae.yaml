@@ -60,6 +60,7 @@ parameters:
         n_shots: [5]
     common:
       remove_small_annotations: [True]
+      ignore_borders: [True]
       do_subsample: [False]
       load_embeddings: [True]
       load_gts: [False]

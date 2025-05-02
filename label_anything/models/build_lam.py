@@ -15,7 +15,7 @@ from label_anything.models.common import SAM_EMBED_DIM
 from label_anything.models.hfhub import has_config
 from label_anything.models.lam import MultiLevelLam
 from label_anything.models.mask_decoder import AffinityDecoder, MultiLevelMaskDecoder
-from label_anything.models.prompt_encoder import MultiLevelPromptEncoder
+from label_anything.models.prompt_encoder import MultiLevelPromptEncoder, PromptImagePoolEncoder
 from label_anything.models.transformer import AffinityTransformer
 from label_anything.models.pyramids import PyramidNeck
 from label_anything.utils.utils import load_state_dict, torch_dict_load
@@ -98,6 +98,7 @@ def _build_lam(
     checkpoint=None,
     use_sam_checkpoint=False,
     use_vit_sam_neck=True,
+    ignore_encoder_checkpoint=False,
     use_vit=True,
     image_embed_dim=SAM_EMBED_DIM,
     embed_dim=SAM_EMBED_DIM,
@@ -113,12 +114,16 @@ def _build_lam(
     classification_layer_downsample_rate: int = 8,
     use_support_features_in_prompt_encoder: bool = True,
     fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer" or "IdentityTransformer"
+    classification_levels=1,
     few_type="Prototype",  # "Prototype" or "Affinity" or "PrototypeAffinity"
     class_fusion="sum",
+    prompt_encoder=None, # None or TokenPool
     transformer_keys_are_images=True,
     transformer_feature_size=None,
     class_encoder=None,
     segment_example_logits=False,
+    embeddings_per_example=None,
+    embedding_extraction=None,
     dropout: float = 0.0,
     binary=False,
     custom_preprocess=True,
@@ -135,6 +140,11 @@ def _build_lam(
         class_encoder = cls(**params)
     else:
         class_encoder = lambda x, y: (x, y)
+    
+    if segment_example_logits and embeddings_per_example is None:
+        embeddings_per_example = 1
+    if embeddings_per_example and not segment_example_logits:
+        segment_example_logits = True
 
     if not is_pyramids:
         neck = (
@@ -167,11 +177,13 @@ def _build_lam(
         )
     lam_class = BinaryLam if binary else Lam
 
+    prompt_encoder = PromptImagePoolEncoder if prompt_encoder == "TokenPool" else PromptImageEncoder
+
     lam = lam_class(
         image_size=image_size,
         image_encoder=vit,
         neck=neck,
-        prompt_encoder=PromptImageEncoder(
+        prompt_encoder=prompt_encoder(
             embed_dim=embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
             input_image_size=(image_size, image_size),
@@ -191,6 +203,8 @@ def _build_lam(
                 dropout=dropout,
             ),
             class_encoder=class_encoder,
+            embeddings_per_example=embeddings_per_example,
+            embedding_extraction=embedding_extraction,
         ),
         mask_decoder=build_mask_decoder(
             embed_dim=embed_dim,
@@ -203,6 +217,7 @@ def _build_lam(
             dropout=dropout,
             few_type=few_type,
             class_fusion=class_fusion,
+            classification_levels=classification_levels,
             transformer_keys_are_images=transformer_keys_are_images,
         ),
         custom_preprocess=custom_preprocess,
@@ -214,7 +229,7 @@ def _build_lam(
         if use_sam_checkpoint:
             lam.init_pretrained_weights(state_dict)
         else:
-            lam = load_state_dict(lam, state_dict)
+            lam = load_state_dict(lam, state_dict, ignore_encoder_missing_keys=ignore_encoder_checkpoint)
     return lam
 
 
@@ -231,6 +246,7 @@ def build_mask_decoder(
     dropout=0.0,
     class_fusion="sum",
     prototype_merge=False,
+    classification_levels=1,
     transformer_keys_are_images=True,
 ):
     if few_type == "Prototype":
@@ -250,6 +266,7 @@ def build_mask_decoder(
             segment_example_logits=segment_example_logits,
             classification_layer_downsample_rate=classification_layer_downsample_rate,
             conv_upsample_stride=conv_upsample_stride,
+            classification_levels=classification_levels,
             dropout=dropout,
         )
     elif few_type == "Affinity" or few_type == "PrototypeAffinity":

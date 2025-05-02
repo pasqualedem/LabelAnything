@@ -7,14 +7,14 @@
 import numpy as np
 import torch
 from torch import nn
-from einops import rearrange, repeat
+from einops import rearrange, reduce, repeat
 
 from typing import Any, Optional, Tuple, Type
 
 from .common import Attention, LayerNorm2d, MLPBlock, AttentionMLPBlock
-from .transformer import TwoWayTransformer
+from .transformer import TwoWayTransformer, OneWayAttentionBlock
 
-from label_anything.data.utils import Label
+from label_anything.data.utils import BatchKeys, Label
 from label_anything.utils.utils import ResultDict
 
 
@@ -275,6 +275,122 @@ class RandomMatrixEncoder(nn.Module):
         return self.forward_with_rows(
             dense_embeddings, sparse_embeddings, selected_rows
         )
+        
+
+class EmbeddingTransformer(nn.Module):
+    def __init__(self, emb_dim, num_embeddings, num_layers=2):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            OneWayAttentionBlock(embedding_dim=emb_dim, num_heads=8) for _ in range(num_layers)
+        ])
+        self.embeddings = nn.Embedding(num_embeddings=num_embeddings, embedding_dim=emb_dim)
+        self.embedding_dropout = 0.2
+        
+    def forward(self, src, image_pe, flag_examples):
+        b, m, c = flag_examples.shape
+        h, w = src.shape[-2:]
+        n = self.embeddings.weight.shape[0]
+        embeddings = repeat(self.embeddings.weight, "n d -> (b c) n d", b=b, c=c)
+        key_mask = repeat(flag_examples, "b m c -> (b c) (m h w)", h=h, w=w)
+        src = rearrange(src, "(b m c) d h w -> (b c) (m h w) d", b=b, m=m)
+        for layer in self.layers:
+            embeddings = layer(embeddings, src, key_mask=key_mask, query_pe=torch.zeros_like(embeddings))
+            
+        flag_embeddings = flag_examples.sum(dim=1).bool().int()
+        flag_embeddings = repeat(flag_embeddings, " b c -> b n c", n=n)
+        if self.training:
+            included = torch.rand(n).to(flag_embeddings.device) > self.embedding_dropout
+            if not included.any():  # Check if all are False
+                random_index = torch.randint(0, n, (1,)).item()  # Randomly select an index
+                included[random_index] = True  # Set it to True
+            included = rearrange(included, "n -> 1 n 1")
+            flag_embeddings = flag_embeddings * included
+        embeddings = rearrange(embeddings, "(b c) n d -> b n c d", c=c)
+
+        return {
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            BatchKeys.FLAG_EXAMPLES: flag_embeddings,
+        }
+        
+class GuidedPooler(nn.Module):
+    def __init__(self, emb_dim, num_embeddings):
+        super().__init__()
+        self.num_embeddings = num_embeddings
+        self.attention = nn.MultiheadAttention(emb_dim, 8)
+        
+        self.fg_chooser = nn.Sequential(
+            nn.Conv2d(emb_dim, emb_dim // 2, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 8, num_embeddings+1, (1, 1), stride=1, padding=0)
+        )
+
+        self.bg_chooser = nn.Sequential(
+            nn.Conv2d(emb_dim, emb_dim // 2, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 2, emb_dim // 4, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 4, emb_dim // 8, (1, 1), stride=1, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(emb_dim // 8, num_embeddings+1, (1, 1), stride=1, padding=0)
+        )
+
+    
+    def act(self, x):
+        tau = 0.5
+        return torch.nn.functional.gumbel_softmax(x, tau=tau, hard=False)
+        
+    def forward(self, src, image_pe, flag_examples):
+        fg_flag_examples = flag_examples.clone()
+        b, m, c  = fg_flag_examples.shape
+        h, w = src.shape[-2:]
+        
+        # Remove bg
+        fg_flag_examples = fg_flag_examples[:, :, 1:]
+        src = src + image_pe
+        src = rearrange(src, "(b m c) d ... -> b m c d ...", b=b, m=m)
+        fg_src = src[:, :, 1:]
+        bg_src = fg_src.mean(dim=2).unsqueeze(2)
+        bg_flag_examples = fg_flag_examples.sum(dim=2).bool().int().unsqueeze(2)
+        fg_src = rearrange(fg_src, "b m c d h w -> (b m c) (h w) d", b=b, m=m)
+        bg_src = rearrange(bg_src, "b m c d h w -> (b m c) (h w) d", b=b, m=m, c=1)
+        
+        fg_src, _ = self.attention(fg_src, fg_src, fg_src)
+        bg_src, _ = self.attention(bg_src, bg_src, bg_src)
+        
+        fg_src = rearrange(fg_src, "(b m c) (h w) d -> (b m c) d h w", b=b, m=m, h=h)
+        bg_src = rearrange(bg_src, "(b m c) (h w) d -> (b m c) d h w", b=b, m=m, c=1, h=h)
+        
+        fg_mask = self.fg_chooser(fg_src)
+        bg_mask = self.bg_chooser(bg_src)
+        
+        fg_mask = rearrange(self.act(fg_mask), "bmc n ... -> n bmc 1 ...")[1:]
+        bg_mask = rearrange(self.act(bg_mask), "bmc n ... -> n bmc 1 ...")[1:]
+                
+        fg_src = repeat(fg_src, "... -> n ...", n=self.num_embeddings)
+        bg_src = repeat(bg_src, "... -> n ...", n=self.num_embeddings)
+        
+        fg = fg_mask * fg_src
+        bg = bg_mask * bg_src
+        
+        fg = nn.functional.adaptive_avg_pool2d(fg, (1, 1))
+        bg = nn.functional.adaptive_avg_pool2d(bg, (1, 1))
+        flag_examples = torch.cat([bg_flag_examples, fg_flag_examples], dim=2)
+        flag_examples = repeat(flag_examples, "b m c -> b (n m) c", n=self.num_embeddings)
+        
+        fg = rearrange(fg, "n (b m c) d 1 1 -> b (n m) c d", b=b, m=m, c=(c - 1))
+        bg = rearrange(bg, "n (b m c) d 1 1 -> b (n m) c d", b=b, m=m, c=1)
+        
+        embeddings = torch.cat([bg, fg], dim=2)
+        
+        return {
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            ResultDict.MASK_EMBEDDINGS: (bg_mask, fg_mask)
+        }
 
 
 class PromptImageEncoder(PromptEncoder):
@@ -292,6 +408,8 @@ class PromptImageEncoder(PromptEncoder):
         example_attention: bool = False,
         activation: Type[nn.Module] = nn.GELU,
         use_support_features: bool = True,
+        embeddings_per_example: int = 1,
+        embedding_extraction: str = None,
         dropout: float = 0.0,
     ) -> None:
         """
@@ -315,11 +433,18 @@ class PromptImageEncoder(PromptEncoder):
         num_heads: int = 8
         attention_downsample_rate: int = 2
         self.num_point_embeddings: int = 4  # pos/neg point + 2 box corners
+        self.embeddings_per_example = embeddings_per_example
         mlp_dim: int = 2048
 
         self.transformer = transformer
         self.class_encoder = class_encoder
         self.use_support_features = use_support_features
+        if embedding_extraction == "pooler":
+            self.embedding_extraction = GuidedPooler(emb_dim=embed_dim, num_embeddings=embeddings_per_example)
+        elif embedding_extraction == "cross_attention":
+            self.embedding_extraction = EmbeddingTransformer(emb_dim=embed_dim, num_embeddings=embeddings_per_example, num_layers=2)
+        else:
+            self.embedding_extraction = None            
 
         self.sparse_embedding_attention = AttentionMLPBlock(
             embed_dim=embed_dim,
@@ -375,7 +500,15 @@ class PromptImageEncoder(PromptEncoder):
                 act=activation,
                 dropout=dropout,
             )
-
+            
+        if not self.use_support_features:
+            self.proto_chooser = nn.Sequential(
+                nn.Conv2d(embed_dim, embed_dim // 8, (1, 1), stride=1, padding=0),
+                nn.ReLU(),
+                nn.Conv2d(embed_dim // 8, 1, (1, 1), stride=1, padding=0),
+                nn.Sigmoid(),
+            )
+                 
         self.not_a_mask_embed = nn.Embedding(
             1, embed_dim
         )  # For classes/examples with missing masks
@@ -582,6 +715,39 @@ class PromptImageEncoder(PromptEncoder):
             embeddings = rearrange(embeddings, "b (m c) d -> b m c d", c=c)
         embeddings = self.class_projector_out(embeddings)
         return embeddings
+    
+    def _obtain_embeddings(self, src, image_pe, flag_examples):
+        _, d, h, w = src.shape
+        b, m, c = flag_examples.shape
+        if self.embedding_extraction:
+            class_embeddings = None
+            return self.embedding_extraction(src, image_pe, flag_examples)
+        
+        if self.embeddings_per_example and self.embeddings_per_example > 1:
+            num_embeddings = int(torch.sqrt(torch.tensor(self.embeddings_per_example)))
+            embeddings = nn.functional.adaptive_avg_pool2d(src, (num_embeddings, num_embeddings)) # (BMC, D, num_embeddings, num_embeddings)
+            embeddings = rearrange(embeddings, "(b m c) d h w -> b (m h w) c d", b=b, m=m, c=c, d=d)
+            m = m * num_embeddings * num_embeddings
+            flag_examples = repeat(flag_examples, "b m c -> b (m h w) c", h=num_embeddings, w=num_embeddings)
+        else:
+            src = rearrange(src, "b d h w -> b d (h w)")
+            embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
+            embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
+        embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
+
+        # Average over examples removing padding embeddings
+        masked_embeddings = embeddings * flag_examples.unsqueeze(-1)
+        normalizer = flag_examples.clone().unsqueeze(-1).sum(dim=1).float()
+        normalizer[normalizer == 0] = (
+            1  # Put 1 in padding to avoid division by 0 (logits will be put to -inf)
+        )
+
+        class_embeddings = masked_embeddings.sum(dim=1) / normalizer
+        return {
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
+            ResultDict.CLASS_EMBS: class_embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings
+        }
 
     def forward(
         self,
@@ -646,10 +812,23 @@ class PromptImageEncoder(PromptEncoder):
         src = self.sparse_dense_fusion(
             src, pos_src, sparse_embeddings, chunk_size=chunk_size
         )
-        src = rearrange(src, "b d h w -> b d (h w)")
-        embeddings = nn.functional.adaptive_avg_pool1d(src, (1)).squeeze(2)  # (BMC, D)
-        embeddings = rearrange(embeddings, "(b m c) d -> b m c d", b=b, m=m, c=c)
+        if not self.use_support_features:
+            mask = self.proto_chooser(src)
+            # mask = rearrange(mask, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
+            src = repeat(image_embeddings, "b m d h w -> (b m c) d h w", c=c)
+            src = src * mask
+            
+        embeddings_dict = self._obtain_embeddings(
+            src, pos_src, flag_examples
+        )
+        return {
+            **embeddings_dict,
+            ResultDict.EXAMPLES_CLASS_SRC: src,
+        }
 
+
+class PromptImagePoolEncoder(PromptImageEncoder):
+    def _obtain_embeddings(self, embeddings, flag_examples):
         embeddings = self.prompt_class_information_merge(embeddings, flag_examples)
 
         # Average over examples removing padding embeddings
@@ -661,10 +840,80 @@ class PromptImageEncoder(PromptEncoder):
 
         class_embeddings = masked_embeddings.sum(dim=1) / normalizer
         return {
+            BatchKeys.FLAG_EXAMPLES: flag_examples,
             ResultDict.CLASS_EMBS: class_embeddings,
-            ResultDict.EXAMPLES_CLASS_SRC: src,
-            ResultDict.EXAMPLES_CLASS_EMBS: embeddings,
+            ResultDict.EXAMPLES_CLASS_EMBS: embeddings
         }
+    
+    def forward(
+        self,
+        image_embeddings: torch.Tensor,
+        points: Optional[Tuple[torch.Tensor, torch.Tensor]],
+        boxes: Optional[torch.Tensor],
+        masks: Optional[torch.Tensor],
+        flag_examples: Optional[torch.Tensor],
+        chunk_size=None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Embeds different types of prompts, returning class embeddings
+
+        Arguments:
+          image_embeddings (torch.Tensor): the embeddings from the image encoder
+          points (tuple(torch.Tensor, torch.Tensor) or none): point coordinates
+            and labels to embed (B, M, C, 2)
+          boxes (torch.Tensor or none): boxes to embed (B, M, C, 2, 2)
+          masks (torch.Tensor or none): masks to embed (B, M, C, H, W)
+          flag_examples (torch.Tensor or none): flags to indicate which examples (B, M, C)
+
+        Returns:
+          torch.Tensor: sparse embeddings for the points and boxes, with shape
+            BxNx(embed_dim), where N is determined by the number of input points
+            and boxes.
+          torch.Tensor: dense embeddings for the masks, in the shape
+            Bx(embed_dim)x(embed_H)x(embed_W)
+        """
+        sparse_embeddings, dense_embeddings = self.embed_points_masks(
+            points, boxes, masks, chunk_size=chunk_size
+        )
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m c) n d")
+
+        b, m, c, d, h, w = dense_embeddings.shape
+        dense_embeddings = rearrange(dense_embeddings, "b m c d h w -> (b m c) d h w")
+
+        if image_embeddings.shape[-2:] != dense_embeddings.shape[-2:]:
+            dense_embeddings = nn.functional.interpolate(
+                dense_embeddings,
+                size=image_embeddings.shape[-2:],
+                mode="bilinear",
+                align_corners=False,
+            )
+        dense_embeddings = rearrange(dense_embeddings, "(b m c) d h w -> b m c d h w", b=b, m=m, c=c)
+        sparse_embeddings = rearrange(sparse_embeddings, "(b m c) n d -> b m c n d", b=b, m=m, c=c)
+
+        if self.use_support_features:
+            dense_embeddings, sparse_embeddings = self.class_encoder(dense_embeddings, sparse_embeddings)
+            dense_embeddings = dense_embeddings.sum(dim=2)
+            src = image_embeddings + dense_embeddings
+        else:
+            raise NotImplementedError(
+                "PromptImagePoolEncoder does not support use_support_features=False"
+            )
+
+        # Run the transformer to fuse the dense embeddings and sparse embeddings
+        src = rearrange(src, "b m d h w -> (b m) d h w")
+        sparse_embeddings = rearrange(sparse_embeddings, "b m c n d -> (b m) (c n) d")
+        pos_src = torch.repeat_interleave(
+            self.get_dense_pe(), src.shape[0], dim=0
+        )
+        embeddings, src = self.transformer(src, pos_src, sparse_embeddings)
+        embeddings = reduce(embeddings, "(b m) (c n) d -> b m c d", b=b, c=c, reduction="mean")
+            
+        embeddings_dict = self._obtain_embeddings(embeddings, flag_examples)
+        return {
+            **embeddings_dict,
+            ResultDict.EXAMPLES_CLASS_SRC: src,
+        }
+
 
 
 class MultiLevelPromptEncoder(nn.Module):

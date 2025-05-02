@@ -15,7 +15,7 @@ from label_anything.data import utils
 from label_anything.data.utils import AnnFileKeys, PromptType, BatchKeys, flags_merge
 from accelerate import Accelerator
 
-from label_anything.demo.utils import debug_write
+from label_anything.demo.utils import COLORS
 from label_anything.experiment.utils import WrapperModule
 from label_anything.logger.utils import take_image
 
@@ -93,18 +93,23 @@ def get_image(image_tensor):
     return Image.fromarray(unnormalized_image)
 
 
-def draw_points(img: Image, points: torch.Tensor, colors):
+def draw_points(img: Image, points: torch.Tensor, colors, flag_points=None):
     img = np.array(img)
     
-    for i, cat in enumerate(points):
-        for point in cat:
+    if flag_points is None:
+        flag_points = torch.ones_like(points, dtype=torch.bool)[:, :, 0]
+    
+    for i, (cat, flag_cat) in enumerate(zip(points, flag_points)):
+        for point, flag in zip(cat, flag_cat):
+            if not flag:
+                continue
             x, y = point
             x, y = int(x), int(y)
             img = cv2.circle(img, (x, y), 5, colors[i], -1)
     return img
 
 
-def draw_masks(img: Image, masks: torch.Tensor, colors):
+def draw_masks(img: Image, masks: torch.Tensor, colors, flag_masks=None):
     # here masks is a dict having category names as keys
     # associated to a list of binary masks
     orig_shape = img.size
@@ -121,17 +126,22 @@ def draw_masks(img: Image, masks: torch.Tensor, colors):
     return resize(Image.fromarray(overlap), orig_shape)
 
 
-def draw_boxes(img: Image, boxes: torch.Tensor, colors):
+def draw_boxes(img: Image, boxes: torch.Tensor, colors, flag_bboxes=None):
     img = np.array(img)
+
+    if flag_bboxes is None:
+        flag_bboxes = torch.ones_like(boxes, dtype=torch.bool)[:, :, 0]
     
-    for i, cat in enumerate(boxes):
-        for box in cat:
+    for i, (cat, flag_cat) in enumerate(zip(boxes, flag_bboxes)):
+        for box, flag in zip(cat, flag_cat):
+            if not flag:
+                continue
             x1, y1, x2, y2 = box
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
             img = cv2.rectangle(img, (x1, y1), (x2, y2), colors[i], 2)
     return img
 
-import streamlit as st
+
 def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
     masked_image = img.copy()
     for i in range(1, num_classes):
@@ -145,11 +155,12 @@ def draw_seg(img: Image, seg: torch.Tensor, colors, num_classes):
     return cv2.addWeighted(np.array(img), 0.6, masked_image, 0.4, 0)
 
 
-def draw_all(img: Image, masks, boxes, points, colors):
-    img = draw_masks(img, masks, colors)
-    img = draw_boxes(img, boxes, colors)
+def draw_all(img: Image, masks, boxes, points, colors, flag_masks=None, flag_bboxes=None, flag_points=None):
+    
+    img = draw_masks(img, masks, colors, flag_masks=flag_masks)
+    img = draw_boxes(img, boxes, colors, flag_bboxes=flag_bboxes)
     img = Image.fromarray(img)
-    img = draw_points(img, points, colors)
+    img = draw_points(img, points, colors, flag_points=flag_points)
     img = Image.fromarray(img)
     return img
 
@@ -181,8 +192,8 @@ def plot_all(dataset, batch, colors):
     draw_all(
         get_image(unbatched["images"][i]),
         unbatched["prompt_masks"][i],
-        unbatched["prompt_bboxes"][i],
-        unbatched["prompt_points"][i],
+        unbatched["prompt_bboxes"][i][unbatched["flag_bboxes"][i]],
+        unbatched["prompt_points"][i][unbatched["flag_points"][i]],
         colors
     )
     for i in range(unbatched["images"].shape[0])
@@ -190,35 +201,82 @@ def plot_all(dataset, batch, colors):
     plot_images(images, unbatched["classes"], dataset.categories["coco"])
     
     
-def plot_seg_gt(input, seg, gt, colors, dims, classes):
+def unnormalize(image_tensor):
+    MEAN = torch.tensor([123.675, 116.280, 103.530], device=image_tensor.device) / 255
+    STD = torch.tensor([58.395, 57.120, 57.375], device=image_tensor.device) / 255
+    unnormalized_image = (image_tensor * STD[:, None, None]) + MEAN[:, None, None]
+    unnormalized_image = (unnormalized_image * 255).byte()
+    return unnormalized_image
+
+
+def create_rgb_segmentation(segmentation, num_classes=None):
+    """
+    Convert a segmentation map to an RGB visualization using a precise colormap.
+
+    Args:
+        segmentation (torch.Tensor): Segmentation map of shape [B, H, W] where
+                                      each pixel contains class labels (natural numbers).
+        num_classes (int): The number of unique classes in the segmentation.
+
+    Returns:
+        torch.Tensor: RGB visualization of shape [B, 3, H, W].
+    """
+    if len(segmentation.shape) == 4:
+        segmentation = segmentation.argmax(dim=1)
+    if num_classes is None:
+        num_classes = segmentation.max().item() + 1
+    
+    # Define a precise colormap for specific classes
+    colormap = torch.tensor(COLORS, dtype=torch.uint8)  # Ensure dtype is uint8
+
+    # Initialize an empty tensor for RGB output
+    B, H, W = segmentation.shape
+    rgb_segmentation = torch.zeros((B, 3, H, W), dtype=torch.uint8)
+
+    # Loop through each class and assign the corresponding RGB color
+    for class_id in range(num_classes):
+        # Create a mask for the current class
+        class_mask = (segmentation == class_id).unsqueeze(1)  # Shape: [B, 1, H, W]
+        # Assign the corresponding color to the rgb_segmentation
+        rgb_segmentation += class_mask * colormap[class_id].view(1, 3, 1, 1)  # Broadcasting
+
+    return rgb_segmentation
+    
+    
+def plot_seg_gt(input, seg, gt, colors, dims, classes, custom_preprocess=False, resize_to_model_shape=True):
     query_dim = dims[0, 0]
     num_classes = len(classes) + 1
-    image = take_image(get_image(input["images"][0, 0]))
-    segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes)
-    gtmask = draw_seg(image, gt, colors, num_classes=num_classes)
-    blank_seg = Image.fromarray(np.zeros_like(segmask))
-    blank_gt = Image.fromarray(np.zeros_like(gtmask))
-    blank_segmask = draw_seg(
-        blank_seg, seg.cpu(), colors, num_classes=num_classes
-    )
-    blank_gtmask = draw_seg(
-        blank_gt, gt, colors, num_classes=num_classes
-    )
-    plots = [segmask, gtmask, blank_segmask, blank_gtmask, image, image]
+    seg = seg.cpu()
+    dims = dims.cpu()
+    image = unnormalize(input["images"][0, 0]).cpu()
+    model_image_size = image.shape[-2:]
+    if custom_preprocess:
+        image = take_image(image, dims=query_dim, input_shape=1024)
+    else:
+        image = resize(image, (query_dim[0], query_dim[1]))
+        seg = seg[:, : query_dim[0], : query_dim[1]]
+        gt = gt[:, : query_dim[0], : query_dim[1]]
+    rgb_seg = create_rgb_segmentation(seg, num_classes=num_classes+1)[0]
+    rgb_gt = create_rgb_segmentation(gt, num_classes=num_classes+1)[0]
+    
+    blended_image_pred = image.clone()
+    blended_image_pred[rgb_seg > 0] = rgb_seg[rgb_seg > 0]
+    
+    blended_image_gt = image.clone()
+    blended_image_gt[rgb_gt > 0] = rgb_gt[rgb_gt > 0]
+    
+    plots = [image, rgb_gt, blended_image_gt, rgb_seg, blended_image_pred]
+    
+    if resize_to_model_shape:
+        for i in range(len(plots)):
+            plots[i] = resize(plots[i], model_image_size)
     titles = [
-        "Predicted",
+        "Image",
         "Ground Truth",
-        "Predicted",
-        "Ground Truth",
-        "Original",
-        "Original",
+        "Blended GT",
+        "Pred",
+        "Blended Pred",
     ]
-
-    subplots = plt.subplots(3, 2, figsize=(20, 30))
-    for i, (plot, title) in enumerate(zip(plots, titles)):
-        subplots[1].flatten()[i].imshow(plot)
-        subplots[1].flatten()[i].set_title(title)
-        subplots[1].flatten()[i].axis("off")
     return plots, titles
 
 

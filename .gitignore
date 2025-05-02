@@ -117,3 +117,5 @@ VOCtrainval_11-May-2012.tar
 
 *.zip
 *.out
+
+events.out.tfevents.*

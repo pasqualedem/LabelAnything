@@ -1,4 +1,4 @@
-import open_clip
+# import open_clip
 from argparse import ArgumentParser
 import torch
 from label_anything.data.coco import LabelAnyThingOnlyImageDataset

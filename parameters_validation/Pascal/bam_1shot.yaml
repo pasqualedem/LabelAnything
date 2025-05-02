@@ -46,6 +46,7 @@ parameters:
         n_ways: [2]
     common:
       remove_small_annotations: [True]
+      ignore_borders: [True]
       do_subsample: [False]
       load_gts: [False]
       image_size: [641]

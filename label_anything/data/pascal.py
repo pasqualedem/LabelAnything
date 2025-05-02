@@ -32,6 +32,7 @@ logger = get_logger(__name__)
 
 
 class PascalDataset(Dataset):
+    PASCAL_IGNORE_INDEX = 255
     """Pascal VOC dataset."""
 
     def __init__(
@@ -48,9 +49,12 @@ class PascalDataset(Dataset):
         do_subsample: bool = True,
         remove_small_annotations: bool = False,
         all_example_categories: bool = True,
+        num_samples: int = None,
         sample_function: str = "power_law",
         custom_preprocess: bool = True,
         load_annotation_dicts: bool = True,
+        ignore_index: int = -100,
+        ignore_borders: bool = False,
         is_pyramids: bool = False,
     ):
         super().__init__()
@@ -78,11 +82,14 @@ class PascalDataset(Dataset):
         self.image_size = image_size
         self.load_embeddings = load_embeddings
         self.all_example_categories = all_example_categories
+        self.num_samples = num_samples
         self.load_gts = load_gts
         self.do_subsample = do_subsample
         self.remove_small_annotations = remove_small_annotations
         self.sample_function = sample_function
         self.is_pyramids = is_pyramids
+        self.ignore_index = ignore_index
+        self.ignore_borders = ignore_borders
 
         self.masks_dir_list = set(os.listdir(self.masks_dir))
         self.aug_masks_dir_list = set(os.listdir(self.masks_dir + "Aug"))
@@ -257,7 +264,7 @@ class PascalDataset(Dataset):
         return img2cat, cat2img
 
     def __len__(self):
-        return len(self.image_data)
+        return self.num_samples or len(self.image_data)
 
     def load_and_preprocess_images(self, image_names: list[str]) -> torch.Tensor:
         image_names = [x[0] if isinstance(x, tuple) else x for x in image_names]
@@ -428,6 +435,8 @@ class PascalDataset(Dataset):
                     continue
                 mask = seg == cat_id
                 ground_truths[-1][mask] = cat_ids.index(cat_id)
+                if self.split == "val" and self.ignore_borders:
+                    ground_truths[-1][seg == self.PASCAL_IGNORE_INDEX] = self.ignore_index
 
         return [torch.tensor(x) for x in ground_truths]
 

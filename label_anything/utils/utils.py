@@ -107,21 +107,37 @@ def torch_dict_save(data, file_path):
     else:
         raise ValueError("File extension not supported")
     
+    
+def state_dict_keys_check(res):
+    if missing_keys := [
+        k for k in res.missing_keys if "image_encoder" not in k
+    ]:
+        raise RuntimeError(f"Missing keys: {missing_keys}")
+    if res.unexpected_keys:
+        raise RuntimeError(f"Unexpected keys: {res.unexpected_keys}")
 
-def load_state_dict(model, state_dict, strict=True):
+def load_state_dict(model, state_dict, strict=True, ignore_encoder_missing_keys=False):
     """
     """
+    if ignore_encoder_missing_keys:
+        strict = False
     try:
-        model.load_state_dict(state_dict, strict=strict)
+        res = model.load_state_dict(state_dict, strict=strict)
+        if ignore_encoder_missing_keys:
+            state_dict_keys_check(res)
     except RuntimeError as e:
         try:
             print("Error loading state_dict, trying to load without 'model.' prefix")
             state_dict = {k.replace("model.", ""): v for k, v in state_dict.items()}
-            model.load_state_dict(state_dict, strict=strict)
+            res = model.load_state_dict(state_dict, strict=strict)
+            if ignore_encoder_missing_keys:
+                state_dict_keys_check(res)
         except RuntimeError as e:
             print("Error loading state_dict, trying to load without 'module.' prefix")
             state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
-            model.load_state_dict(state_dict, strict=strict)
+            res = model.load_state_dict(state_dict, strict=strict)
+            if ignore_encoder_missing_keys:
+                state_dict_keys_check(res)
     print("State_dict loaded successfully")
     return model
 
@@ -318,13 +334,95 @@ class RunningAverage:
         
     def compute(self):
         return self.accumulator / self.steps
+    
+class LossRunningAverage:
+    def __init__(self):
+        self.loss = RunningAverage()
+        self.components = {}
+        
+    def update(self, loss_dict):
+        value = loss_dict[LossDict.VALUE]
+        self.loss.update(value)
+        for k, v in loss_dict[LossDict.COMPONENTS].items():
+            if f"loss_{k}" not in self.components:
+                self.components[f"loss_{k}"] = RunningAverage()
+            self.components[f"loss_{k}"].update(v)
+    def compute(self):
+        value = self.loss.compute()
+        components = {f"avg_loss_{k}": self.components[k].compute() for k, v in self.components.items()}
+        return {"avg_loss": value, **components}
 
 
 class ResultDict(StrEnum):
     CLASS_EMBS = "class_embeddings"
+    MASK_EMBEDDINGS = "mask_embeddings"
     LOGITS = "logits"
     EXAMPLES_CLASS_EMBS = "class_examples_embeddings"
     EXAMPLES_CLASS_SRC = "class_examples_src"
     LOSS = "loss"
     LAST_HIDDEN_STATE = 'last_hidden_state'
     LAST_BLOCK_STATE = 'last_block_state'
+    
+
+class LossDict(StrEnum):
+    VALUE = "value"
+    COMPONENTS = "components"
+
+
+NORM_MODULES = [
+    torch.nn.BatchNorm1d,
+    torch.nn.BatchNorm2d,
+    torch.nn.BatchNorm3d,
+    torch.nn.SyncBatchNorm,
+    # NaiveSyncBatchNorm inherits from BatchNorm2d
+    torch.nn.GroupNorm,
+    torch.nn.InstanceNorm1d,
+    torch.nn.InstanceNorm2d,
+    torch.nn.InstanceNorm3d,
+    torch.nn.LayerNorm,
+    torch.nn.LocalResponseNorm,
+]
+
+def register_norm_module(cls):
+    NORM_MODULES.append(cls)
+    return cls
+
+
+def is_main_process():
+    rank = 0
+    if 'OMPI_COMM_WORLD_SIZE' in os.environ:
+        rank = int(os.environ['OMPI_COMM_WORLD_RANK'])
+
+    return rank == 0
+
+
+def align_and_update_state_dicts(model_state_dict, ckpt_state_dict):
+    model_keys = sorted(model_state_dict.keys())
+    ckpt_keys = sorted(ckpt_state_dict.keys())
+    result_dicts = {}
+    matched_log = []
+    unmatched_log = []
+    unloaded_log = []
+    for model_key in model_keys:
+        model_weight = model_state_dict[model_key]
+        if model_key in ckpt_keys:
+            ckpt_weight = ckpt_state_dict[model_key]
+            if model_weight.shape == ckpt_weight.shape:
+                result_dicts[model_key] = ckpt_weight
+                ckpt_keys.pop(ckpt_keys.index(model_key))
+                matched_log.append("Loaded {}, Model Shape: {} <-> Ckpt Shape: {}".format(model_key, model_weight.shape, ckpt_weight.shape))
+            else:
+                unmatched_log.append("*UNMATCHED* {}, Model Shape: {} <-> Ckpt Shape: {}".format(model_key, model_weight.shape, ckpt_weight.shape))
+        else:
+            unloaded_log.append("*UNLOADED* {}, Model Shape: {}".format(model_key, model_weight.shape))
+            
+    if is_main_process():
+        for info in matched_log:
+            print(info)
+        for info in unloaded_log:
+            print(info)
+        for key in ckpt_keys:
+            print("$UNUSED$ {}, Ckpt Shape: {}".format(key, ckpt_state_dict[key].shape))
+        for info in unmatched_log:
+            print(info)
+    return result_dicts

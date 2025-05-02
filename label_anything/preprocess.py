@@ -190,22 +190,20 @@ def create_image_embeddings_huggingface(
     n_steps = len(dataloader)
     print("Number of steps needed: ", n_steps)
 
-    for idx, batch in enumerate(dataloader):
+    for idx, batch in tqdm(enumerate(dataloader), total=n_steps):
         img, image_id = batch
         img = img.to(device)
         out = (
             model(img, interpolate_pos_encoding=True).last_hidden_state[:, 1:, :].cpu()
         )
         out = rearrange(
-            out, "b (h w) c -> b c h w", h=image_resolution // 16
+            out, "b (h w) c -> b c h w", h=image_resolution // model.config.patch_size
         ).contiguous()
         for i in range(out.shape[0]):
             save_file(
                 {"embedding": out[i]},
                 os.path.join(outfolder, f"{image_id[i]}.safetensors"),
             )
-        if idx % 10 == 0:
-            logging.info(f"Step {idx}/{n_steps}")
 
 
 @torch.no_grad

@@ -1,0 +1,108 @@
+
+experiment:
+  # It contains all the about the grids and the group of runs:
+  name: LabelAnything # name of the logger platform experiment
+  group: pascal5i # name of group of experiments for the logger platform
+  continue_with_errors: False # continue with other runs even if a run fails
+  start_from_grid: 0 # skip grids in the grid search
+  start_from_run: 0 # skip runs from the selected grid
+
+parameters:
+  # Contains the parameters to build the grid.
+  # Each value should be a dict or a list
+  seed: [42]
+
+  val_params:
+    reruns: [5]
+
+  logger:
+    log_frequency: [100]
+    train_image_log_frequency: [250]
+    val_image_log_frequency: [25]
+    tmp_dir: [tmp]
+    entity: [cilabuniba]
+    tags: [[DCAMA, Validation]]
+    offline_directory: [offline]
+
+  model:
+    name: [dcama]
+    backbone: [swin]
+    backbone_checkpoint: [checkpoints/dcama/swin_base_patch4_window12_384.pth]
+    model_checkpoint: [checkpoints/dcama/pascal/fold0_dcama_swin_xm0xgeoo.safetensors, checkpoints/dcama/pascal/swin_fold0.pt]
+    image_size: &image_size [384]
+
+  dataset: # parameters depending on the class you defined for the dataset
+    datasets:
+      val_pascal5i_N1K1: &val_pascal5i_N1K1
+        name: [pascal]
+        data_dir: &instance_dir [data/pascal]
+        split: ["val"]
+        val_fold_idx: [0]
+        n_folds: [4]
+        n_shots: [1]
+        n_ways: [1]
+        do_subsample: [False]
+      val_pascal5i_N1K5:
+        <<: *val_pascal5i_N1K1
+        n_shots: [5]
+      val_pascal5i_N2K1:
+        <<: *val_pascal5i_N1K1
+        n_ways: [2]
+      val_pascal5i_N2K5:
+        <<: *val_pascal5i_N1K1
+        n_ways: [2]
+        n_shots: [5]
+    common:
+      remove_small_annotations: [True]
+      ignore_borders: [True]
+      do_subsample: [False]
+      load_embeddings: [False]
+      load_gts: [False]
+      image_size: *image_size
+      custom_preprocess: [False]
+  dataloader:
+    num_workers: [32]
+    prefetch_factor: [2]
+    possible_batch_example_nums: [[[2, 1, 4], [1, 2, 4], [8, 2, 1], [16, 1, 1]]]
+    val_possible_batch_example_nums: [[[1, 1]]] 
+    prompt_types: [["mask"]]
+    prompt_choice_level: [["episode"]]
+    val_prompt_types: [["mask"]]
+
+other_grids:
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [1]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [1]
+  #   model:
+  #     checkpoint: [checkpoints/pascal/fold1_mae_oa6hslb5.safetensors]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [2]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [2]
+  #   model:
+  #     checkpoint: [checkpoints/pascal/fold2_mae_hupmfr07.safetensors]
+  # - dataset: # parameters depending on the class you defined for the dataset
+  #     datasets:
+  #       val_pascal5i_N1K1:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N1K5:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N2K1:
+  #         val_fold_idx: [3]
+  #       val_pascal5i_N2K5:
+  #         val_fold_idx: [3]
+  #   model:
+  #     checkpoint: [checkpoints/pascal/fold3_mae_pzl98ldo.safetensors]

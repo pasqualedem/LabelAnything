@@ -50,6 +50,10 @@ class CocoLVISDataset(Dataset):
         max_points_per_annotation: int = 10,
         max_points_annotations: int = 50,
         n_ways: int = "max",
+        n_shots: int = None,
+        n_examples: int = None,
+        num_samples: int = None,
+        class_based_sampling: bool = False,
         preprocess=ToTensor(),
         image_size: int = 1024,
         load_embeddings: bool = None,
@@ -72,6 +76,10 @@ class CocoLVISDataset(Dataset):
             max_points_per_annotation (int, optional): Maximum number of points per annotation. Defaults to 10.
             max_points_annotations (int, optional): Maximum number of sparse prompts. Defaults to 50.
             n_ways (int, optional): Number of classes to sample. Defaults to "max".
+            n_shots (int, optional): Number of examples to sample. Defaults to None.
+            n_examples (int, optional): Number of examples to sample, alternative to n_shots. Defaults to None.
+            num_samples (int, optional): Number of samples, len of the dataset if set.
+            class_based_sampling (bool, optional): each getitem is drawn by classes and not by images.
             preprocess (_type_, optional): A preprocessing step to apply to the images. Defaults to ToTensor().
             load_embeddings (bool, optional): Specify if embeddings are precomputed. Defaults to True.
             load_gts (bool, optional): Specify if ground truth masks are precomputed. Defaults to False.
@@ -114,11 +122,16 @@ class CocoLVISDataset(Dataset):
         self.do_subsample = do_subsample
         self.add_box_noise = add_box_noise
         self.n_ways = n_ways
+        self.n_shots = n_shots
+        self.n_examples = n_examples
+        assert n_examples is None or n_shots is None, "n_examples and n_shots cannot be both set."
+        self.class_based_sampling = class_based_sampling
         self.image_size = image_size
         self.remove_small_annotations = remove_small_annotations
         self.all_example_categories = all_example_categories
         self.sample_function = sample_function
         self.is_pyramids = is_pyramids
+        self.num_samples = num_samples
 
         # load instances
         instances = utils.load_instances(self.instances_path)
@@ -302,25 +315,45 @@ class CocoLVISDataset(Dataset):
         ]
 
     def _extract_examples(
-        self, img_data: dict, num_examples: int, num_classes: int
+        self, img_data: dict, num_shots: int, num_examples: int, num_classes: int, img_cats: Optional[list[int]] = None
     ) -> (list[int], list[int]):
         """Chooses examples (and categories) for the query image.
 
         Args:
             img_data (dict): A dictionary containing the image data, as in the coco dataset.
-            num_examples (int): The number of examples to be chosen.
+            num_shots (int): The number of shots per class to be chosen.
+            num_examples (int): The number of examples to be chosen (alternative to num_shots).
 
         Returns:
             (list, list): Returns two lists:
                 1. examples: A list of image ids of the examples.
                 2. cats: A list of sets of category ids of the examples.
         """
-        img_cats = torch.tensor(list(self.img2cat[img_data[AnnFileKeys.ID]]))
-        sampled_classes = (
-            self.example_generator.sample_classes_from_query(img_cats, uniform_sampling)
-            if self.do_subsample
-            else img_cats
-        )
+        if img_cats is None:
+            img_cats = torch.tensor(list(self.img2cat[img_data[AnnFileKeys.ID]]))
+        if num_examples is None:
+            sampled_classes = (
+                self.example_generator.sample_classes_from_query(img_cats, uniform_sampling)
+                if self.do_subsample
+                else img_cats
+            )
+            num_examples = num_shots
+        else:
+            permutation = torch.randperm(len(img_cats))
+            sampled_classes = img_cats[permutation[:num_classes]]
+            if len(sampled_classes) < num_classes:
+                remaining_classes = num_classes - len(sampled_classes)
+                class_pool = set(self.categories.keys()) - set(sampled_classes.tolist())
+                remaining_sampled = torch.tensor(random.sample(
+                    sorted(class_pool), remaining_classes
+                ))
+                sampled_classes = torch.cat(
+                    [
+                        sampled_classes,
+                        remaining_sampled,
+                    ]
+                )
+            num_classes = None
         return self.example_generator.generate_examples(
             query_image_id=img_data[AnnFileKeys.ID],
             image_classes=img_cats,
@@ -522,15 +555,26 @@ class CocoLVISDataset(Dataset):
         """
         idx, batch_metadata = idx_metadata
 
-        num_examples = batch_metadata[BatchMetadataKeys.NUM_EXAMPLES]
+        num_shots = batch_metadata.get(BatchMetadataKeys.NUM_EXAMPLES) or self.n_shots
+        num_examples = self.n_examples
         possible_prompt_types = batch_metadata[BatchMetadataKeys.PROMPT_TYPES]
         if batch_metadata[BatchMetadataKeys.PROMPT_CHOICE_LEVEL] == "episode":
             possible_prompt_types = random.choice(possible_prompt_types)
-        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, None)
-
-        base_image_data = self.images[self.image_ids[idx]]
+        num_classes = batch_metadata.get(BatchMetadataKeys.NUM_CLASSES, self.n_ways)
+        
+        if self.class_based_sampling:
+            # sample n_ways categories
+            init_cat_ids = random.sample(list(self.categories.keys()), num_classes)
+            # Choose a random image from the first category
+            query_image_id = random.choice(list(self.cat2img[init_cat_ids[0]]))
+            base_image_data = self.images[query_image_id]
+            init_cat_ids = torch.tensor(init_cat_ids)
+        else:
+            base_image_data = self.images[self.image_ids[idx]]
+            init_cat_ids = None
+        
         image_ids, aux_cat_ids = self._extract_examples(
-            base_image_data, num_examples, num_classes
+            base_image_data, num_shots, num_examples, num_classes, img_cats=init_cat_ids
         )
 
         if self.all_example_categories:
@@ -601,7 +645,7 @@ class CocoLVISDataset(Dataset):
         return data_dict
 
     def __len__(self):
-        return len(self.images)
+        return self.num_samples or len(self.images)
 
 
 class CocoLVISTestDataset(CocoLVISDataset, LabelAnythingTestDataset):
