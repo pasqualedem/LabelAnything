@@ -31,12 +31,10 @@ parameters:
     num_points: [1] # number of points for class after the substitution
     max_epochs: [50]
     compile: [False]
-    initial_lr: [0.00025]
+    initial_lr: [0.0001]
     optimizer:
-      type: [SGD]
-      momentum: [0.9]
-      weight_decay: [0.000025]
-      nesterov: [True]
+      type: [AdamW]
+      weight_decay: [0.0001]
     scheduler:
     - type: constant_with_warmup
       step_moment: batch
@@ -48,7 +46,7 @@ parameters:
   model:
     name: [dcama]
     backbone: [swin]
-    backbone_checkpoint: [checkpoints/swin_base_patch4_window12_384.pth]
+    backbone_checkpoint: [checkpoints/dcama/swin_base_patch4_window12_384.pth]
     image_size: &image_size [384]
 
   dataset: # parameters depending on the class you defined for the dataset
@@ -84,14 +82,14 @@ parameters:
       #   n_shots: [5]
     common:
       remove_small_annotations: [True]
+      ignore_borders: [True]
       do_subsample: [False]
       load_gts: [False]
       image_size: *image_size
       custom_preprocess: [False]
   dataloader:
     num_workers: [32]
-    prefetch_factor: [2]
-    possible_batch_example_nums: [[[1, 1, 1]]]
+    possible_batch_example_nums: [[[4, 1, 1]]]
     val_possible_batch_example_nums: [[[1, 1]]] 
     prompt_types: [["mask"]]
     prompt_choice_level: [["episode"]]

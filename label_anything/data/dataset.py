@@ -192,7 +192,7 @@ class LabelAnythingDataset(Dataset):
 
         # aux gts
         classes = [x["classes"] for x in batched_input]
-        intended_classes = [x["intended_classes"] for x in batched_input]
+        intended_classes = [x["intended_classes"] for x in batched_input] if "intended_classes" in batched_input[0].keys() else None
 
         # image ids
         image_ids = [x["image_ids"] for x in batched_input]
