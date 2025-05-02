@@ -77,19 +77,20 @@ class DCAMAMultiClass(DCAMA):
         x[BatchKeys.PROMPT_MASKS] = self._preprocess_masks(
             x[BatchKeys.PROMPT_MASKS], x[BatchKeys.DIMS]
         )
-        assert (
-            x[BatchKeys.PROMPT_MASKS].shape[0] == 1
-        ), "Only tested with batch size = 1"
+        # assert (
+        #     x[BatchKeys.PROMPT_MASKS].shape[0] == 1
+        # ), "Only tested with batch size = 1"
         logits = []
         # get logits for each class
+        B = x[BatchKeys.PROMPT_MASKS].shape[0]
         for c in range(x[BatchKeys.PROMPT_MASKS].size(2)):
             class_examples = x[BatchKeys.FLAG_EXAMPLES][:, :, c + 1]
-            n_shots = class_examples.sum().item()
+            n_shots = class_examples.sum(dim=1)
+            assert (n_shots == n_shots[0]).all(), "Only support same number of examples for each class"
+            n_shots = n_shots[0]
             class_input_dict = {
                 BatchKeys.IMAGES: x[BatchKeys.IMAGES],
-                BatchKeys.PROMPT_MASKS: x[BatchKeys.PROMPT_MASKS][:, :, c, ::][
-                    class_examples
-                ].unsqueeze(0),
+                BatchKeys.PROMPT_MASKS: rearrange(x[BatchKeys.PROMPT_MASKS][:, :, c, ::][class_examples], "(b k) h w -> b k h w", b=B),
             }
             logits.append(self.predict_mask_nshot(class_input_dict, n_shots))
         logits = torch.stack(logits, dim=1)
