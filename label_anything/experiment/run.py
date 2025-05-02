@@ -9,6 +9,7 @@ import shutil
 import uuid
 from copy import deepcopy
 
+import accelerate
 import numpy as np
 import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
@@ -122,10 +123,11 @@ class Run:
             DistributedDataParallelKwargs(find_unused_parameters=True),
         ]
         logger.info("Creating Accelerator")
+        dataloader_config = accelerate.DataLoaderConfiguration(even_batches=False)
         self.accelerator = Accelerator(
-            even_batches=False,
             kwargs_handlers=kwargs,
             split_batches=False,
+            dataloader_config=dataloader_config,
         )
         logger.info("Initiliazing tracker...")
         self.tracker: WandBLogger = wandb_tracker(self.accelerator, self.params)

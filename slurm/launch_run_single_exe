@@ -1,7 +1,6 @@
 #!/bin/bash
 
-conda init zsh
-conda activate label-anything
+source .venv/bin/activate
 export TMPDIR=./tmp
 
 python3 main.py run $1
