@@ -179,6 +179,7 @@ class MaskDecoderLam(nn.Module):
         conv_upsample_stride: int = 2,
         classification_levels: int = 1,
         dropout: float = 0.0,
+        conv_classification: bool = False,
     ) -> None:
         """
         Predicts masks given an image and prompt embeddings, using a
@@ -252,6 +253,22 @@ class MaskDecoderLam(nn.Module):
                     )
                     module_list.append(activation())
             self.spatial_convs = nn.Sequential(*module_list)
+        
+        self.prototype_tconv = None
+        if conv_classification:
+            self.prototype_tconv = nn.Sequential(
+                *[
+                    nn.ConvTranspose2d(
+                        in_channels=transformer_dim // classification_layer_downsample_rate,
+                        out_channels=transformer_dim // classification_layer_downsample_rate,
+                        kernel_size=3,
+                        stride=1,
+                        padding=0,
+                        bias=False,
+                    )
+                    for _ in range(2)
+                ]
+            )
 
     def _get_pe_result(self, pe_result, flag_examples):
         flag_examples = (
@@ -282,7 +299,14 @@ class MaskDecoderLam(nn.Module):
     def _classify(self, query_embeddings, class_embeddings, flag_examples):
         b, d, h, w = query_embeddings.shape
         b, n, c = flag_examples.shape
-        seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(b, -1, h, w)
+        if self.prototype_tconv is not None:
+            class_embeddings = rearrange(class_embeddings, "b c d -> (b c) d 1 1")
+            class_embeddings = self.prototype_tconv(class_embeddings)
+            convs = list(rearrange(class_embeddings, "(b c) d h w -> b c d h w", c=c))
+            queries = [q.unsqueeze(0) for q in query_embeddings]
+            seg = torch.cat([F.conv2d(q, c, padding=2) for q, c in zip(queries, convs)])
+        else:
+            seg = (class_embeddings @ query_embeddings.view(b, d, h * w)).view(b, -1, h, w)
         if self.segment_example_logits:
             seg = rearrange(seg, "b (n c) h w -> b n c h w", c=c)
             seg[flag_examples.logical_not()] = float("-inf")

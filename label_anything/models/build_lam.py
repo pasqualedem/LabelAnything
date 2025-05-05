@@ -112,6 +112,7 @@ def _build_lam(
     encoder_attention_downsample_rate: int = 2,
     decoder_attention_downsample_rate: int = 2,
     classification_layer_downsample_rate: int = 8,
+    conv_classification=False,
     use_support_features_in_prompt_encoder: bool = True,
     fusion_transformer="TwoWayTransformer",  # "TwoWayTransformer" or "OneWayTransformer" or "IdentityTransformer"
     classification_levels=1,
@@ -218,6 +219,7 @@ def _build_lam(
             few_type=few_type,
             class_fusion=class_fusion,
             classification_levels=classification_levels,
+            conv_classification=conv_classification,
             transformer_keys_are_images=transformer_keys_are_images,
         ),
         custom_preprocess=custom_preprocess,
@@ -247,6 +249,7 @@ def build_mask_decoder(
     class_fusion="sum",
     prototype_merge=False,
     classification_levels=1,
+    conv_classification=False,
     transformer_keys_are_images=True,
 ):
     if few_type == "Prototype":
@@ -268,6 +271,7 @@ def build_mask_decoder(
             conv_upsample_stride=conv_upsample_stride,
             classification_levels=classification_levels,
             dropout=dropout,
+            conv_classification=conv_classification,
         )
     elif few_type == "Affinity" or few_type == "PrototypeAffinity":
         fusion_transformer = AffinityTransformer(
