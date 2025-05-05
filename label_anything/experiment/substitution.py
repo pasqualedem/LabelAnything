@@ -257,6 +257,8 @@ class Substitutor:
             )
 
         for key in self.list_keys_to_exchange:
+            if self.batch[key] is None:
+                continue
             self.batch[key] = [
                 [elem[i] for i in index_tensor] for elem in self.batch[key]
             ]
