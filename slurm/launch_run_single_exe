@@ -1,6 +1,0 @@
-#!/bin/bash
-
-source .venv/bin/activate
-export TMPDIR=./tmp
-
-python3 main.py run $1
