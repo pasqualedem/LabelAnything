@@ -1,6 +1,6 @@
 from tempfile import TemporaryDirectory
 from einops import rearrange
-from nicegui import ui, events, observables, run
+from nicegui import ui, events, observables, run, app
 from pathlib import Path
 from PIL import Image
 import torch
@@ -28,26 +28,27 @@ TEXT_COLORS = [
 
 
 def preview_support_set(batch):
+    # Clear previous preview if it exists
     if "preview" in components:
         components["preview"].clear()
-    with components["right"]:
-        components["preview"] = ui.row().classes("gap-4 overflow-x-auto no-wrap")
 
     with components["preview"]:
-        ui.markdown("### Support Set Preview").classes("text-lg font-bold")
+        # Scrollable image row
+        with ui.row().classes("gap-4 overflow-x-auto whitespace-nowrap pb-2"):
+            for i, _ in enumerate(state["support_set"]):
+                img = batch[BatchKeys.IMAGES][0][i]
+                masks = batch[BatchKeys.PROMPT_MASKS][0][i]
+                bboxes = batch[BatchKeys.PROMPT_BBOXES][0][i]
+                points = batch[BatchKeys.PROMPT_POINTS][0][i]
 
-        for i, _ in enumerate(state["support_set"]):
-            img = batch[BatchKeys.IMAGES][0][i]
-            masks = batch[BatchKeys.PROMPT_MASKS][0][i]
-            bboxes = batch[BatchKeys.PROMPT_BBOXES][0][i]
-            points = batch[BatchKeys.PROMPT_POINTS][0][i]
+                img = get_image(img)
+                img = draw_all(img, masks=masks, boxes=bboxes, points=points, colors=COLORS)
 
-            img = get_image(img)
-            img = draw_all(img, masks=masks, boxes=bboxes, points=points, colors=COLORS)
-
-            with ui.column().classes("items-center").style("max-width: 256px;"):
-                ui.label(f"Support Image {i + 1}").classes("text-sm")
-                ui.image(img).style("width: 100%; max-width: 256px;").classes("rounded shadow")
+                with ui.element("div").classes(
+                    "bg-white rounded-xl shadow-md p-2 flex flex-col items-center min-w-[180px] max-w-[256px]"
+                ):
+                    ui.image(img).style("width: 100%; max-width: 512px;").classes("rounded")
+                    ui.label(f"Support Image {i + 1}").classes("text-sm text-gray-600 mt-2")
 
 
 
@@ -234,12 +235,15 @@ def show_support_image():
         state["image_widget"].on_mouse(mouse_handler)
 
 
-def load_model(e):
-    model_name = e.value
+async def load_model(e, model_name=None):
+    model_name = model_name or e.value
+    components["spinner"] = ui.spinner()
     if not model_name:
         ui.notify("Please select a model", color="negative")
         return
-    state["model"] = LabelAnything.from_pretrained(model_name).model
+    model_wrapper = await run.cpu_bound(LabelAnything.from_pretrained, model_name)
+    state["model"] = model_wrapper.model
+    components["spinner"].delete()
     ui.notify(f"Model {model_name} loaded successfully", color="positive")
 
 
@@ -311,12 +315,20 @@ async def predict():
         dims=batch[BatchKeys.DIMS],
         classes=state["classes"],
     )
-    print("Generated plots for the predictions")
-    for title, plot in zip(titles, plots):
-        ui.label(title).classes("text-lg font-bold")
-        ui.image(Image.fromarray(plot)).classes("rounded shadow").classes(
-            "w-full max-w-256px"
+    
+    components["prediction"].clear()
+    with components["prediction"]:
+        ui.markdown("## 🔮 Prediction Output").classes(
+            "text-xl font-semibold text-gray-700 border-b pb-2 mb-4"
         )
+
+        with ui.row().classes("gap-4 w-full"):
+            for title, plot in zip(titles, plots):
+                with ui.element("div").classes(
+                    "flex flex-col flex-1 bg-white p-4 rounded-xl shadow-md items-center"
+                ):
+                    ui.label(title).classes("text-sm text-gray-600 mb-2")
+                    ui.image(Image.fromarray(plot)).classes("rounded w-full").style("height: auto;")
 
 
 def get_features(_model, batch):
@@ -332,57 +344,75 @@ def get_features(_model, batch):
 
 def main():
     ui.page_title("Label Anything")
-    ui.markdown("# Label Anything Demo")
+    ui.markdown("# 🎯 Label Anything Demo")
 
-    with ui.left_drawer().classes("bg-blue-100") as left_drawer:
+    # Left Drawer: Model selection
+    with ui.left_drawer().classes("bg-gradient-to-b from-blue-100 to-white shadow-md p-4"):
         models = retrieve_models()
-        ui.select(label="Model", options=models, on_change=load_model).classes("w-full")
+        ui.select(label="🧠 Select Model", options=models, on_change=load_model, value=models[0]).classes("w-full rounded-md shadow-sm")
+        components["spinner"] = ui.element("div")
 
-    with ui.element("div").classes("flex w-full"):
-        components["left"] = ui.element("div").classes("w-1/2 p-4")
-        components["right"] = ui.element("div").classes("w-1/2 p-4")
+    # Main layout with two columns
+    with ui.element("div").classes("flex flex-col md:flex-row w-full gap-4"):
+        # Left Column
+        components["left"] = ui.element("div").classes("w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300")
+
+        # Right Column
+        components["right"] = ui.element("div").classes("w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300")
 
         with components["left"]:
-            ui.markdown(
-                "#### Step 1: Upload your query image"
-            )
+            # Step 1: Upload query image
+            ui.markdown("### 📤 Step 1: Upload your query image").classes("font-semibold text-gray-700")
             state["query_image_path"] = ui.upload(
                 on_upload=handle_query_upload,
                 auto_upload=True,
                 label="Upload Query Image",
-            ).classes("w-full")
-            
-            ui.markdown(
-                "#### Step 2: Add the desired classes"
-            )
-            label_input = ui.input("Add class").on(
+            ).classes("w-full rounded border border-gray-300")
+
+            # Step 2: Add class labels
+            ui.markdown("### 🏷️ Step 2: Add the desired classes").classes("font-semibold text-gray-700")
+            label_input = ui.input("Type a class and press Enter").on(
                 "keydown.enter", lambda: add_class(label_input, chips)
-            )
-            chips = ui.row().classes("gap-0")
+            ).classes("w-full rounded border border-gray-300")
+            chips = ui.row().classes("gap-2 flex-wrap mt-2")
 
-
-            ui.markdown(
-                "#### Step 3: Upload support images and annotate them"
-            )
+            # Step 3: Upload and annotate support images
+            ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes("font-semibold text-gray-700")
             state["prompt"] = ui.radio(
                 ["Point", "Rectangle", "Mask"], value="Point"
-            ).props("inline")
-            with ui.element("div"):
+            ).props("inline").classes("mb-2")
+            ui.markdown("You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points.")
+
+            with ui.element("div").classes("mb-4"):
                 components["upload_support"] = ui.upload(
                     on_upload=handle_support_upload,
                     auto_upload=True,
                     label="Upload Support Image",
-                ).classes("w-full")
+                ).classes("w-full rounded border border-gray-300")
 
-            ui.element("div").classes("h-4")  # Add a gap before the row
-            with ui.row():
-                ui.button("End Polyline", on_click=end_polyline)
-                ui.button("Clear Annotations", on_click=clear_annotations)
-                ui.button("Add Support Image", on_click=add_support_image)
-            ui.separator().classes("my-4")
-            ui.button("Predict", on_click=predict)
+            with ui.row().classes("gap-2"):
+                ui.button("🔚 End Mask", on_click=end_polyline).classes("rounded-lg")
+                ui.button("🧹 Clear Annotations", on_click=clear_annotations).classes("rounded-lg")
+                ui.button("➕ Add Support Image", on_click=add_support_image).classes("rounded-lg")
+
+            ui.separator().classes("my-4 border-t-2")
+            ui.button("🚀 Predict", on_click=predict).classes("bg-blue-600 text-white hover:bg-blue-700 font-semibold py-2 px-4 rounded shadow")
+        
+    # Populate the right side separately
+    with components["right"]:
+        # placeholder or functional content for the right panel
+        ui.markdown("## 🖼️ Support Set Preview").classes(
+            "text-xl font-semibold text-gray-700 border-b pb-2 mb-2"
+        )
+        components["preview"] = ui.element("div").classes("gap-4")
+        components["prediction"] = ui.element("div").classes("gap-4")
+
+
+    # Initialize models
+    app.on_connect(load_model(None, models[0]))
 
     ui.run()
+
 
 
 if __name__ == "__main__":
