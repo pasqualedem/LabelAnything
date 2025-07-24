@@ -364,3 +364,8 @@ def rename_coco20i_json_cli(instances_path):
     from label_anything.preprocess import rename_coco20i_json
 
     rename_coco20i_json(instances_path)
+
+@main.command("app")
+def app():
+    from label_anything.demo.nicegui import main as nicegui_main
+    nicegui_main()
