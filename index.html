@@ -176,13 +176,12 @@
     <section class="hero teaser">
         <div class="container is-max-desktop">
             <div class="hero-body">
-                <video id="teaser" autoplay muted loop playsinline height="100%">
-                    <source src="./static/videos/teaser.mp4" type="video/mp4">
-                </video>
+                <img id="teaser-img" src="./static/images/la.png" alt="Label Anything teaser"
+                    style="width:100%; height:auto;" />
                 <h2 class="subtitle has-text-centered">
-                    <span class="dnerf">Nerfies</span> turns selfie videos from your phone into
-                    free-viewpoint
-                    portraits.
+                    <span class="dnerf">Label Anything</span> performs few-shot semantic segmentation over query images,
+                    segmenting objects of interest specified by points, boxes, or masks over an arbitrarily large set of
+                    support images.
                 </h2>
             </div>
         </div>
@@ -247,31 +246,24 @@
                     <h2 class="title is-3">Abstract</h2>
                     <div class="content has-text-justified">
                         <p>
-                            We present the first method capable of photorealistically reconstructing a non-rigidly
-                            deforming scene using photos/videos captured casually from mobile phones.
-                        </p>
-                        <p>
-                            Our approach augments neural radiance fields
-                            (NeRF) by optimizing an
-                            additional continuous volumetric deformation field that warps each observed point into a
-                            canonical 5D NeRF.
-                            We observe that these NeRF-like deformation fields are prone to local minima, and
-                            propose a coarse-to-fine optimization method for coordinate-based models that allows for
-                            more robust optimization.
-                            By adapting principles from geometry processing and physical simulation to NeRF-like
-                            models, we propose an elastic regularization of the deformation field that further
-                            improves robustness.
-                        </p>
-                        <p>
-                            We show that <span class="dnerf">Nerfies</span> can turn casually captured selfie
-                            photos/videos into deformable NeRF
-                            models that allow for photorealistic renderings of the subject from arbitrary
-                            viewpoints, which we dub <i>"nerfies"</i>. We evaluate our method by collecting data
-                            using a
-                            rig with two mobile phones that take time-synchronized photos, yielding train/validation
-                            images of the same pose at different viewpoints. We show that our method faithfully
-                            reconstructs non-rigidly deforming scenes and reproduces unseen views with high
-                            fidelity.
+                            Few-shot semantic segmentation aims to segment objects from previously unseen classes using
+                            only a limited number of labeled examples. In this paper, we introduce Label Anything, a
+                            novel transformer-based architecture designed for multi-prompt, multi-way few-shot semantic
+                            segmentation. Our approach leverages diverse visual prompts—points, bounding boxes, and
+                            masks—to create a highly flexible and generalizable framework that significantly reduces
+                            annotation burden while maintaining high accuracy.
+                            Label Anything makes three key contributions: (\textit{i}) we introduce a new task
+                            formulation that relaxes conventional few-shot segmentation constraints by supporting
+                            various types of prompts, multi-class classification, and enabling multiple prompts within a
+                            single image; (\textit{ii}) we propose a novel architecture based on transformers and
+                            attention mechanisms, eliminating dependency on convolutional networks; and (\textit{iii})
+                            we design a versatile training procedure allowing our model to operate seamlessly across
+                            different $N$-way $K$-shot and prompt-type configurations with a single trained model.
+                            Our extensive experimental evaluation on the widely used COCO-$20^i$ benchmark demonstrates
+                            that Label Anything achieves state-of-the-art performance among existing multi-way few-shot
+                            segmentation methods, while significantly outperforming leading single-class models when
+                            evaluated in multi-class settings. Code and trained models are available at
+                            \url{https://github.com/pasqualedem/LabelAnything}.
                         </p>
                     </div>
                 </div>
