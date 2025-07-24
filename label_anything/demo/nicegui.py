@@ -42,14 +42,19 @@ def preview_support_set(batch):
                 points = batch[BatchKeys.PROMPT_POINTS][0][i]
 
                 img = get_image(img)
-                img = draw_all(img, masks=masks, boxes=bboxes, points=points, colors=COLORS)
+                img = draw_all(
+                    img, masks=masks, boxes=bboxes, points=points, colors=COLORS
+                )
 
                 with ui.element("div").classes(
                     "bg-white rounded-xl shadow-md p-2 flex flex-col items-center min-w-[180px] max-w-[256px]"
                 ):
-                    ui.image(img).style("width: 100%; max-width: 512px;").classes("rounded")
-                    ui.label(f"Support Image {i + 1}").classes("text-sm text-gray-600 mt-2")
-
+                    ui.image(img).style("width: 100%; max-width: 512px;").classes(
+                        "rounded"
+                    )
+                    ui.label(f"Support Image {i + 1}").classes(
+                        "text-sm text-gray-600 mt-2"
+                    )
 
 
 def set_batch_support():
@@ -315,7 +320,7 @@ async def predict():
         dims=batch[BatchKeys.DIMS],
         classes=state["classes"],
     )
-    
+
     components["prediction"].clear()
     with components["prediction"]:
         ui.markdown("## 🔮 Prediction Output").classes(
@@ -328,7 +333,9 @@ async def predict():
                     "flex flex-col flex-1 bg-white p-4 rounded-xl shadow-md items-center"
                 ):
                     ui.label(title).classes("text-sm text-gray-600 mb-2")
-                    ui.image(Image.fromarray(plot)).classes("rounded w-full").style("height: auto;")
+                    ui.image(Image.fromarray(plot)).classes("rounded w-full").style(
+                        "height: auto;"
+                    )
 
 
 def get_features(_model, batch):
@@ -347,22 +354,35 @@ def main():
     ui.markdown("# 🎯 Label Anything Demo")
 
     # Left Drawer: Model selection
-    with ui.left_drawer().classes("bg-gradient-to-b from-blue-100 to-white shadow-md p-4"):
+    with ui.left_drawer().classes(
+        "bg-gradient-to-b from-blue-100 to-white shadow-md p-4"
+    ):
         models = retrieve_models()
-        ui.select(label="🧠 Select Model", options=models, on_change=load_model, value=models[0]).classes("w-full rounded-md shadow-sm")
+        ui.select(
+            label="🧠 Select Model",
+            options=models,
+            on_change=load_model,
+            value=models[0],
+        ).classes("w-full rounded-md shadow-sm")
         components["spinner"] = ui.element("div")
 
     # Main layout with two columns
     with ui.element("div").classes("flex flex-col md:flex-row w-full gap-4"):
         # Left Column
-        components["left"] = ui.element("div").classes("w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300")
+        components["left"] = ui.element("div").classes(
+            "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
+        )
 
         # Right Column
-        components["right"] = ui.element("div").classes("w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300")
+        components["right"] = ui.element("div").classes(
+            "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
+        )
 
         with components["left"]:
             # Step 1: Upload query image
-            ui.markdown("### 📤 Step 1: Upload your query image").classes("font-semibold text-gray-700")
+            ui.markdown("### 📤 Step 1: Upload your query image").classes(
+                "font-semibold text-gray-700"
+            )
             state["query_image_path"] = ui.upload(
                 on_upload=handle_query_upload,
                 auto_upload=True,
@@ -370,18 +390,28 @@ def main():
             ).classes("w-full rounded border border-gray-300")
 
             # Step 2: Add class labels
-            ui.markdown("### 🏷️ Step 2: Add the desired classes").classes("font-semibold text-gray-700")
-            label_input = ui.input("Type a class and press Enter").on(
-                "keydown.enter", lambda: add_class(label_input, chips)
-            ).classes("w-full rounded border border-gray-300")
+            ui.markdown("### 🏷️ Step 2: Add the desired classes").classes(
+                "font-semibold text-gray-700"
+            )
+            label_input = (
+                ui.input("Type a class and press Enter")
+                .on("keydown.enter", lambda: add_class(label_input, chips))
+                .classes("w-full rounded border border-gray-300")
+            )
             chips = ui.row().classes("gap-2 flex-wrap mt-2")
 
             # Step 3: Upload and annotate support images
-            ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes("font-semibold text-gray-700")
-            state["prompt"] = ui.radio(
-                ["Point", "Rectangle", "Mask"], value="Point"
-            ).props("inline").classes("mb-2")
-            ui.markdown("You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points.")
+            ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes(
+                "font-semibold text-gray-700"
+            )
+            state["prompt"] = (
+                ui.radio(["Point", "Rectangle", "Mask"], value="Point")
+                .props("inline")
+                .classes("mb-2")
+            )
+            ui.markdown(
+                "You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points."
+            )
 
             with ui.element("div").classes("mb-4"):
                 components["upload_support"] = ui.upload(
@@ -392,12 +422,18 @@ def main():
 
             with ui.row().classes("gap-2"):
                 ui.button("🔚 End Mask", on_click=end_polyline).classes("rounded-lg")
-                ui.button("🧹 Clear Annotations", on_click=clear_annotations).classes("rounded-lg")
-                ui.button("➕ Add Support Image", on_click=add_support_image).classes("rounded-lg")
+                ui.button("🧹 Clear Annotations", on_click=clear_annotations).classes(
+                    "rounded-lg"
+                )
+                ui.button("➕ Add Support Image", on_click=add_support_image).classes(
+                    "rounded-lg"
+                )
 
             ui.separator().classes("my-4 border-t-2")
-            ui.button("🚀 Predict", on_click=predict).classes("bg-blue-600 text-white hover:bg-blue-700 font-semibold py-2 px-4 rounded shadow")
-        
+            ui.button("🚀 Predict", on_click=predict).classes(
+                "bg-blue-600 text-white hover:bg-blue-700 font-semibold py-2 px-4 rounded shadow"
+            )
+
     # Populate the right side separately
     with components["right"]:
         # placeholder or functional content for the right panel
@@ -407,12 +443,10 @@ def main():
         components["preview"] = ui.element("div").classes("gap-4")
         components["prediction"] = ui.element("div").classes("gap-4")
 
-
     # Initialize models
     app.on_connect(load_model(None, models[0]))
 
     ui.run()
-
 
 
 if __name__ == "__main__":
