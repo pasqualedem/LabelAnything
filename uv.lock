@@ -1011,6 +1011,7 @@ dependencies = [
     { name = "torchvision" },
     { name = "transformers" },
     { name = "wandb" },
+    { name = "wget" },
 ]
 
 [package.metadata]
@@ -1042,6 +1043,7 @@ requires-dist = [
     { name = "torchvision", specifier = ">=0.22.0" },
     { name = "transformers", specifier = ">=4.51.3" },
     { name = "wandb", specifier = ">=0.19.10" },
+    { name = "wget", specifier = ">=3.2" },
 ]
 
 [[package]]
@@ -3030,6 +3032,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/1b/6c/c65773d6cab416a64d191d6ee8a8b1c68a09970ea6909d16965d26bfed1e/websockets-15.0.1-cp313-cp313-win_amd64.whl", hash = "sha256:e09473f095a819042ecb2ab9465aee615bd9c2028e4ef7d933600a8401c79561", size = 176837 },
     { url = "https://files.pythonhosted.org/packages/fa/a8/5b41e0da817d64113292ab1f8247140aac61cbf6cfd085d6a0fa77f4984f/websockets-15.0.1-py3-none-any.whl", hash = "sha256:f7a866fbc1e97b5c617ee4116daaa09b722101d4a3c170c787450ba409f9736f", size = 169743 },
 ]
+
+[[package]]
+name = "wget"
+version = "3.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/6a/62e288da7bcda82b935ff0c6cfe542970f04e29c756b0e147251b2fb251f/wget-3.2.zip", hash = "sha256:35e630eca2aa50ce998b9b1a127bb26b30dfee573702782aa982f875e3f16061", size = 10857 }
 
 [[package]]
 name = "wsproto"

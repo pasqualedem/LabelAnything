@@ -285,6 +285,7 @@ def plot_seg(input, seg, colors, dims, classes):
     num_classes = len(classes) + 1
     query_image = input["images"][0, 0]
     image = get_image(take_image(query_image, dims=query_dim, input_shape=query_image.shape[-1]))
+    print(image)
     seg = seg[:, : query_dim[0], : query_dim[1]]
     segmask = draw_seg(image, seg.cpu(), colors, num_classes=num_classes)
     blank_seg = Image.fromarray(np.zeros_like(segmask))

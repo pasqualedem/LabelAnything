@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 import torch
 import numpy as np
-from streamlit_drawable_canvas import st_canvas
+# from streamlit_drawable_canvas import st_canvas
 from PIL import Image
 
 from label_anything import LabelAnything

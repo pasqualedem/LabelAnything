@@ -1,5 +1,5 @@
 from tempfile import TemporaryDirectory
-from einops import rearrange
+from label_anything.demo.builtin_ng import built_in_dataset
 from nicegui import ui, events, observables, run, app
 from pathlib import Path
 from PIL import Image
@@ -13,18 +13,19 @@ from label_anything.demo.visualize import (
     load_from_wandb,
     plot_seg,
 )
-from label_anything.demo.utils import COLORS, retrieve_models
+from label_anything.demo.utils import COLORS, get_features, retrieve_models, run_computation, sanitize
 from label_anything.demo.preprocess_ng import preprocess_support_set
 from label_anything.models.build_lam import LabelAnything
 from label_anything.utils.utils import ResultDict
 
 IMAGE_SIZE = 1024
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-TEXT_COLORS = [
+RGB_TO_TEXT_COLORS = {
     # rbg to hex
-    f"rgba({c[0]}, {c[1]}, {c[2]}, 1)"
-    for c in COLORS
-]
+    f"rgba({c[0]}, {c[1]}, {c[2]}, 1)": c
+    for c in COLORS[1:]
+}
+TEXT_COLORS = list(RGB_TO_TEXT_COLORS.keys())
 
 
 def preview_support_set(batch):
@@ -43,7 +44,7 @@ def preview_support_set(batch):
 
                 img = get_image(img)
                 img = draw_all(
-                    img, masks=masks, boxes=bboxes, points=points, colors=COLORS
+                    img, masks=masks, boxes=bboxes, points=points, colors=[COLORS[0]] + [RGB_TO_TEXT_COLORS[c] for c in app.storage.tab["taken_colors"].values()]
                 )
 
                 with ui.element("div").classes(
@@ -58,24 +59,24 @@ def preview_support_set(batch):
 
 
 def set_batch_support():
+    classes = app.storage.tab["classes"].copy()
+    classes = sanitize(classes)
+    support_set = sanitize(app.storage.tab["support_set"])
+    image_size = app.storage.tab.get("image_size", IMAGE_SIZE)
+    
     app.storage.tab["batch_support"] = preprocess_support_set(
-        app.storage.tab["support_set"].copy(),
-        app.storage.tab["classes"].copy(),
-        size=IMAGE_SIZE,
+        support_set,
+        classes,
+        size=image_size,
         custom_preprocess=True,
         device="cpu",
     )
-    ui.notify(
-        f'Preprocessed {app.storage.tab["support_set"]} support images',
-        color="positive",
-    )
+    for k, v in app.storage.tab["batch_support"].items():
+        print(f"{k}: instance of {type(v)}")
     preview_support_set(app.storage.tab["batch_support"])
 
 
 UPLOAD_DIR = TemporaryDirectory(prefix="label_anything_uploads", delete=False)
-
-AVAILABLE_COLORS = set(TEXT_COLORS.copy())
-TAKEN_COLORS = {}
 
 
 def set_current_class(value):
@@ -87,9 +88,10 @@ def set_current_class(value):
 
 
 def add_class(label_input: ui.input, chips):
-    color = AVAILABLE_COLORS.pop()
-    TAKEN_COLORS[label_input.value] = color
-    if not AVAILABLE_COLORS:
+    color = app.storage.tab["available_colors"].pop()
+    app.storage.tab["taken_colors"][label_input.value] = color
+    app.storage.tab["current_class"] = label_input.value
+    if not app.storage.tab["available_colors"]:
         ui.notify("No more colors available for new classes", color="negative")
         return
     with chips:
@@ -109,7 +111,7 @@ def remove_class(chip: ui.chip, chips):
     chips.remove(chip)
     ui.notify(f'Removed class: {chip.text} from {app.storage.tab["classes"]}')
     app.storage.tab["classes"].remove(chip.text)
-    AVAILABLE_COLORS.add(TAKEN_COLORS.pop(chip.text))
+    app.storage.tab["available_colors"].add(app.storage.tab["taken_colors"].pop(chip.text))
 
 
 def end_polyline():
@@ -121,7 +123,7 @@ def end_polyline():
         ui.notify("No polyline started", color="negative")
         return
 
-    last_line = f"<line x1=\"{app.storage.tab['polyline'][-2]}\" y1=\"{app.storage.tab['polyline'][-1]}\" x2=\"{app.storage.tab['polyline'][0]}\" y2=\"{app.storage.tab['polyline'][1]}\" stroke=\"{TAKEN_COLORS[current_class]}\" stroke-width=\"3\" />"
+    last_line = f"<line x1=\"{app.storage.tab['polyline'][-2]}\" y1=\"{app.storage.tab['polyline'][-1]}\" x2=\"{app.storage.tab['polyline'][0]}\" y2=\"{app.storage.tab['polyline'][1]}\" stroke=\"{app.storage.tab['taken_colors'][current_class]}\" stroke-width=\"3\" />"
     app.storage.tab["svg_annotations"].content += last_line
 
     if current_class not in app.storage.tab["annotations"]["masks"]:
@@ -135,7 +137,7 @@ def end_polyline():
 def mouse_handler(e: events.MouseEventArguments):
     selected_prompt = app.storage.tab["prompt"]
     current_class = app.storage.tab.get("current_class")
-    color = TAKEN_COLORS.get(current_class)
+    color = app.storage.tab["taken_colors"].get(current_class)
     if not color:
         ui.notify("Please select a class first by clicking on it", color="negative")
         return
@@ -245,6 +247,7 @@ async def load_model(e, model_name=None):
         return
     model_wrapper = await run.cpu_bound(LabelAnything.from_pretrained, model_name)
     app.storage.tab["model"] = model_wrapper.model
+    app.storage.tab["model_config"] = model_wrapper.config
     app.storage.tab["components"]["spinner"].delete()
     ui.notify(f"Model {model_name} loaded successfully", color="positive")
 
@@ -257,13 +260,6 @@ def set_device(device):
     else:
         app.storage.tab["device"] = "cpu"
     print(f"Device set to: {app.storage.tab['device']}")
-    if "model" in app.storage.tab and app.storage.tab["model"]:
-        app.storage.tab["model"].to(device)
-    if "batch_support" in app.storage.tab and app.storage.tab["batch_support"]:
-        app.storage.tab["batch_support"] = {
-            k: v.to(device) if isinstance(v, torch.Tensor) else v
-            for k, v in app.storage.tab["batch_support"].items()
-        }
 
 
 def handle_support_upload(e):
@@ -278,12 +274,6 @@ def handle_query_upload(e):
     file_path = save_uploaded_file(e, Path(UPLOAD_DIR.name))
     app.storage.tab["query_image_path"] = str(file_path)
     ui.notify(f"Query image uploaded: {file_path}")
-
-
-def run_computation(model, batch):
-    with torch.no_grad():
-        result = model(batch)
-    return result
 
 
 async def predict():
@@ -304,24 +294,28 @@ async def predict():
         Image.open(app.storage.tab["query_image_path"]),
         app.storage.tab["batch_support"].copy(),
         size=IMAGE_SIZE,
-        device=DEVICE,
+        device="cpu",
     )
-    print(f"Batch prepared with {len(app.storage.tab['batch_support'])} support images")
-    ui.notify(
-        f"Preprocessed query image with {len(app.storage.tab['batch_support'])} support images"
-    )
-    image_features = await run.cpu_bound(
-        get_features, model.image_encoder, batch[BatchKeys.IMAGES]
-    )
-    print("Extracted image features from the query image")
-    ui.notify("Extracted image features from the query image")
+    # Make batch obserable-free by turning observables into regular lists
+    classes = batch[BatchKeys.CLASSES]
+    classes = [[v for v in c] for c in classes]
+    batch[BatchKeys.CLASSES] = classes
 
-    batch[BatchKeys.EMBEDDINGS] = image_features
+    print(f"Batch prepared")
+    ui.notify(f"Batch prepared")
+    # image_features = await run.cpu_bound(
+    #     get_features, model.image_encoder, batch[BatchKeys.IMAGES], app.storage.tab["device"]
+    # )
+    # print("Extracted image features from the query image")
+    # ui.notify("Extracted image features from the query image")
+
+    # batch[BatchKeys.EMBEDDINGS] = image_features
 
     app.storage.tab["result"] = await run.cpu_bound(
         run_computation,
         model,
         batch,
+        app.storage.tab["device"],
     )
 
     print("Model prediction completed")
@@ -353,17 +347,6 @@ async def predict():
                     )
 
 
-def get_features(_model, batch):
-    b, n = batch.shape[:2]
-    batch = rearrange(batch, "b n c h w -> (b n) c h w")
-    with torch.no_grad():
-        result = torch.cat(
-            [_model(batch[i].unsqueeze(0)) for i in range(batch.shape[0])], dim=0
-        )
-    result = rearrange(result, "(b n) c h w -> b n c h w", b=b)
-    return result
-
-
 async def page_init():
     print("Page initialized")
     app.storage.tab.update(
@@ -371,19 +354,21 @@ async def page_init():
             "query_image_path": None,
             "support_image_path": None,
             "image_widget": None,
-            "classes": observables.ObservableList(),
+            "classes": [],
             "current_class": None,
             "support_set": observables.ObservableList([], on_change=set_batch_support),
             "batch_support": None,
-            "prompt": None,
+            "prompt": "Point",
             "svg_annotations": None,
             "polyline": None,
             "start_rect": None,
             "annotations": None,
             "model": None,
             "result": None,
-            "components": {},
+            "components": {"builtin": {}},
             "device": DEVICE,
+            "available_colors": set(TEXT_COLORS.copy()),
+            "taken_colors": {}
         }
     )
 
@@ -391,24 +376,28 @@ async def page_init():
 @ui.page('/')
 async def index():
     await ui.context.client.connected()
-    # Initialize
     await page_init() 
     components = app.storage.tab["components"]
 
     ui.page_title("Label Anything")
-    ui.markdown("# 🏷️ Label Anything Demo")
+    ui.markdown("# 🏷️ Label Anything")
 
-    # Left Drawer: Model selection
-    with ui.left_drawer().classes(
-        "bg-gradient-to-b from-blue-100 to-white shadow-md p-4"
-    ):
-        models = retrieve_models()
+    # Model list and selection
+    models = retrieve_models()
+    app.storage.tab['model'] = models[0]
+
+    def on_model_change(e):
+        app.storage.tab['model'] = e.value
+        load_model(e)
+
+    with ui.left_drawer().classes("bg-gradient-to-b from-blue-100 to-white shadow-md p-4"):
         ui.select(
             label="🧠 Select Model",
             options=models,
-            on_change=load_model,
+            on_change=on_model_change,
             value=models[0],
         ).classes("w-full rounded-md shadow-sm")
+
         components["spinner"] = ui.element("div")
         ui.switch(
             "Use GPU",
@@ -416,85 +405,71 @@ async def index():
             on_change=lambda x: set_device("cuda" if x.value else "cpu"),
         )
 
-    # Main layout with two columns
-    with ui.element("div").classes("flex flex-col md:flex-row w-full gap-4"):
-        # Left Column
-        components["left"] = ui.element("div").classes(
-            "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
-        )
+    # Tabs: "Segment your images" and "Segment from COCO"
+    with ui.tabs().classes("w-full") as tabs:
+        tab1 = ui.tab("🖼️ Segment your images")
+        tab2 = ui.tab("📦 Segment from COCO")
 
-        # Right Column
-        components["right"] = ui.element("div").classes(
-            "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
-        )
-
-        with components["left"]:
-            # Step 1: Upload query image
-            ui.markdown("### 📤 Step 1: Upload your query image").classes(
-                "font-semibold text-gray-700"
-            )
-            ui.upload(
-                on_upload=handle_query_upload,
-                auto_upload=True,
-                label="Upload Query Image",
-            ).classes("w-full rounded border border-gray-300")
-
-            # Step 2: Add class labels
-            ui.markdown("### 🎯 Step 2: Add the desired classes").classes(
-                "font-semibold text-gray-700"
-            )
-            label_input = (
-                ui.input("Type a class and press Enter")
-                .on("keydown.enter", lambda: add_class(label_input, chips))
-                .classes("w-full rounded border border-gray-300")
-            )
-            chips = ui.row().classes("gap-2 flex-wrap mt-2")
-
-            # Step 3: Upload and annotate support images
-            ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes(
-                "font-semibold text-gray-700"
-            )
-            ui.radio(["Point", "Rectangle", "Mask"], value="Point").props(
-                "inline"
-            ).classes("mb-2").bind_value(app.storage.tab, "prompt")
-            ui.markdown(
-                "You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points."
-            )
-
-            with ui.element("div").classes("mb-4"):
-                components["upload_support"] = ui.upload(
-                    on_upload=handle_support_upload,
-                    auto_upload=True,
-                    label="Upload Support Image",
-                ).classes("w-full rounded border border-gray-300")
-
-            with ui.row().classes("gap-2"):
-                ui.button("🔚 End Mask", on_click=end_polyline).classes("rounded-lg")
-                ui.button("🧹 Clear Annotations", on_click=clear_annotations).classes(
-                    "rounded-lg"
+    with ui.tab_panels(tabs, value=tab1).classes("w-full"):
+        with ui.tab_panel(tab1):
+            with ui.element("div").classes("flex flex-col md:flex-row w-full gap-4"):
+                components["left"] = ui.element("div").classes(
+                    "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
                 )
-                ui.button("➕ Add Support Image", on_click=add_support_image).classes(
-                    "rounded-lg"
+                components["right"] = ui.element("div").classes(
+                    "w-full md:flex-[5] min-w-0 bg-white rounded-xl p-6 shadow-md transition-all duration-300"
                 )
 
-            ui.separator().classes("my-4 border-t-2")
-            ui.button("🚀 Predict", on_click=predict).classes(
-                "bg-blue-600 text-white hover:bg-blue-700 font-semibold py-2 px-4 rounded shadow"
-            )
+                with components["left"]:
+                    ui.markdown("### 📤 Step 1: Upload your query image").classes("font-semibold text-gray-700")
+                    ui.upload(
+                        on_upload=handle_query_upload,
+                        auto_upload=True,
+                        label="Upload Query Image",
+                    ).classes("w-full rounded border border-gray-300")
 
-    # Populate the right side separately
-    with components["right"]:
-        # placeholder or functional content for the right panel
-        ui.markdown("## 🖼️ Support Set Preview").classes(
-            "text-xl font-semibold text-gray-700 border-b pb-2 mb-2"
-        )
-        components["preview"] = ui.element("div").classes("gap-4")
-        components["prediction"] = ui.element("div").classes("gap-4")
-        
-    # Initial load of the first model
+                    ui.markdown("### 🎯 Step 2: Add the desired classes").classes("font-semibold text-gray-700")
+                    label_input = ui.input("Type a class and press Enter").on(
+                        "keydown.enter", lambda: add_class(label_input, chips)
+                    ).classes("w-full rounded border border-gray-300 px-3")
+                    chips = ui.row().classes("gap-2 flex-wrap mt-2")
+
+                    ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes("font-semibold text-gray-700")
+                    ui.radio(["Point", "Rectangle", "Mask"], value="Point").props("inline").classes("mb-2").bind_value(app.storage.tab, "prompt")
+                    ui.markdown("You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points.")
+
+                    with ui.element("div").classes("mb-4"):
+                        components["upload_support"] = ui.upload(
+                            on_upload=handle_support_upload,
+                            auto_upload=True,
+                            label="Upload Support Image",
+                        ).classes("w-full rounded border border-gray-300")
+
+                    with ui.row().classes("gap-2"):
+                        ui.button("🔚 End Mask", on_click=end_polyline).classes("rounded-lg")
+                        ui.button("🧹 Clear Annotations", on_click=clear_annotations).classes("rounded-lg")
+                        ui.button("➕ Add Support Image", on_click=add_support_image).classes("rounded-lg")
+
+                    ui.separator().classes("my-4 border-t-2")
+                    ui.button("🚀 Predict", on_click=predict).classes(
+                        "bg-blue-600 text-white hover:bg-blue-700 font-semibold py-2 px-4 rounded shadow"
+                    )
+
+                with components["right"]:
+                    ui.markdown("## 🖼️ Support Set Preview").classes(
+                        "text-xl font-semibold text-gray-700 border-b pb-2 mb-2"
+                    )
+                    components["preview"] = ui.element("div").classes("gap-4")
+                    components["prediction"] = ui.element("div").classes("gap-4")
+
+        with ui.tab_panel(tab2):
+            # Pass currently selected model to built-in dataset UI
+            built_in_dataset()
+
+    # Load initial model once
     await load_model(None, models[0])
 
 
 def main():
-    ui.run(favicon="🏷️")
+    ui.run(favicon="🏷️", port=8501)
 

@@ -94,9 +94,8 @@ class CocoLVISDataset(Dataset):
         super().__init__()
         print(f"Loading dataset annotations from {instances_path}...")
 
-        assert (
-            img_dir is not None or emb_dir is not None
-        ), "Either img_dir or emb_dir must be provided."
+        if img_dir is None and emb_dir is None:
+            print("Warning: img_dir and emb_dir are both None. Images will be downloaded.")
         assert (
             not load_gts or emb_dir is not None
         ), "If load_gts is True, emb_dir must be provided."

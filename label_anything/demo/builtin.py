@@ -8,13 +8,10 @@ import plotly.express as px
 import torch
 
 
-from copy import deepcopy
 
-from label_anything.demo.utils import COLORS, TEXT_COLORS
+from label_anything.demo.utils import COLORS, TEXT_COLORS, get_data
 from label_anything.experiment.substitution import Substitutor
 from label_anything.utils.utils import ResultDict
-from label_anything.data.examples import uniform_sampling
-from label_anything.data import get_dataloaders, utils
 from label_anything.data.utils import (
     AnnFileKeys,
     PromptType,
@@ -35,73 +32,6 @@ from label_anything.demo.visualize import (
     set_embeddings,
     to_device,
 )
-
-    
-
-COCO_NAME = "val_coco20i"
-COCO_PARAMS = {
-    "name": "coco",
-    "instances_path": "data/coco/annotations/instances_val2014.json",
-    "img_dir": "data/coco/train_val_2017",
-    "split": "val",
-    "val_fold_idx": 3,
-    "n_folds": 4,
-    "n_shots": 1,
-    "n_ways": 1,
-    "do_subsample": False,
-    "add_box_noise": False,
-    "val_num_samples": 100,
-}
-
-
-parameters = {
-    "dataloader": {
-        "num_workers": 0,
-        "possible_batch_example_nums": [[1]],
-        "val_possible_batch_example_nums": [[1]],
-        "prompt_types": ["mask"],
-        "prompt_choice_level": ["episode"],
-        "val_prompt_types": ["mask"],
-        },
-    "dataset": {
-        "preprocess": {
-            "mean": [0.485, 0.456, 0.406],
-            "std": [0.229, 0.224, 0.225],
-            "image_size": 480,
-        },
-        "datasets": {
-            COCO_NAME: COCO_PARAMS,
-        },
-        "common": {
-            "remove_small_annotations": True
-        }
-    },
-}
-
-
-def get_data(n_ways, n_shots, n_examples, image_size, custom_preprocess, all_example_categories, prompt_types, max_points, fold, class_based_sampling=False):
-    parameters["dataset"]["datasets"][COCO_NAME]["n_ways"] = n_ways
-    parameters["dataset"]["datasets"][COCO_NAME]["n_shots"] = n_shots
-    parameters["dataset"]["datasets"][COCO_NAME]["n_examples"] = n_examples
-    parameters["dataset"]["datasets"][COCO_NAME]["image_size"] = image_size
-    parameters["dataset"]["datasets"][COCO_NAME]["val_fold_idx"] = fold
-    parameters["dataset"]["datasets"][COCO_NAME]["class_based_sampling"] = class_based_sampling
-    parameters["dataset"]["preprocess"]["image_size"] = image_size
-    parameters["dataset"]["common"]["custom_preprocess"] = custom_preprocess
-    parameters["dataset"]["common"]["image_size"] = image_size
-    parameters["dataset"]["common"]["max_points_per_annotation"] = max_points
-    parameters["dataset"]["common"]["all_example_categories"] = all_example_categories
-    if not prompt_types:
-        st.warning("Please select at least one prompt type.")
-        return
-    parameters["dataloader"]["prompt_types"] = prompt_types
-    parameters["dataloader"]["val_prompt_types"] = prompt_types
-    _, val, _ = get_dataloaders(
-        deepcopy(parameters["dataset"]),
-        deepcopy(parameters["dataloader"]),
-        num_processes=1,
-    )
-    return val[COCO_NAME]
 
 
 def get_prompt_types():
