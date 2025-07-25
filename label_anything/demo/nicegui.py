@@ -19,7 +19,7 @@ from label_anything.models.build_lam import LabelAnything
 from label_anything.utils.utils import ResultDict
 
 IMAGE_SIZE = 1024
-DEVICE = "cpu"  # Change to "cuda" if you have a GPU
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 TEXT_COLORS = [
     # rbg to hex
     f"rgba({c[0]}, {c[1]}, {c[2]}, 1)"
@@ -29,13 +29,13 @@ TEXT_COLORS = [
 
 def preview_support_set(batch):
     # Clear previous preview if it exists
-    if "preview" in components:
-        components["preview"].clear()
+    if "preview" in app.storage.tab["components"]:
+        app.storage.tab["components"]["preview"].clear()
 
-    with components["preview"]:
+    with app.storage.tab["components"]["preview"]:
         # Scrollable image row
         with ui.row().classes("gap-4 overflow-x-auto whitespace-nowrap pb-2"):
-            for i, _ in enumerate(state["support_set"]):
+            for i, _ in enumerate(app.storage.tab["support_set"]):
                 img = batch[BatchKeys.IMAGES][0][i]
                 masks = batch[BatchKeys.PROMPT_MASKS][0][i]
                 bboxes = batch[BatchKeys.PROMPT_BBOXES][0][i]
@@ -58,38 +58,29 @@ def preview_support_set(batch):
 
 
 def set_batch_support():
-    state["batch_support"] = preprocess_support_set(
-        state["support_set"].copy(),
-        state["classes"].copy(),
+    app.storage.tab["batch_support"] = preprocess_support_set(
+        app.storage.tab["support_set"].copy(),
+        app.storage.tab["classes"].copy(),
         size=IMAGE_SIZE,
         custom_preprocess=True,
         device="cpu",
     )
-    ui.notify(f'Preprocessed {state["support_set"]} support images', color="positive")
-    preview_support_set(state["batch_support"])
+    ui.notify(
+        f'Preprocessed {app.storage.tab["support_set"]} support images',
+        color="positive",
+    )
+    preview_support_set(app.storage.tab["batch_support"])
 
 
 UPLOAD_DIR = TemporaryDirectory(prefix="label_anything_uploads", delete=False)
-
-state = {
-    "query_image_path": None,
-    "support_image_path": None,
-    "image_widget": None,
-    "classes": observables.ObservableList(),
-    "current_class": None,
-    "support_set": observables.ObservableList([], on_change=set_batch_support),
-    "batch_support": None,
-}
-
-components = {}
 
 AVAILABLE_COLORS = set(TEXT_COLORS.copy())
 TAKEN_COLORS = {}
 
 
 def set_current_class(value):
-    if value in state["classes"]:
-        state["current_class"] = value
+    if value in app.storage.tab["classes"]:
+        app.storage.tab["current_class"] = value
         ui.notify(f"Current class set to: {value}")
     else:
         ui.notify(f'Class "{value}" not found in available classes', color="negative")
@@ -110,38 +101,40 @@ def add_class(label_input: ui.input, chips):
             on_click=lambda: set_current_class(chip.text),
         )
     chip.on("remove", lambda: remove_class(chip, chips))
-    state["classes"].append(label_input.value)
+    app.storage.tab["classes"].append(label_input.value)
     label_input.value = ""
 
 
 def remove_class(chip: ui.chip, chips):
     chips.remove(chip)
-    ui.notify(f'Removed class: {chip.text} from {state["classes"]}')
-    state["classes"].remove(chip.text)
+    ui.notify(f'Removed class: {chip.text} from {app.storage.tab["classes"]}')
+    app.storage.tab["classes"].remove(chip.text)
     AVAILABLE_COLORS.add(TAKEN_COLORS.pop(chip.text))
 
 
 def end_polyline():
-    current_class = state.get("current_class")
+    current_class = app.storage.tab.get("current_class")
     if not current_class:
         ui.notify("Please select a class first by clicking on it", color="negative")
         return
-    if not state["polyline"]:
+    if not app.storage.tab["polyline"]:
         ui.notify("No polyline started", color="negative")
         return
 
-    last_line = f"<line x1=\"{state['polyline'][-2]}\" y1=\"{state['polyline'][-1]}\" x2=\"{state['polyline'][0]}\" y2=\"{state['polyline'][1]}\" stroke=\"{TAKEN_COLORS[current_class]}\" stroke-width=\"3\" />"
-    state["svg_annotations"].content += last_line
+    last_line = f"<line x1=\"{app.storage.tab['polyline'][-2]}\" y1=\"{app.storage.tab['polyline'][-1]}\" x2=\"{app.storage.tab['polyline'][0]}\" y2=\"{app.storage.tab['polyline'][1]}\" stroke=\"{TAKEN_COLORS[current_class]}\" stroke-width=\"3\" />"
+    app.storage.tab["svg_annotations"].content += last_line
 
-    if current_class not in state["annotations"]["masks"]:
-        state["annotations"]["masks"][current_class] = []
-    state["annotations"]["masks"][current_class].append(state["polyline"])
-    state["polyline"] = None
+    if current_class not in app.storage.tab["annotations"]["masks"]:
+        app.storage.tab["annotations"]["masks"][current_class] = []
+    app.storage.tab["annotations"]["masks"][current_class].append(
+        app.storage.tab["polyline"]
+    )
+    app.storage.tab["polyline"] = None
 
 
 def mouse_handler(e: events.MouseEventArguments):
-    selected_prompt = state["prompt"].value
-    current_class = state.get("current_class")
+    selected_prompt = app.storage.tab["prompt"]
+    current_class = app.storage.tab.get("current_class")
     color = TAKEN_COLORS.get(current_class)
     if not color:
         ui.notify("Please select a class first by clicking on it", color="negative")
@@ -150,71 +143,75 @@ def mouse_handler(e: events.MouseEventArguments):
     #     f"State prompt: {state['prompt'].value}, Mouse event: {e.type}, Coordinates: ({e.image_x}, {e.image_y}, Class: {current_class}, Color: {color})"
     # )
     if e.shift or selected_prompt == "Rectangle":  # Add a rectangle
-        if state["start_rect"]:
+        if app.storage.tab["start_rect"]:
             # Finish rectangle and draw it
-            x1, y1 = state["start_rect"]
+            x1, y1 = app.storage.tab["start_rect"]
             x2, y2 = e.image_x, e.image_y
             x, y = min(x1, x2), min(y1, y2)
             w, h = abs(x2 - x1), abs(y2 - y1)
             rect_svg = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="none" stroke="{color}" stroke-width="3" />'
-            state["svg_annotations"].content += rect_svg
-            if current_class not in state["annotations"]["bboxes"]:
-                state["annotations"]["bboxes"][current_class] = []
-            state["annotations"]["bboxes"][current_class].append((x, y, x + w, y + h))
+            app.storage.tab["svg_annotations"].content += rect_svg
+            if current_class not in app.storage.tab["annotations"]["bboxes"]:
+                app.storage.tab["annotations"]["bboxes"][current_class] = []
+            app.storage.tab["annotations"]["bboxes"][current_class].append(
+                (x, y, x + w, y + h)
+            )
             ui.notify(
                 f"Rectangle completed: ({x1:.1f}, {y1:.1f}) to ({x2:.1f}, {y2:.1f})"
             )
-            state["start_rect"] = None
+            app.storage.tab["start_rect"] = None
         else:
-            state["start_rect"] = (e.image_x, e.image_y)
+            app.storage.tab["start_rect"] = (e.image_x, e.image_y)
             ui.notify(f"Starting rectangle at ({e.image_x}, {e.image_y})")
     elif e.ctrl or selected_prompt == "Mask":  # Add a polyline
-        if state["polyline"]:
-            state[
+        if app.storage.tab["polyline"]:
+            app.storage.tab[
                 "svg_annotations"
-            ].content += f'<line x1="{state["polyline"][-2]}" y1="{state["polyline"][-1]}" x2="{e.image_x}" y2="{e.image_y}" stroke="{color}" stroke-width="3" />'
-            state["polyline"].extend([e.image_x, e.image_y])
+            ].content += f'<line x1="{app.storage.tab["polyline"][-2]}" y1="{app.storage.tab["polyline"][-1]}" x2="{e.image_x}" y2="{e.image_y}" stroke="{color}" stroke-width="3" />'
+            app.storage.tab["polyline"].extend([e.image_x, e.image_y])
             # Add the line to annotations
             # Notify the user
             ui.notify(f"Line drawn to ({e.image_x}, {e.image_y})")
         else:
-            state["polyline"] = [e.image_x, e.image_y]
+            app.storage.tab["polyline"] = [e.image_x, e.image_y]
             ui.notify(f"Starting line at ({e.image_x}, {e.image_y})")
     else:
-        state[
+        app.storage.tab[
             "svg_annotations"
         ].content += f'<circle cx="{e.image_x}" cy="{e.image_y}" r="15" fill="none" stroke="{color}" stroke-width="4" />'
-        if current_class not in state["annotations"]["points"]:
-            state["annotations"]["points"][current_class] = []
-        state["annotations"]["points"][current_class].append((e.image_x, e.image_y))
+        if current_class not in app.storage.tab["annotations"]["points"]:
+            app.storage.tab["annotations"]["points"][current_class] = []
+        app.storage.tab["annotations"]["points"][current_class].append(
+            (e.image_x, e.image_y)
+        )
         ui.notify(f"Point clicked at ({e.image_x}, {e.image_y})")
 
 
 def clear_annotations():
-    if state["svg_annotations"]:
-        state["svg_annotations"].content = ""
-        state["annotations"] = {"points": [], "bboxes": [], "masks": []}
+    if app.storage.tab["svg_annotations"]:
+        app.storage.tab["svg_annotations"].content = ""
+        app.storage.tab["annotations"] = {"points": [], "bboxes": [], "masks": []}
         ui.notify("Annotations cleared")
 
 
 def add_support_image():
-    if not state["support_image_path"]:
+    if not app.storage.tab["support_image_path"]:
         ui.notify("Please upload a support image first", color="negative")
         return
-    if "annotations" not in state:
+    if "annotations" not in app.storage.tab:
         ui.notify("No annotations available to add", color="negative")
         return
-    state["support_set"].append(
+    app.storage.tab["support_set"].append(
         {
-            "image": state["support_image_path"],
-            "annotations": state["annotations"].copy(),
+            "image": app.storage.tab["support_image_path"],
+            "annotations": app.storage.tab["annotations"].copy(),
         }
     )
     clear_annotations()
-    components["annotation_row"].delete()
-    state["support_image_path"] = None
-    state["image_widget"] = None
-    state["svg_annotations"] = None
+    app.storage.tab["components"]["annotation_row"].delete()
+    app.storage.tab["support_image_path"] = None
+    app.storage.tab["image_widget"] = None
+    app.storage.tab["svg_annotations"] = None
     ui.notify("Support image added")
 
 
@@ -226,43 +223,60 @@ def save_uploaded_file(e, dest_dir: Path) -> Path:
 
 
 def show_support_image():
-    components["annotation_row"] = ui.element("div").classes("gap-4")
-    with components["annotation_row"]:
+    app.storage.tab["components"]["annotation_row"] = ui.element("div").classes("gap-4")
+    with app.storage.tab["components"]["annotation_row"]:
         ui.label("Annotate your support image").classes("text-lg font-bold")
-        state["image_widget"] = ui.interactive_image(
-            state["support_image_path"], cross=True
+        app.storage.tab["image_widget"] = ui.interactive_image(
+            app.storage.tab["support_image_path"], cross=True
         )
-        state["svg_annotations"] = state["image_widget"].add_layer()
-        state["polyline"] = None
-        state["start_rect"] = None
-        state["annotations"] = {"points": {}, "bboxes": {}, "masks": {}}
+        app.storage.tab["svg_annotations"] = app.storage.tab["image_widget"].add_layer()
+        app.storage.tab["polyline"] = None
+        app.storage.tab["start_rect"] = None
+        app.storage.tab["annotations"] = {"points": {}, "bboxes": {}, "masks": {}}
 
-        state["image_widget"].on_mouse(mouse_handler)
+        app.storage.tab["image_widget"].on_mouse(mouse_handler)
 
 
 async def load_model(e, model_name=None):
     model_name = model_name or e.value
-    components["spinner"] = ui.spinner()
+    app.storage.tab["components"]["spinner"] = ui.spinner()
     if not model_name:
         ui.notify("Please select a model", color="negative")
         return
     model_wrapper = await run.cpu_bound(LabelAnything.from_pretrained, model_name)
-    state["model"] = model_wrapper.model
-    components["spinner"].delete()
+    app.storage.tab["model"] = model_wrapper.model
+    app.storage.tab["components"]["spinner"].delete()
     ui.notify(f"Model {model_name} loaded successfully", color="positive")
+
+def set_device(device):
+    app.storage.tab["device"] = device
+    if device == "cuda":
+        if not torch.cuda.is_available():
+            ui.notify("CUDA is not available, switching to CPU", color="negative")
+            app.storage.tab["device"] = "cpu"
+    else:
+        app.storage.tab["device"] = "cpu"
+    print(f"Device set to: {app.storage.tab['device']}")
+    if "model" in app.storage.tab and app.storage.tab["model"]:
+        app.storage.tab["model"].to(device)
+    if "batch_support" in app.storage.tab and app.storage.tab["batch_support"]:
+        app.storage.tab["batch_support"] = {
+            k: v.to(device) if isinstance(v, torch.Tensor) else v
+            for k, v in app.storage.tab["batch_support"].items()
+        }
 
 
 def handle_support_upload(e):
     file_path = save_uploaded_file(e, Path(UPLOAD_DIR.name))
-    state["support_image_path"] = str(file_path)
+    app.storage.tab["support_image_path"] = str(file_path)
     ui.notify(f"Support image uploaded: {file_path}")
-    components["upload_support"].reset()
+    app.storage.tab["components"]["upload_support"].reset()
     show_support_image()
 
 
 def handle_query_upload(e):
     file_path = save_uploaded_file(e, Path(UPLOAD_DIR.name))
-    state["query_image_path"] = str(file_path)
+    app.storage.tab["query_image_path"] = str(file_path)
     ui.notify(f"Query image uploaded: {file_path}")
 
 
@@ -273,27 +287,28 @@ def run_computation(model, batch):
 
 
 async def predict():
+    components = app.storage.tab["components"]
     print("Predicting...")
     ui.notify("Predicting...", color="info")
-    model = state.get("model")
+    model = app.storage.tab.get("model")
     if not model:
         ui.notify("Please load a model first", color="negative")
         return
-    if not state["query_image_path"]:
+    if not app.storage.tab["query_image_path"]:
         ui.notify("Please upload a query image first", color="negative")
         return
-    if not state["batch_support"]:
+    if not app.storage.tab["batch_support"]:
         ui.notify("Please upload support images first", color="negative")
         return
     batch = preprocess_to_batch(
-        Image.open(state["query_image_path"]),
-        state["batch_support"].copy(),
+        Image.open(app.storage.tab["query_image_path"]),
+        app.storage.tab["batch_support"].copy(),
         size=IMAGE_SIZE,
         device=DEVICE,
     )
-    print(f"Batch prepared with {len(state['batch_support'])} support images")
+    print(f"Batch prepared with {len(app.storage.tab['batch_support'])} support images")
     ui.notify(
-        f"Preprocessed query image with {len(state['batch_support'])} support images"
+        f"Preprocessed query image with {len(app.storage.tab['batch_support'])} support images"
     )
     image_features = await run.cpu_bound(
         get_features, model.image_encoder, batch[BatchKeys.IMAGES]
@@ -303,7 +318,7 @@ async def predict():
 
     batch[BatchKeys.EMBEDDINGS] = image_features
 
-    state["result"] = await run.cpu_bound(
+    app.storage.tab["result"] = await run.cpu_bound(
         run_computation,
         model,
         batch,
@@ -312,13 +327,13 @@ async def predict():
     print("Model prediction completed")
     ui.notify("Model prediction completed")
 
-    pred = state["result"][ResultDict.LOGITS].argmax(dim=1)
+    pred = app.storage.tab["result"][ResultDict.LOGITS].argmax(dim=1)
     plots, titles = plot_seg(
         batch,
         pred,
         COLORS,
         dims=batch[BatchKeys.DIMS],
-        classes=state["classes"],
+        classes=app.storage.tab["classes"],
     )
 
     components["prediction"].clear()
@@ -349,9 +364,39 @@ def get_features(_model, batch):
     return result
 
 
-def main():
+async def page_init():
+    print("Page initialized")
+    app.storage.tab.update(
+        {
+            "query_image_path": None,
+            "support_image_path": None,
+            "image_widget": None,
+            "classes": observables.ObservableList(),
+            "current_class": None,
+            "support_set": observables.ObservableList([], on_change=set_batch_support),
+            "batch_support": None,
+            "prompt": None,
+            "svg_annotations": None,
+            "polyline": None,
+            "start_rect": None,
+            "annotations": None,
+            "model": None,
+            "result": None,
+            "components": {},
+            "device": DEVICE,
+        }
+    )
+
+
+@ui.page('/')
+async def index():
+    await ui.context.client.connected()
+    # Initialize
+    await page_init() 
+    components = app.storage.tab["components"]
+
     ui.page_title("Label Anything")
-    ui.markdown("# 🎯 Label Anything Demo")
+    ui.markdown("# 🏷️ Label Anything Demo")
 
     # Left Drawer: Model selection
     with ui.left_drawer().classes(
@@ -365,6 +410,11 @@ def main():
             value=models[0],
         ).classes("w-full rounded-md shadow-sm")
         components["spinner"] = ui.element("div")
+        ui.switch(
+            "Use GPU",
+            value=app.storage.tab["device"] == "cuda",
+            on_change=lambda x: set_device("cuda" if x.value else "cpu"),
+        )
 
     # Main layout with two columns
     with ui.element("div").classes("flex flex-col md:flex-row w-full gap-4"):
@@ -383,14 +433,14 @@ def main():
             ui.markdown("### 📤 Step 1: Upload your query image").classes(
                 "font-semibold text-gray-700"
             )
-            state["query_image_path"] = ui.upload(
+            ui.upload(
                 on_upload=handle_query_upload,
                 auto_upload=True,
                 label="Upload Query Image",
             ).classes("w-full rounded border border-gray-300")
 
             # Step 2: Add class labels
-            ui.markdown("### 🏷️ Step 2: Add the desired classes").classes(
+            ui.markdown("### 🎯 Step 2: Add the desired classes").classes(
                 "font-semibold text-gray-700"
             )
             label_input = (
@@ -404,11 +454,9 @@ def main():
             ui.markdown("### 🖼️ Step 3: Upload & Annotate Support Images").classes(
                 "font-semibold text-gray-700"
             )
-            state["prompt"] = (
-                ui.radio(["Point", "Rectangle", "Mask"], value="Point")
-                .props("inline")
-                .classes("mb-2")
-            )
+            ui.radio(["Point", "Rectangle", "Mask"], value="Point").props(
+                "inline"
+            ).classes("mb-2").bind_value(app.storage.tab, "prompt")
             ui.markdown(
                 "You can also use *Shift + Click* to draw rectangles, *Ctrl + Click* to draw masks, or just click to add points."
             )
@@ -442,12 +490,11 @@ def main():
         )
         components["preview"] = ui.element("div").classes("gap-4")
         components["prediction"] = ui.element("div").classes("gap-4")
-
-    # Initialize models
-    app.on_connect(load_model(None, models[0]))
-
-    ui.run()
+        
+    # Initial load of the first model
+    await load_model(None, models[0])
 
 
-if __name__ == "__main__":
-    main()
+def main():
+    ui.run(favicon="🏷️")
+
