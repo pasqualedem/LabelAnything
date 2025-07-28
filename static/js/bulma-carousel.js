@@ -2306,8 +2306,8 @@ var Translate = function () {
 "use strict";
 var defaultOptions = {
   initialSlide: 0,
-  slidesToScroll: 1,
-  slidesToShow: 1,
+  slidesToScroll: 4,
+  slidesToShow: 4,
 
   navigation: true,
   navigationKeys: true,
@@ -2327,16 +2327,16 @@ var defaultOptions = {
   pauseOnHover: true,
   breakpoints: [{
     changePoint: 480,
-    slidesToShow: 1,
-    slidesToScroll: 1
+    slidesToShow: 4,
+    slidesToScroll: 4
   }, {
     changePoint: 640,
-    slidesToShow: 2,
-    slidesToScroll: 2
+    slidesToShow: 4,
+    slidesToScroll: 4
   }, {
     changePoint: 768,
-    slidesToShow: 3,
-    slidesToScroll: 3
+    slidesToShow: 4,
+    slidesToScroll: 4
   }],
 
   onReady: null,

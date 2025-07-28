@@ -26,8 +26,10 @@
     <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
 
     <link rel="stylesheet" href="./static/css/bulma.min.css">
-    <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
-    <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+    <link rel="stylesheet" href="./static/css/swiper.css">
+    <!-- <link rel="stylesheet" href="./static/css/bulma-carousel.min.css"> -->
+    <!-- <link rel="stylesheet" href="./static/css/bulma-slider.min.css"> -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
     <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
     <link rel="stylesheet" href="./static/css/index.css">
@@ -35,8 +37,8 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script defer src="./static/js/fontawesome.all.min.js"></script>
-    <script src="./static/js/bulma-carousel.min.js"></script>
-    <script src="./static/js/bulma-slider.min.js"></script>
+    <script src="./static/js/bulma-carousel.js"></script>
+    <!-- <script src="./static/js/bulma-slider.min.js"></script> -->
     <script src="./static/js/index.js"></script>
 </head>
 
@@ -63,11 +65,11 @@
                         More Research
                     </a>
                     <div class="navbar-dropdown">
+                        <a class="navbar-item" href="https://pasqualedem.github.io/">
+                            Pasquale De Marinis' Website
+                        </a>
                         <a class="navbar-item" href="https://sites.google.com/site/cilabuniba/home">
                             CILab's Website
-                        </a>
-                        <a class="navbar-item" href="https://github.com/cilabuniba">
-                            CILab's GitHub
                         </a>
                     </div>
                 </div>
@@ -83,7 +85,8 @@
                     <div class="column has-text-centered">
                         <h1 class="title is-1 publication-title">Label Anything: Multi-Class Few-Shot Semantic
                             Segmentation with Visual Prompts</h1>
-                        <h2 class="title is-5 publication-title">European Conference on Artificial Intelligence (ECAI) 2025</h2>
+                        <h2 class="title is-5 publication-title">European Conference on Artificial Intelligence (ECAI)
+                            2025</h2>
                         <div class="is-size-5 publication-authors">
                             <span class="author-block">
                                 <a href="https://pasqualedem.github.io/">Pasquale De Marinis</a><sup>1</sup>,</span>
@@ -189,52 +192,58 @@
     </section>
 
 
-    <section class="hero is-light is-small">
+    <!-- <section class="hero is-light is-small">
         <div class="hero-body">
             <div class="container">
                 <div id="results-carousel" class="carousel results-carousel">
                     <div class="item item-steve">
-                        <video poster="" id="steve" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/steve.mp4" type="video/mp4">
-                        </video>
+                    <div class="item">
+                        <img src="./static/images/LAexamples_1.png"
+                            alt="Label Anything example 1" />
+                    </div>
                     </div>
                     <div class="item item-chair-tp">
-                        <video poster="" id="chair-tp" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/chair-tp.mp4" type="video/mp4">
-                        </video>
+                        <img src="./static/images/LAexamples_2.png"
+                            alt="Label Anything example 2" />
                     </div>
                     <div class="item item-shiba">
-                        <video poster="" id="shiba" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/shiba.mp4" type="video/mp4">
-                        </video>
+                        <img src="./static/images/LAexamples_3.png"
+                            alt="Label Anything example 3" />
                     </div>
                     <div class="item item-fullbody">
-                        <video poster="" id="fullbody" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/fullbody.mp4" type="video/mp4">
-                        </video>
-                    </div>
-                    <div class="item item-blueshirt">
-                        <video poster="" id="blueshirt" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/blueshirt.mp4" type="video/mp4">
-                        </video>
-                    </div>
-                    <div class="item item-mask">
-                        <video poster="" id="mask" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/mask.mp4" type="video/mp4">
-                        </video>
-                    </div>
-                    <div class="item item-coffee">
-                        <video poster="" id="coffee" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/coffee.mp4" type="video/mp4">
-                        </video>
-                    </div>
-                    <div class="item item-toby">
-                        <video poster="" id="toby" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/toby2.mp4" type="video/mp4">
-                        </video>
+                        <img src="./static/images/LAexamples_4.png"
+                            alt="Label Anything example 4" />
                     </div>
                 </div>
             </div>
+        </div>
+    </section> -->
+
+    <section class="hero is-light is-small">
+        <div class="hero-body">
+            <div class="container">
+                <div class="swiper swiper-container">
+                    <div class="swiper-wrapper">
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_1.png" alt="Label Anything example 1" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_2.png" alt="Label Anything example 2" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_3.png" alt="Label Anything example 3" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_4.png" alt="Label Anything example 4" />
+                        </div>
+                    </div>
+                    <!-- Pagination -->
+                    <div class="swiper-pagination"></div>
+                    <div class="swiper-button-next"></div>
+                    <div class="swiper-button-prev"></div>
+                </div>
+            </div>
+        </div>
         </div>
     </section>
 
@@ -272,7 +281,7 @@
             <!--/ Abstract. -->
 
             <!-- Paper video. -->
-            <div class="columns is-centered has-text-centered">
+            <!-- <div class="columns is-centered has-text-centered">
                 <div class="column is-four-fifths">
                     <h2 class="title is-3">Video</h2>
                     <div class="publication-video">
@@ -280,7 +289,7 @@
                             allow="autoplay; encrypted-media" allowfullscreen></iframe>
                     </div>
                 </div>
-            </div>
+            </div> -->
             <!--/ Paper video. -->
         </div>
     </section>
@@ -289,100 +298,54 @@
     <section class="section">
         <div class="container is-max-desktop">
 
-            <div class="columns is-centered">
-
-                <!-- Visual Effects. -->
-                <div class="column">
-                    <div class="content">
-                        <h2 class="title is-3">Visual Effects</h2>
-                        <p>
-                            Using <i>nerfies</i> you can create fun visual effects. This Dolly zoom effect
-                            would be impossible without nerfies since it would require going through a wall.
-                        </p>
-                        <video id="dollyzoom" autoplay controls muted loop playsinline height="100%">
-                            <source src="./static/videos/dollyzoom-stacked.mp4" type="video/mp4">
-                        </video>
-                    </div>
-                </div>
-                <!--/ Visual Effects. -->
-
-                <!-- Matting. -->
-                <div class="column">
-                    <h2 class="title is-3">Matting</h2>
-                    <div class="columns is-centered">
-                        <div class="column content">
-                            <p>
-                                As a byproduct of our method, we can also solve the matting problem by ignoring
-                                samples that fall outside of a bounding box during rendering.
-                            </p>
-                            <video id="matting-video" controls playsinline height="100%">
-                                <source src="./static/videos/matting.mp4" type="video/mp4">
-                            </video>
-                        </div>
-
-                    </div>
-                </div>
-            </div>
-            <!--/ Matting. -->
-
-            <!-- Animation. -->
+            <!-- Explanation. -->
             <div class="columns is-centered">
                 <div class="column is-full-width">
-                    <h2 class="title is-3">Animation</h2>
+                    <h2 class="title is-3">How it works</h2>
 
                     <!-- Interpolating. -->
-                    <h3 class="title is-4">Interpolating states</h3>
+                    <h3 class="title is-4">Prototype Learning through Prompting</h3>
                     <div class="content has-text-justified">
                         <p>
-                            We can also animate the scene by interpolating the deformation latent codes of two input
-                            frames. Use the slider here to linearly interpolate between the left frame and the right
-                            frame.
+                            Label Anything learns to segment objects by learning a prototype for each class specified by
+                            a visual prompt. It first fuses support image features with dense and sparse prompt
+                            embeddings using a two-way attention mechanism, producing enriched class-specific
+                            representations. These are then pooled into class-example embeddings and refined via a
+                            self-attention mixer, which aggregates them into a single class prototype capturing the
+                            shared semantics across support examples, to guide segmentation in the query image.
                         </p>
+                        <video id="encoding" autoplay controls muted loop playsinline height="100%">
+                            <source src="./static/videos/LA_PromptEncoding.mp4" type="video/mp4">
+                        </video>
                     </div>
-                    <div class="columns is-vcentered interpolation-panel">
-                        <div class="column is-3 has-text-centered">
-                            <img src="./static/images/interpolate_start.jpg" class="interpolation-image"
-                                alt="Interpolate start reference image." />
-                            <p>Start Frame</p>
-                        </div>
-                        <div class="column interpolation-video-column">
-                            <div id="interpolation-image-wrapper">
-                                Loading...
-                            </div>
-                            <input class="slider is-fullwidth is-large is-info" id="interpolation-slider" step="1"
-                                min="0" max="100" value="0" type="range">
-                        </div>
-                        <div class="column is-3 has-text-centered">
-                            <img src="./static/images/interpolate_end.jpg" class="interpolation-image"
-                                alt="Interpolation end reference image." />
-                            <p class="is-bold">End Frame</p>
-                        </div>
-                    </div>
-                    <br />
                     <!--/ Interpolating. -->
 
                     <!-- Re-rendering. -->
-                    <h3 class="title is-4">Re-rendering the input video</h3>
+                    <h3 class="title is-4">Masks Decoding</h3>
                     <div class="content has-text-justified">
                         <p>
-                            Using <span class="dnerf">Nerfies</span>, you can re-render a video from a novel
-                            viewpoint such as a stabilized camera by playing back the training deformations.
+                            Label Anything decodes segmentation masks by matching learned class prototypes to the query
+                            image features. A two-way attention mechanism enables mutual interaction between the
+                            prototypes and query features, allowing class-specific patterns to be transferred to the
+                            query representation. The query features are then upsampled, spatially refined, and
+                            projected to match the prototype dimensions, after which segmentation masks are generated
+                            via a dot product between the transformed query features and the class prototypes.
                         </p>
                     </div>
                     <div class="content has-text-centered">
-                        <video id="replay-video" controls muted preload playsinline width="75%">
-                            <source src="./static/videos/replay.mp4" type="video/mp4">
+                        <video id="replay-video" controls muted preload playsinline width="100%">
+                            <source src="./static/videos/LA_MaskDecoding.mp4" type="video/mp4">
                         </video>
                     </div>
                     <!--/ Re-rendering. -->
 
                 </div>
             </div>
-            <!--/ Animation. -->
+            <!--/ Explanation -->
 
 
             <!-- Concurrent Work. -->
-            <div class="columns is-centered">
+            <!-- <div class="columns is-centered">
                 <div class="column is-full-width">
                     <h2 class="title is-3">Related Links</h2>
 
@@ -414,7 +377,7 @@
                         </p>
                     </div>
                 </div>
-            </div>
+            </div> -->
             <!--/ Concurrent Work. -->
 
         </div>
@@ -424,11 +387,12 @@
     <section class="section" id="BibTeX">
         <div class="container is-max-desktop content">
             <h2 class="title">BibTeX</h2>
-            <pre><code>@article{park2021nerfies,
-  author    = {Park, Keunhong and Sinha, Utkarsh and Barron, Jonathan T. and Bouaziz, Sofien and Goldman, Dan B and Seitz, Steven M. and Martin-Brualla, Ricardo},
-  title     = {Nerfies: Deformable Neural Radiance Fields},
-  journal   = {ICCV},
-  year      = {2021},
+            <pre><code>@incollection{LabelAnything,
+  title={RoWeeder: Unsupervised Weed Mapping through Crop-Row Detection},
+  author={Pasquale De Marinis, Nicola Fanelli, Raffaele Scaringi, Emanuele Colonna, Giuseppe Fiameni, Gennaro Vessio and Giovanna Castellano},
+  booktitle={ECAI 2025},
+  year={2025},
+  note={in press}
 }</code></pre>
         </div>
     </section>
@@ -464,6 +428,10 @@
             </div>
         </div>
     </footer>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+    <script src="./static/js/swiper.js"></script>
 
 </body>
 
