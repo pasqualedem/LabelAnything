@@ -185,31 +185,30 @@ accelerate launch --multi_gpu main.py experiment --parameters="parameters/trainv
 
 ```
 📦 LabelAnything
-├── 🌟 Core Components
-│   ├── label_anything/          # 🔧 Main codebase
-│   │   ├── **main**.py          # 🚪 CLI entry point
-│   │   ├── cli.py               # 💻 Command interface
-│   │   ├── data/                # 📊 Dataset handling
-│   │   ├── demo/                # 🎮 Interactive demos
-│   │   ├── experiment/          # 🧪 Training workflows
-│   │   ├── models/              # 🤖 Neural architectures
-│   │   ├── loss/                # 📉 Loss functions
-│   │   └── utils/               # 🛠️ Utilities
-│   └── parameters/              # ⚙️ Configuration files
-│       ├── coco/                # COCO dataset configs
-│       ├── pascal/              # Pascal VOC configs
-│       └── ablations/           # Ablation studies
-│
-├── 📚 Resources
-│   ├── notebooks/               # 📓 Analysis & demos
-│   ├── assets/                  # 🖼️ Media files
-│   ├── data/                    # 💾 Dataset storage
-│   └── checkpoints/             # 🏆 Model weights
-│
-└── 🚀 Deployment
+    🌟 Core Components
+    ├── label_anything/          # 🔧 Main codebase
+    │   ├── **main**.py          # 🚪 CLI entry point
+    │   ├── cli.py               # 💻 Command interface
+    │   ├── data/                # 📊 Dataset handling
+    │   ├── demo/                # 🎮 Interactive demos
+    │   ├── experiment/          # 🧪 Training workflows
+    │   ├── models/              # 🤖 Neural architectures
+    │   ├── loss/                # 📉 Loss functions
+    │   └── utils/               # 🛠️ Utilities
+    └── parameters/              # ⚙️ Configuration files
+        ├── trainval/            # 📚 Training configs
+        ├── validation/          # 📖 Validation configs
+        └── test/                # 🧪 Testing configs
+
+    📚 Resources
+    ├── notebooks/               # 📓 Analysis & demos
+    ├── assets/                  # 🖼️ Media files
+    ├── data/                    # 💾 Dataset storage
+    └── checkpoints/             # 🏆 Model weights
+
+    🚀 Deployment
     ├── slurm/                   # ⚡ HPC job scripts
-    ├── app.py                   # 🌐 Web application
-    └── test.py                  # 🧪 Testing suite
+    └── app.py                   # 🌐 Web application
 ```
 
 ## 🎨 Key Features
