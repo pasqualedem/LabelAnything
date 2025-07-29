@@ -22,7 +22,7 @@
 
 ![Label Anything Demo](assets/la.png)
 
-*Visual prompting meets few-shot learning*
+*Visual prompting meets few-shot learning with a new fast and efficient architecture.*
 
 </div>
 
@@ -236,7 +236,11 @@ If you find Label Anything useful in your research, please cite our work:
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and suggest improvements.
+We welcome contributions! Feel free to:
+- 🐛 Report bugs by opening an issue
+- 💡 Suggest new features or improvements
+- 🔧 Submit pull requests with bug fixes or enhancements
+- 📚 Improve documentation and examples
 
 ## 📜 License
 
@@ -246,6 +250,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Made with ❤️ by the Label Anything Team**
+**Made with ❤️ by the CilabUniba Label Anything Team**
 
 </div>
