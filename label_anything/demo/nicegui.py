@@ -19,7 +19,8 @@ from label_anything.models.build_lam import LabelAnything
 from label_anything.utils.utils import ResultDict
 
 IMAGE_SIZE = 1024
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cpu"
 RGB_TO_TEXT_COLORS = {
     # rbg to hex
     f"rgba({c[0]}, {c[1]}, {c[2]}, 1)": c
@@ -158,13 +159,9 @@ def mouse_handler(e: events.MouseEventArguments):
             app.storage.tab["annotations"]["bboxes"][current_class].append(
                 (x, y, x + w, y + h)
             )
-            ui.notify(
-                f"Rectangle completed: ({x1:.1f}, {y1:.1f}) to ({x2:.1f}, {y2:.1f})"
-            )
             app.storage.tab["start_rect"] = None
         else:
             app.storage.tab["start_rect"] = (e.image_x, e.image_y)
-            ui.notify(f"Starting rectangle at ({e.image_x}, {e.image_y})")
     elif e.ctrl or selected_prompt == "Mask":  # Add a polyline
         if app.storage.tab["polyline"]:
             app.storage.tab[
@@ -176,7 +173,6 @@ def mouse_handler(e: events.MouseEventArguments):
             ui.notify(f"Line drawn to ({e.image_x}, {e.image_y})")
         else:
             app.storage.tab["polyline"] = [e.image_x, e.image_y]
-            ui.notify(f"Starting line at ({e.image_x}, {e.image_y})")
     else:
         app.storage.tab[
             "svg_annotations"
@@ -186,7 +182,6 @@ def mouse_handler(e: events.MouseEventArguments):
         app.storage.tab["annotations"]["points"][current_class].append(
             (e.image_x, e.image_y)
         )
-        ui.notify(f"Point clicked at ({e.image_x}, {e.image_y})")
 
 
 def clear_annotations():
@@ -252,6 +247,8 @@ async def load_model(e, model_name=None):
     ui.notify(f"Model {model_name} loaded successfully", color="positive")
 
 def set_device(device):
+    ui.notify("Bugged, not implemented yet, setting device to cpu", color="negative")
+    return
     app.storage.tab["device"] = device
     if device == "cuda":
         if not torch.cuda.is_available():
