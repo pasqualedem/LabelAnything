@@ -1,9 +1,10 @@
 <div align="center">
 
-# 🏷️ Label Anything
+# 🏷️ [Label Anything](https://pasqualedem.github.io/LabelAnything/)
 
 ### Multi-Class Few-Shot Semantic Segmentation with Visual Prompts
 
+[![Project Page](https://img.shields.io/badge/🌐_Project-Page-blue.svg)](https://pasqualedem.github.io/LabelAnything/)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/label-anything-multi-class-few-shot-semantic/few-shot-semantic-segmentation-on-coco-20i-2-1)](https://paperswithcode.com/sota/few-shot-semantic-segmentation-on-coco-20i-2-1?p=label-anything-multi-class-few-shot-semantic)
 [![arXiv](https://img.shields.io/badge/arXiv-2407.02075-b31b1b.svg)](https://arxiv.org/abs/2407.02075)
 [![ECAI 2025](https://img.shields.io/badge/ECAI-2025-brightgreen.svg)](https://ecai2025.org/)
