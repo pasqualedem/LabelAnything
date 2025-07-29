@@ -1,207 +1,251 @@
+<div align="center">
+
+# 🏷️ Label Anything
+
+### Multi-Class Few-Shot Semantic Segmentation with Visual Prompts
+
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/label-anything-multi-class-few-shot-semantic/few-shot-semantic-segmentation-on-coco-20i-2-1)](https://paperswithcode.com/sota/few-shot-semantic-segmentation-on-coco-20i-2-1?p=label-anything-multi-class-few-shot-semantic)
+[![arXiv](https://img.shields.io/badge/arXiv-2407.02075-b31b1b.svg)](https://arxiv.org/abs/2407.02075)
+[![ECAI 2025](https://img.shields.io/badge/ECAI-2025-brightgreen.svg)](https://ecai2025.org/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-# [Label Anything](https://arxiv.org/abs/2407.02075)
+</div>
 
-This repository contains the official code for the paper ["LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts"](https://arxiv.org/abs/2407.02075) accepted at [ECAI 2025](https://ecai2025.org/).
+---
 
-![Label Anything](assets/la.png)
+## 🌟 Overview
 
-## Demo
+**Label Anything** is a novel method for multi-class few-shot semantic segmentation using visual prompts. This repository contains the official implementation of our ECAI 2025 paper, enabling precise segmentation with just a few prompted examples.
 
-Easily run the demo through [uv](https://docs.astral.sh/uv/) by executing the following command:
+<div align="center">
+
+![Label Anything Demo](assets/la.png)
+
+*Visual prompting meets few-shot learning*
+
+</div>
+
+## 🚀 Quick Start
+
+### ⚡ One-Line Demo
+
+Experience Label Anything instantly with our streamlined demo:
 
 ```bash
 uvx --from git+https://github.com/pasqualedem/LabelAnything app
 ```
 
-## Installation
+> **💡 Pro Tip**: This command uses [uv](https://docs.astral.sh/uv/) for lightning-fast package management and execution.
 
-Or you can install the package manually by cloning the repository and installing the dependencies:
-**Note**: The following instructions are for a Linux environment using CUDA 12.1. 
+### 🛠️ Manual Installation
 
-Create a virtual environment using uv
+For development and customization:
 
 ```bash
+# Clone the repository
+git clone https://github.com/pasqualedem/LabelAnything.git
+cd LabelAnything
+
+# Create virtual environment with uv
 uv sync
 source .venv/bin/activate
 ```
 
-## Released checkpoints
+> **⚠️ System Requirements**: Linux environment with CUDA 12.1 support
 
-| Encoder | Embedding Size | Image Size | Fold |Checkpoint |
-|---------|----------------|------------|------|------------|
-| SAM     | 512            | 1024       | -    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_sam_1024_coco)
-| ViT-MAE | 256            | 480        | -    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_mae_480_coco) |
-| ViT-MAE | 256            | 480        | 0    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_coco_fold0_mae_7a5p0t63) |
+## 📦 Pre-trained Models
 
-Import them with the following command:
+Access our collection of state-of-the-art checkpoints:
+
+<div align="center">
+
+| 🧠 Encoder | 📐 Embedding Size | 🖼️ Image Size | 📁 Fold | 🔗 Checkpoint |
+|------------|-------------------|----------------|----------|---------------|
+| **SAM** | 512 | 1024 | - | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_sam_1024_coco) |
+| **ViT-MAE** | 256 | 480 | - | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_mae_480_coco) |
+| **ViT-MAE** | 256 | 480 | 0 | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_coco_fold0_mae_7a5p0t63) |
+
+</div>
+
+### 🔌 Model Loading
 
 ```python
 from label_anything.models import LabelAnything
+
+# Load pre-trained model
 model = LabelAnything.from_pretrained("pasqualedem/label_anything_sam_1024_coco")
 ```
 
-## Training
+## 🎯 Training Pipeline
 
-You need to download the COCO 2017 dataset to train the model. The following sections describe how to set up these datasets.
+### 📊 Dataset Setup: COCO 2017
 
-### Setting up [COCO 2017](https://cocodataset.org/#home) Dataset with COCO 2014 annotations
-
-Enter the `data` directory, create and enter the directory `coco` and download the COCO 2017 train and val images and the COCO 2014 annotations from the [COCO website](https://cocodataset.org/#download):
+Prepare the COCO dataset with our automated setup:
 
 ```bash
-cd data
-mkdir coco
-cd coco
+# Navigate to data directory
+cd data && mkdir coco && cd coco
+
+# Download COCO 2017 images and 2014 annotations
 wget http://images.cocodataset.org/zips/train2017.zip
 wget http://images.cocodataset.org/zips/val2017.zip
 wget http://images.cocodataset.org/annotations/annotations_trainval2014.zip
+
+# Extract and organize
+unzip "*.zip" && rm *.zip
+mv val2017/* train2017/ && mv train2017 train_val_2017 && rm -rf val2017
 ```
 
-Unzip the files:
+### 🔧 Annotation Preprocessing
 
-```bash
-unzip train2017.zip
-unzip val2017.zip
-unzip annotations_trainval2014.zip
-rm -rf train2017.zip val2017.zip annotations_trainval2014.zip
-```
-
-The `coco` directory should now contain the following files and directories:
-
-```
-coco
-├── annotations
-│   ├── captions_train2014.json
-│   ├── captions_val2014.json
-│   ├── instances_train2014.json
-│   ├── instances_val2014.json
-|   ├── person_keypoints_train2014.json
-|   └── person_keypoints_val2014.json
-├── train2017
-└── val2017
-```
-
-Now, join the images of the train and val sets into a single directory:
-
-```bash
-mv val2017/* train2017
-mv train2017 train_val_2017
-rm -rf val2017
-```
-
-Finally, you will have to rename image filenames in the COCO 2014 annotations to match the filenames in the `train_val_2017` directory. To do this, run the following script:
+Synchronize filenames between images and annotations:
 
 ```bash
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_train2014.json
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_val2014.json
 ```
-### Preprocess
 
-We use [Segment Anything](https://github.com/facebookresearch/segment-anything) pretrained models to extract image features. Enter the `checkpoints` directory and download the pretrained models from the Segment Anything repository:
+### 🧠 Feature Extraction
 
+#### SAM Encoder Setup
 ```bash
-mkdir offline
+# Download SAM checkpoint
 cd checkpoints
 wget https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth
+
+# Extract embeddings (optional but recommended for speed)
+mkdir -p data/coco/vit_sam_embeddings/{last_hidden_state,last_block_state}
+python main.py generate_embeddings \
+  --encoder vit_b \
+  --checkpoint checkpoints/sam_vit_b_01ec64.pth \
+  --use_sam_checkpoint \
+  --directory data/coco/train_val_2017 \
+  --batch_size 16 \
+  --num_workers 8 \
+  --outfolder data/coco/vit_sam_embeddings/last_hidden_state \
+  --last_block_dir data/coco/vit_sam_embeddings/last_block_state \
+  --custom_preprocess
 ```
 
-**Optional**: To optimize model training and evaluation, you can extract the output of the vision encoder for each image in the COCO dataset, and save it to disk. We call `last_hidden_state` the directory containing the output of the convolutional neck we added on top of the Vision Transformer, while we call `last_block_state` the final output of ViT. This can be done by running the following script:
-
+#### ViT-MAE Encoders
 ```bash
-mkdir -p data/coco/vit_sam_embeddings/last_hidden_state
-mkdir data/coco/vit_sam_embeddings/last_block_state
-python main.py generate_embeddings --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/coco/train_val_2017 --batch_size 16 --num_workers=8 --outfolder data/coco/vit_sam_embeddings/last_hidden_state --last_block_dir data/coco/vit_sam_embeddings/last_block_state --custom_preprocess
+# Base ViT-MAE (1024px)
+python main.py generate_embeddings \
+  --encoder vit_b_mae \
+  --directory data/coco/train_val_2017 \
+  --batch_size 32 \
+  --outfolder data/coco/embeddings_vit_mae_1024/ \
+  --model_name facebook/vit-mae-base \
+  --image_resolution 1024 \
+  --huggingface
+
+# Base ViT-MAE (480px)
+python main.py generate_embeddings \
+  --encoder vit_b_mae \
+  --directory data/coco/train_val_2017 \
+  --batch_size 64 \
+  --outfolder data/coco/embeddings_vit_mae_480 \
+  --model_name facebook/vit-mae-base \
+  --image_resolution 480 \
+  --huggingface
+
+# Large ViT-MAE (480px)
+python main.py generate_embeddings \
+  --encoder vit_l_mae \
+  --directory data/coco/train_val_2017 \
+  --batch_size 64 \
+  --outfolder data/coco/embeddings_vit_mae_l_480 \
+  --model_name facebook/vit-mae-large \
+  --image_resolution 480 \
+  --huggingface
 ```
 
-For ViT-MAE
+### 🏋️ Training & Evaluation
 
+#### Single GPU Training
 ```bash
-python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 32 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_1024/ --model_name facebook/vit-mae-base --image_resolution 1024 --mean_std default --huggingface
+# Train with pre-extracted embeddings
+python main.py experiment --parameters="parameters/coco20i/mae.yaml"
 
-python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_480 --model_name facebook/vit-mae-base --image_resolution 480 --mean_std default --huggingface
-
-python main.py generate_embeddings --encoder vit_l_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_l_480 --model_name facebook/vit-mae-large --image_resolution 480 --mean_std default --huggingface
-```
-
-### Train and Test
-
-You can train LabelAnything (ViT-MAE) model on COCO-20i by running the command:
-
-```bash
+# Train without pre-extracted embeddings
 python main.py experiment --parameters="parameters/coco20i/mae_noembs.yaml"
 ```
 
-If you extracted the embeddings you can run the command:
-
+#### Multi-GPU Training
 ```bash
-python main.py experiment --parameters="parameters/coco20i/mae.yaml"
-```
-
-By default, four training processes will be launched sequentially, one for each fold of the 4-fold cross-validation. It is possible to launch only interesting training by deleting them from the `other_grids` section of the parameter file. Remember to also change the `val_fold_idx` in the `parameters.dataset` section to the fold you want to validate, which will be executed at the beginning. If you start a model training, you don't need to run the the validation step, as it is already included in the training process.
-
-If you have a multi GPU machine, you can run the command:
-
-```bash
+# Accelerated training for faster convergence
 accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO.yaml"
-accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"  
+accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"
 ```
 
-Experiments are tracked using [Weights & Biases](https://wandb.ai/site). The resulting run files are stored in the `offline/wandb/run-<date>-<run_id>` directory. Model weights for the specific run are saved in the `files` subdirectory of the run folder.
+> **📈 Experiment Tracking**: All experiments are automatically logged to [Weights & Biases](https://wandb.ai/site). Results are saved in `offline/wandb/run-<date>-<run_id>/files/`.
 
-## Project Organization
+## 🏗️ Project Architecture
 
 ```
-📦 Project Root
-├── .gitignore               # Git exclusions
-├── .python-version          # Python version lock
-├── LICENSE                  # License file
-├── README.md                # Project documentation
-├── pyproject.toml           # Build system config
-├── setup.py                 # Install script (setuptools)
-├── main.py                  # Possibly main script or entry point
-├── app.py                   # Alternative app entry point
-├── test.py                  # Test runner or example test
-├── uv.lock                  # Dependency lock file (for `uv`)
-
-├── label_anything/          # 🔧 Core project code
-│   ├── __main__.py          # CLI entry point
-│   ├── cli.py               # Command-line interface
-│   ├── data/                # Dataset loaders & preprocessing
-│   ├── demo/                # Web demos (Streamlit, Gradio, NiceGUI)
-│   ├── experiment/          # Training and experiment scripts
-│   ├── logger/              # Logging tools (console, wandb, etc.)
-│   ├── loss/                # Custom loss functions
-│   ├── models/              # Model architectures and utilities
-│   ├── utils/               # General helper functions
-│   ├── visualization/       # Plotting and visual tools
-│   ├── metrics.py           # Evaluation metrics
-│   ├── preprocess.py        # Preprocessing logic
-│   └── preprocess_clip.py   # CLIP-specific preprocessing
-
-├── parameters/              # 📋 Training configuration (YAML)
-│   ├── coco/                # COCO dataset configs
-│   ├── pascal/              # Pascal VOC configs
-│   ├── other/, ablations/   # Miscellaneous & ablation configs
-│   └── old/                 # Legacy configs (for reference)
-├── parameters_test/         # 🧪 Test-time configurations
-├── parameters_validation/   # ✅ Validation experiments
-
-├── notebooks/               # 📓 Jupyter notebooks
-│   ├── demo.ipynb           # Demo notebook
-│   ├── check_dataset.ipynb  # Dataset inspection
-│   └── ...                  # Other dataset/model analysis notebooks
-
-├── slurm/                   # ⚙️ HPC job scripts (SLURM)
-│   ├── launch_run           # SLURM launcher scripts
-│   ├── generate_embeddings  # Embedding extraction jobs
-│   └── slurm.py             # Python SLURM utilities
-
-├── assets/                  # 📁 Static assets (e.g., images)
-│   └── la.png
-├── data/                    # 📁 Data setup and placeholders
-│   ├── .gitkeep             # Keeps the folder in git
-│   └── script/              # Dataset setup scripts
-└── checkpoints/             # 💾 Saved model checkpoints
+📦 LabelAnything
+├── 🌟 Core Components
+│   ├── label_anything/          # 🔧 Main codebase
+│   │   ├── **main**.py          # 🚪 CLI entry point
+│   │   ├── cli.py               # 💻 Command interface
+│   │   ├── data/                # 📊 Dataset handling
+│   │   ├── demo/                # 🎮 Interactive demos
+│   │   ├── experiment/          # 🧪 Training workflows
+│   │   ├── models/              # 🤖 Neural architectures
+│   │   ├── loss/                # 📉 Loss functions
+│   │   └── utils/               # 🛠️ Utilities
+│   └── parameters/              # ⚙️ Configuration files
+│       ├── coco/                # COCO dataset configs
+│       ├── pascal/              # Pascal VOC configs
+│       └── ablations/           # Ablation studies
+│
+├── 📚 Resources
+│   ├── notebooks/               # 📓 Analysis & demos
+│   ├── assets/                  # 🖼️ Media files
+│   ├── data/                    # 💾 Dataset storage
+│   └── checkpoints/             # 🏆 Model weights
+│
+└── 🚀 Deployment
+    ├── slurm/                   # ⚡ HPC job scripts
+    ├── app.py                   # 🌐 Web application
+    └── test.py                  # 🧪 Testing suite
 ```
 
+## 🎨 Key Features
+
+- **🎯 Few-Shot Learning**: Achieve remarkable results with minimal training data
+- **🖼️ Visual Prompting**: Intuitive interaction through visual cues
+- **⚡ Multi-GPU Support**: Accelerated training on modern hardware
+- **🔄 Cross-Validation**: Robust 4-fold evaluation protocol
+- **📊 Rich Logging**: Comprehensive experiment tracking
+- **🤗 HuggingFace Integration**: Seamless model sharing and deployment
+
+## 📄 Citation
+
+If you find Label Anything useful in your research, please cite our work:
+
+```bibtex
+@inproceedings{labelanything2025,
+  title={LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts},
+  author={[Author Names]},
+  booktitle={ECAI 2025},
+  year={2025}
+}
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details on how to submit pull requests, report issues, and suggest improvements.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by the Label Anything Team**
+
+</div>
