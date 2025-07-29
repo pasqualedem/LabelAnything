@@ -1,1 +1,1 @@
-from .models import LabelAnything, LabelAnythingConfig
+from label_anything.models import LabelAnything, LabelAnythingConfig

@@ -2,12 +2,21 @@
 
 # [Label Anything](https://arxiv.org/abs/2407.02075)
 
-This repository contains the official code for the paper ["LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts"](https://arxiv.org/abs/2407.02075).
+This repository contains the official code for the paper ["LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts"](https://arxiv.org/abs/2407.02075) accepted at [ECAI 2025](https://ecai2025.org/).
 
 ![Label Anything](assets/la.png)
 
-## Requirements
+## Demo
 
+Easily run the demo through [uv](https://docs.astral.sh/uv/) by executing the following command:
+
+```bash
+uvx --from git+https://github.com/pasqualedem/LabelAnything app
+```
+
+## Installation
+
+Or you can install the package manually by cloning the repository and installing the dependencies:
 **Note**: The following instructions are for a Linux environment using CUDA 12.1. 
 
 Create a virtual environment using uv
@@ -17,7 +26,26 @@ uv sync
 source .venv/bin/activate
 ```
 
-## Prepare the Datasets
+## Released checkpoints
+
+| Encoder | Embedding Size | Image Size | Fold |Checkpoint |
+|---------|----------------|------------|------|------------|
+| SAM     | 512            | 1024       | -    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_sam_1024_coco)
+| ViT-MAE | 256            | 480        | -    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_mae_480_coco) |
+| ViT-MAE | 256            | 480        | 0    | [![Hugging Face](https://img.shields.io/badge/HuggingFace-Model-000000?style=flat-square&logo=huggingface)](https://huggingface.co/pasqualedem/label_anything_coco_fold0_mae_7a5p0t63) |
+
+Import them with the following command:
+
+```python
+from label_anything.models import LabelAnything
+model = LabelAnything.from_pretrained("pasqualedem/label_anything_sam_1024_coco")
+```
+
+## Training
+
+You need to download the COCO 2017 dataset to train the model. The following sections describe how to set up these datasets.
+
+### Setting up [COCO 2017](https://cocodataset.org/#home) Dataset with COCO 2014 annotations
 
 Enter the `data` directory, create and enter the directory `coco` and download the COCO 2017 train and val images and the COCO 2014 annotations from the [COCO website](https://cocodataset.org/#download):
 
@@ -68,84 +96,7 @@ Finally, you will have to rename image filenames in the COCO 2014 annotations to
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_train2014.json
 python main.py rename_coco20i_json --instances_path data/coco/annotations/instances_val2014.json
 ```
-
-Setting up [PASCAL VOC 2012](http://host.robots.ox.ac.uk/pascal/VOC/) Dataset with augmented data.
-
-### 1. Instruction to download
-``` bash
-bash data/script/setup_voc12.sh data/pascal
-``` 
-```bash
-data/
-└── pascal/
-    ├── Annotations
-    ├── ImageSets/
-    │   └── Segmentation
-    ├── JPEGImages
-    ├── SegmentationObject
-    └── SegmentationClass
-``` 
-### 2. Add SBD Augmentated training data
-- Convert by yourself ([here](https://github.com/shelhamer/fcn.berkeleyvision.org/tree/master/data/pascal)).
-- Or download pre-converted files ([here](https://github.com/DrSleep/tensorflow-deeplab-resnet#evaluation)), **(Prefer this method)**.
-
-After the download move it into the pascal folder.
-
-```bash
-unzip SegmentationClassAug.zip -d data/pascal
-```
-
-```bash
-data/
-└── pascal/
-    ├── Annotations
-    ├── ImageSets/
-    │   └── Segmentation
-    ├── JPEGImages
-    ├── SegmentationObject
-    ├── SegmentationClass
-    └── SegmentationClassAug #ADDED
-``` 
-
-### 3. Download official sets as ImageSets/SegmentationAug list
-From: https://github.com/kazuto1011/deeplab-pytorch/files/2945588/list.zip
-
-```bash
-# Unzip the file
-unzip list.zip -d data/pascal/ImageSets/
-# Move file into Segmentation folder
-mv data/pascal/ImageSets/list/* data/pascal/ImageSets/Segmentation/
-rm -rf data/pascal/ImageSets/list
-```
-
-This is how the dataset should look like
-```bash
-/data
-└── pascal
-    ├── Annotations
-    ├── ImageSets
-    │   └── Segmentation 
-    │       ├── test.txt
-    │       ├── trainaug.txt # ADDED!!
-    │       ├── train.txt
-    │       ├── trainvalaug.txt # ADDED!!
-    │       ├── trainval.txt
-    │       └── val.txt
-    ├── JPEGImages
-    ├── SegmentationObject
-    ├── SegmentationClass
-    └── SegmentationClassAug # ADDED!!
-        └── 2007_000032.png
-```
-### 4. Rename
-Now run the rename.sh script.
-``` bash
-bash data/script/rename.sh data/pascal/ImageSets/Segmentation/train.txt
-bash data/script/rename.sh data/pascal/ImageSets/Segmentation/trainval.txt
-bash data/script/rename.sh data/pascal/ImageSets/Segmentation/val.txt
-``` 
-
-## Preprocess
+### Preprocess
 
 We use [Segment Anything](https://github.com/facebookresearch/segment-anything) pretrained models to extract image features. Enter the `checkpoints` directory and download the pretrained models from the Segment Anything repository:
 
@@ -173,38 +124,18 @@ python main.py generate_embeddings --encoder vit_b_mae --directory data/coco/tra
 python main.py generate_embeddings --encoder vit_l_mae --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_vit_mae_l_480 --model_name facebook/vit-mae-large --image_resolution 480 --mean_std default --huggingface
 ```
 
-For Dino
+### Train and Test
+
+You can train LabelAnything (ViT-MAE) model on COCO-20i by running the command:
 
 ```bash
-python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dino_vitb8_480 --model_name facebook/dino-vitb8 --image_resolution 480 --mean_std default --huggingface
-
-python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dinov2_b_476 --model_name facebook/dinov2-base --image_resolution 476 --mean_std default --huggingface
-
-python main.py generate_embeddings --encoder vit_dino_b8 --directory data/coco/train_val_2017 --batch_size 64 --num_workers 2 --outfolder data/coco/embeddings_dinov2_b_224 --model_name facebook/dinov2-base --image_resolution 224 --mean_std default --huggingface
-```
-
-For PASCAL
-
-```bash
-mkdir -p data/pascal/vit_sam_embeddings/last_hidden_state
-mkdir data/pascal/vit_sam_embeddings/last_block_state
-python main.py generate_embeddings --encoder vit_b --checkpoint checkpoints/sam_vit_b_01ec64.pth --use_sam_checkpoint --directory data/pascal/JPEGImages --batch_size 16 --num_workers=8 --outfolder data/pascal/pascal_embeddings_vit_b_sam/last_hidden_state --last_block_dir data/pascal/pascal_embeddings_vit_b_sam/last_block_state --custom_preprocess
-
-python main.py generate_embeddings --encoder vit_b_mae --directory data/pascal/JPEGImages --batch_size 64 --num_workers 8 --outfolder data/pascal/embeddings_vit_mae_480 --model_name facebook/vit-mae-base --image_resolution 480 --mean_std default --huggingface
-```
-
-## Train and Test
-
-You can train LabelAnything model on COCO-20i by running the command:
-
-```bash
-python main.py experiment --parameters="parameters/COCO_vit.yaml"
+python main.py experiment --parameters="parameters/coco20i/mae_noembs.yaml"
 ```
 
 If you extracted the embeddings you can run the command:
 
 ```bash
-python main.py experiment --parameters="parameters/COCO.yaml"
+python main.py experiment --parameters="parameters/coco20i/mae.yaml"
 ```
 
 By default, four training processes will be launched sequentially, one for each fold of the 4-fold cross-validation. It is possible to launch only interesting training by deleting them from the `other_grids` section of the parameter file. Remember to also change the `val_fold_idx` in the `parameters.dataset` section to the fold you want to validate, which will be executed at the beginning. If you start a model training, you don't need to run the the validation step, as it is already included in the training process.
@@ -218,62 +149,59 @@ accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_v
 
 Experiments are tracked using [Weights & Biases](https://wandb.ai/site). The resulting run files are stored in the `offline/wandb/run-<date>-<run_id>` directory. Model weights for the specific run are saved in the `files` subdirectory of the run folder.
 
-
-## Test
-
-To protect anonimity, our pretrained models are not available for download. Model weights will be available upon acceptance.
-
-## Demo
-
-If you have trained the model and want to use it in an interactive way to segment images, you can run the following command:
-
-```bash
-python -m streamlit run app.py
-```
-
-In the web interface, enter the Weights & Biases path to a run id `<entity>/<project>/<run-id>` ([help](https://docs.wandb.ai/ref/python/public-api/api#run)) of the model you want to use. Currently, the demo only supports box annotations. You will be asked to enter a query image, class names, and support images with prompts.
-
 ## Project Organization
 
-    ├── LICENSE
-    ├── Makefile           <- Makefile with commands like `make data` or `make train`
-    ├── README.md          <- The top-level README for developers using this project.
-    ├── data
-    │   ├── external       <- Data from third party sources.
-    │   ├── interim        <- Intermediate data that has been transformed.
-    │   ├── processed      <- The final, canonical data sets for modeling.
-    │   └── raw            <- The original, immutable data dump.
-    │
-    ├── docs               <- A default Sphinx project; see sphinx-doc.org for details
-    │
-    ├── checkpoints        <- Trained and serialized models, model predictions, or model summaries
-    │
-    ├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-    │                         the creator's initials, and a short `-` delimited description, e.g.
-    │                         `1.0-jqp-initial-data-exploration`.
-    │
-    ├── references         <- Data dictionaries, manuals, and all other explanatory materials.
-    │
-    ├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-    │   └── figures        <- Generated graphics and figures to be used in reporting
-    │
-    ├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-    │                         generated with `pip freeze > requirements.txt`
-    │
-    ├── setup.py           <- makes project pip installable (pip install -e .) so src can be imported
-    ├── label_anything     <- Source code for use in this project.
-    │   ├── __init__.py    <- Makes src a Python module
-    │   │
-    │   ├── data           <- Scripts to download or generate data
-    │   │   └── make_dataset.py
-    │   │
-    │   ├── features       <- Scripts to turn raw data into features for modeling
-    │   │   └── build_features.py
-    │   │
-    │   ├── models         <- Scripts of the models
-    │   │
-    │   └── visualization  <- Scripts to create exploratory and results oriented visualizations
-    │       └── visualize.py
-    │
-    └── tox.ini            <- tox file with settings for running tox; see tox.readthedocs.io
+```
+📦 Project Root
+├── .gitignore               # Git exclusions
+├── .python-version          # Python version lock
+├── LICENSE                  # License file
+├── README.md                # Project documentation
+├── pyproject.toml           # Build system config
+├── setup.py                 # Install script (setuptools)
+├── main.py                  # Possibly main script or entry point
+├── app.py                   # Alternative app entry point
+├── test.py                  # Test runner or example test
+├── uv.lock                  # Dependency lock file (for `uv`)
+
+├── label_anything/          # 🔧 Core project code
+│   ├── __main__.py          # CLI entry point
+│   ├── cli.py               # Command-line interface
+│   ├── data/                # Dataset loaders & preprocessing
+│   ├── demo/                # Web demos (Streamlit, Gradio, NiceGUI)
+│   ├── experiment/          # Training and experiment scripts
+│   ├── logger/              # Logging tools (console, wandb, etc.)
+│   ├── loss/                # Custom loss functions
+│   ├── models/              # Model architectures and utilities
+│   ├── utils/               # General helper functions
+│   ├── visualization/       # Plotting and visual tools
+│   ├── metrics.py           # Evaluation metrics
+│   ├── preprocess.py        # Preprocessing logic
+│   └── preprocess_clip.py   # CLIP-specific preprocessing
+
+├── parameters/              # 📋 Training configuration (YAML)
+│   ├── coco/                # COCO dataset configs
+│   ├── pascal/              # Pascal VOC configs
+│   ├── other/, ablations/   # Miscellaneous & ablation configs
+│   └── old/                 # Legacy configs (for reference)
+├── parameters_test/         # 🧪 Test-time configurations
+├── parameters_validation/   # ✅ Validation experiments
+
+├── notebooks/               # 📓 Jupyter notebooks
+│   ├── demo.ipynb           # Demo notebook
+│   ├── check_dataset.ipynb  # Dataset inspection
+│   └── ...                  # Other dataset/model analysis notebooks
+
+├── slurm/                   # ⚙️ HPC job scripts (SLURM)
+│   ├── launch_run           # SLURM launcher scripts
+│   ├── generate_embeddings  # Embedding extraction jobs
+│   └── slurm.py             # Python SLURM utilities
+
+├── assets/                  # 📁 Static assets (e.g., images)
+│   └── la.png
+├── data/                    # 📁 Data setup and placeholders
+│   ├── .gitkeep             # Keeps the folder in git
+│   └── script/              # Dataset setup scripts
+└── checkpoints/             # 💾 Saved model checkpoints
+```
 

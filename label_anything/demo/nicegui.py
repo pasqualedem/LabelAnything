@@ -471,5 +471,10 @@ async def index():
 
 
 def main():
-    ui.run(favicon="🏷️", port=8501)
+    print("✅ Starting NiceGUI app...")
+    ui.run(favicon="🏷️", port=8501, reload=False)
+    
+    
+if __name__ in {"__main__", "__mp_main__"}:
+    main()
 

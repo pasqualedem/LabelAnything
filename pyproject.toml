@@ -1,7 +1,7 @@
 [project]
-name = "labelanything"
+name = "label_anything"
 version = "0.1.0"
-description = "Add your description here"
+description = "LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -34,3 +34,11 @@ dependencies = [
     "wandb>=0.19.10",
     "wget>=3.2",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["label_anything*"]
+
+
+[project.scripts]
+app = "label_anything.demo.nicegui:main"
