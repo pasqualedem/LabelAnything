@@ -33,13 +33,12 @@
     <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
     <link rel="stylesheet" href="./static/css/index.css">
-    <link rel="icon" href="./static/images/favicon.svg">
+    <link rel="icon" href="./favicon.svg">
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
     <script defer src="./static/js/fontawesome.all.min.js"></script>
     <script src="./static/js/bulma-carousel.js"></script>
     <!-- <script src="./static/js/bulma-slider.min.js"></script> -->
-    <script src="./static/js/index.js"></script>
 </head>
 
 <body>
@@ -219,35 +218,6 @@
         </div>
     </section> -->
 
-    <section class="hero is-light is-small">
-        <div class="hero-body">
-            <div class="container">
-                <div class="swiper swiper-container">
-                    <div class="swiper-wrapper">
-                        <div class="swiper-slide">
-                            <img src="./static/images/LAexamples_1.png" alt="Label Anything example 1" />
-                        </div>
-                        <div class="swiper-slide">
-                            <img src="./static/images/LAexamples_2.png" alt="Label Anything example 2" />
-                        </div>
-                        <div class="swiper-slide">
-                            <img src="./static/images/LAexamples_3.png" alt="Label Anything example 3" />
-                        </div>
-                        <div class="swiper-slide">
-                            <img src="./static/images/LAexamples_4.png" alt="Label Anything example 4" />
-                        </div>
-                    </div>
-                    <!-- Pagination -->
-                    <div class="swiper-pagination"></div>
-                    <div class="swiper-button-next"></div>
-                    <div class="swiper-button-prev"></div>
-                </div>
-            </div>
-        </div>
-        </div>
-    </section>
-
-
     <section class="section">
         <div class="container is-max-desktop">
             <!-- Abstract. -->
@@ -294,6 +264,40 @@
         </div>
     </section>
 
+    <section class="hero is-light is-small">
+        <div class="hero-body">
+        <div class="container is-max-desktop">
+            <div class="columns is-centered has-text-centered">
+                <div class="column is-full-width">
+                <h2 class="title is-3">Gallery</h2><br>
+            <div class="container">
+                <div class="swiper swiper-container">
+                    <div class="swiper-wrapper">
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_1.svg" alt="Label Anything example 1" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_2.svg" alt="Label Anything example 2" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_3.svg" alt="Label Anything example 3" />
+                        </div>
+                        <div class="swiper-slide">
+                            <img src="./static/images/LAexamples_4.svg" alt="Label Anything example 4" />
+                        </div>
+                    </div>
+                    <!-- Pagination -->
+                    <div class="swiper-pagination"></div>
+                    <div class="swiper-button-next"></div>
+                    <div class="swiper-button-prev"></div>
+                </div>
+            </div>
+        </div>
+        </div>
+            </div>
+            </div>
+            </div>
+    </section>
 
     <section class="section">
         <div class="container is-max-desktop">
@@ -303,7 +307,7 @@
                 <div class="column is-full-width">
                     <h2 class="title is-3">How it works</h2>
 
-                    <!-- Interpolating. -->
+                    <!-- Prototype Learning through Prompting. -->
                     <h3 class="title is-4">Prototype Learning through Prompting</h3>
                     <div class="content has-text-justified">
                         <p>
@@ -314,13 +318,13 @@
                             self-attention mixer, which aggregates them into a single class prototype capturing the
                             shared semantics across support examples, to guide segmentation in the query image.
                         </p>
-                        <video id="encoding" autoplay controls muted loop playsinline height="100%">
+                        <video id="encoding" autoplay muted loop playsinline height="100%">
                             <source src="./static/videos/LA_PromptEncoding.mp4" type="video/mp4">
                         </video>
                     </div>
-                    <!--/ Interpolating. -->
+                    <!--/ Prototype Learning through Prompting. -->
 
-                    <!-- Re-rendering. -->
+                    <!-- Mask Decoding. -->
                     <h3 class="title is-4">Masks Decoding</h3>
                     <div class="content has-text-justified">
                         <p>
@@ -333,11 +337,11 @@
                         </p>
                     </div>
                     <div class="content has-text-centered">
-                        <video id="replay-video" controls muted preload playsinline width="100%">
+                        <video id="replay-video" autoplay muted loop playsinline width="100%">
                             <source src="./static/videos/LA_MaskDecoding.mp4" type="video/mp4">
                         </video>
                     </div>
-                    <!--/ Re-rendering. -->
+                    <!--/ Mask Decoding. -->
 
                 </div>
             </div>
