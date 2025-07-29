@@ -167,17 +167,16 @@ python main.py generate_embeddings \
 #### Single GPU Training
 ```bash
 # Train with pre-extracted embeddings
-python main.py experiment --parameters="parameters/coco20i/mae.yaml"
+python main.py experiment --parameters="parameters/trainval/coco20i/mae.yaml"
 
 # Train without pre-extracted embeddings
-python main.py experiment --parameters="parameters/coco20i/mae_noembs.yaml"
+python main.py experiment --parameters="parameters/trainval/coco20i/mae_noembs.yaml"
 ```
 
 #### Multi-GPU Training
 ```bash
 # Accelerated training for faster convergence
-accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO.yaml"
-accelerate launch --multi_gpu main.py experiment --parameters="parameters/COCO_vit.yaml"
+accelerate launch --multi_gpu main.py experiment --parameters="parameters/trainval/coco20i/mae.yaml"
 ```
 
 > **📈 Experiment Tracking**: All experiments are automatically logged to [Weights & Biases](https://wandb.ai/site). Results are saved in `offline/wandb/run-<date>-<run_id>/files/`.
