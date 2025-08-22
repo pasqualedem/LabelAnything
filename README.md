@@ -160,6 +160,15 @@ python main.py generate_embeddings \
   --model_name facebook/vit-mae-large \
   --image_resolution 480 \
   --huggingface
+
+# DinoV3
+python main.py generate_embeddings \
+  --directory data/coco/train_val_2017 \
+  --batch_size 64 \
+  --outfolder data/coco/embeddings_dinov3_480 \
+  --model_name facebook/dinov3-vitb16-pretrain-lvd1689m \
+  --image_resolution 480 \
+  --huggingface
 ```
 
 ### 🏋️ Training & Evaluation
