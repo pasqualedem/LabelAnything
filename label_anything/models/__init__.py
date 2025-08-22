@@ -25,6 +25,7 @@ from .ppnet import build_ppnet
 # from.hdmnet import build_hdmnet
 from .denet import build_denet
 from .dummy import build_dummy
+from .similarity import build_similarity
 
 
 ComposedOutput = namedtuple("ComposedOutput", ["main", "aux"])
@@ -53,6 +54,7 @@ model_registry = {
     # "bam": build_bam,
     # "hdmnet": build_hdmnet,
     "dummy": build_dummy,
+    "similarity": build_similarity,
     # Encoders only
     **ENCODERS
 }
