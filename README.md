@@ -234,11 +234,17 @@ accelerate launch --multi_gpu main.py experiment --parameters="parameters/trainv
 If you find Label Anything useful in your research, please cite our work:
 
 ```bibtex
-@inproceedings{labelanything2025,
-  title={LabelAnything: Multi-Class Few-Shot Semantic Segmentation with Visual Prompts},
-  author={De Marinis, Pasquale and Fanelli, Nicola and Scaringi, Raffaele and Colonna, Emanuele and Fiameni, Giuseppe and Vessio, Gennaro and Castellano, Giovanna},
-  booktitle={ECAI 2025},
-  year={2025}
+@incollection{demarinisLabelAnythingMultiClass2025,
+  title = {Label {Anything}: {Multi}-{Class} {Few}-{Shot} {Semantic} {Segmentation} with {Visual} {Prompts}},
+  shorttitle = {Label {Anything}},
+  url = {https://ebooks.iospress.nl/doi/10.3233/FAIA251289},
+  language = {en},
+  booktitle = {{ECAI} 2025},
+  publisher = {IOS Press},
+  author = {De Marinis, Pasquale and Fanelli, Nicola and Scaringi, Raffaele and Colonna, Emanuele and Fiameni, Giuseppe and Vessio, Gennaro and Castellano, Giovanna},
+  year = {2025},
+  doi = {10.3233/FAIA251289},
+  pages = {4016--4023},
 }
 ```
 
