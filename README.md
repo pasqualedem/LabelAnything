@@ -66,6 +66,9 @@ Access our collection of state-of-the-art checkpoints:
 | **SAM** | 512 | 1024 | - | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_sam_1024_coco) |
 | **ViT-MAE** | 256 | 480 | - | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_mae_480_coco) |
 | **ViT-MAE** | 256 | 480 | 0 | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_coco_fold0_mae_7a5p0t63) |
+| **ViT-MAE** | 256 | 480 | 1 | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_coco_fold1_mae_coh54ws0) |
+| **ViT-MAE** | 256 | 480 | 2 | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_coco_fold2_mae_2pnppb7k) |
+| **ViT-MAE** | 256 | 480 | 3 | [![HF](https://img.shields.io/badge/🤗_HuggingFace-Model-FFD21E?style=for-the-badge)](https://huggingface.co/pasqualedem/label_anything_coco_fold3_mae_a2gk7tet) |
 
 </div>
 
